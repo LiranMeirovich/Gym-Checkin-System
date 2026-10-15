@@ -1,0 +1,65 @@
+# ─── Real gym data: never commit ────────────────────────────────
+# Database (plus SQLite's WAL/journal side files)
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Generated reports (contain real customer names and amounts)
+reports/
+
+# Backups (encrypted, but still never public)
+backups/
+*.zip
+
+# Uploaded files (health forms, photos), in case any end up on disk
+uploads/
+media/
+
+# Logs (can contain names, phone numbers, IPs)
+logs/
+*.log
+
+# ─── Secrets: never commit ──────────────────────────────────────
+# Environment files (.env.example is the safe template and IS committed)
+.env
+.env.*
+!.env.example
+
+# Keys and certificates (SQLCipher key, TLS, Cloudflare tunnel credentials)
+*.key
+*.pem
+*.p12
+*.pfx
+cert.pem
+.cloudflared/
+cloudflared-credentials*.json
+
+# ─── Claude Code: personal settings stay local ──────────────────
+# CLAUDE.md, .claude/skills/ and .claude/settings.json ARE committed
+.claude/settings.local.json
+
+# ─── Python ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ─── Editors & OS ───────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
