@@ -1,0 +1,17 @@
+[project]
+name = "gym-checkin-system"
+version = "0.1.0"
+description = "Check-in and subscription system for a single gym: wall-QR phone check-ins, staff admin app and a monthly billing report."
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.uv]
+# This is an application, not a library: uv installs its dependencies
+# but does not build or install the project itself as a package.
+package = false
