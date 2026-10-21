@@ -5,8 +5,8 @@ The developer (the user) must understand every part of the codebase. Claude is a
 
 ## Project status
 - Design doc: `Gym Check-In & Subscription System — Design Doc.md` in the project root (the source of truth; read the relevant section before starting a milestone)
-- Current milestone: 1 — Foundation (not started). Planning is done: design doc updated, decisions 0001–0007 recorded, local git repo created (nothing committed yet).
-- Next feature: project setup (uv project, ruff, pytest, gitleaks pre-commit, GitHub Actions CI), followed by the first commit.
+- Current milestone: 1 — Foundation, split into six features (decision 0008): **project setup** → settings → database foundation → staff accounts & permissions → first-run setup & staff sessions → activity log.
+- Next feature: project setup (uv project, ruff, pytest, gitleaks pre-commit, GitHub Actions CI, `/health` on both apps per decision 0009).
 - Milestones: 1 Foundation → 2 Customers, prices & plans → 3 Phone linking & check-in → 4 Admin screens → 5 Report → 6 Operations
 - **Open: hosting.** A free server may replace the gym-PC + tunnel setup. Don't build anything host-specific until this is decided.
 - **New requirement: health form** (not in the design doc yet). Built into the system, filled in on the phone with a signature, stored with a PDF snapshot and an expiry date. It is **blocking**: no check-in (phone or manual) without a valid form, because the gym isn't insured without one. Instructors see only valid / not valid; the full form is for the manager.
@@ -44,6 +44,7 @@ Use `/explain-changes` any time to understand code, and `/decision` to record a 
 ## How we work
 - **Explain non-trivial code.** After writing anything beyond boilerplate, briefly explain what it does and why it is built that way.
 - **Ask before architectural decisions.** Don't choose libraries, change the database schema, change the folder structure or change route contracts without asking first. Suggest options and give a recommendation.
+- **Add a dependency only in the feature that first uses it** (decision 0010).
 - **Keep changes small and focused.** Do one feature or fix at a time, so each change can be reviewed and committed on its own.
 - **Never commit or push** unless asked.
 - **"Hint mode":** when I say a feature is mine to write, give hints, reviews and pointers only, never the full solution.
