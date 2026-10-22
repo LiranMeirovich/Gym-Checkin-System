@@ -1,0 +1,81 @@
+# CI: GitHub runs this file on its own servers on every pull request and
+# every push to main. A red result means: don't merge.
+#
+# Actions are pinned to full commit SHAs (a tag like @v7 can be moved to
+# other code; a SHA can't). The comment after each SHA is its version.
+#
+# Docs:
+#   Concepts:         https://docs.github.com/en/actions/get-started/understand-github-actions
+#   Syntax reference: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+#   uv in CI:         https://docs.astral.sh/uv/guides/integration/github/
+#   gitleaks in CI:   https://github.com/gitleaks/gitleaks-action
+
+name: CI
+
+# ── WHEN it runs ─────────────────────────────────────────────────────
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# Least privilege: by default the jobs can only read the repo's code.
+# A job that needs more asks for it in its own "permissions" block.
+permissions:
+  contents: read
+
+# ── WHAT it runs ─────────────────────────────────────────────────────
+# Two jobs. They run in parallel, each on its own fresh machine, and a
+# failure in one doesn't hide the result of the other.
+jobs:
+  checks:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      # A fresh machine has nothing on it, not even our code.
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # uv reads .python-version and installs Python 3.12 itself.
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      # --locked: fail if uv.lock doesn't match pyproject.toml, instead of
+      # quietly resolving different versions than the ones we tested.
+      - name: Install the project
+        run: uv sync --locked
+
+      # --output-format=github shows each problem on its line in the PR.
+      - name: Lint
+        run: uv run ruff check --output-format=github
+
+      - name: Check formatting
+        run: uv run ruff format --check
+
+      - name: Run tests
+        run: uv run pytest
+
+  secrets:
+    name: Scan for secrets
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 downloads the full git history. The default (1) gets
+      # only the latest commit, and a secret added and then "deleted" in an
+      # earlier commit is still in the history.
+      - name: Check out the code with full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          # Created by GitHub for every run; nothing to set up. No
+          # GITLEAKS_LICENSE: it's only needed for organisation accounts.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PR comments would need write access to pull requests. A failed
+          # job is enough of a signal, so the job keeps read-only access.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          # The repo is public: don't publish a findings file as a
+          # downloadable artifact. The job log and summary are enough.
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
