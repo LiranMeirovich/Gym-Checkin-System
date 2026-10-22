@@ -24,6 +24,13 @@ on:
 permissions:
   contents: read
 
+# A new push to the same PR cancels the run that's still going for the old
+# commit; only the latest commit's result matters. Runs on main are never
+# cancelled, so every merge gets a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # ── WHAT it runs ─────────────────────────────────────────────────────
 # Two jobs. They run in parallel, each on its own fresh machine, and a
 # failure in one doesn't hide the result of the other.
@@ -58,6 +65,11 @@ jobs:
   secrets:
     name: Scan for secrets
     runs-on: ubuntu-latest
+    # On a PR, gitleaks-action reads the PR's commit list through the GitHub
+    # API, which needs read access to pull requests. Still read-only.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       # fetch-depth: 0 downloads the full git history. The default (1) gets
       # only the latest commit, and a secret added and then "deleted" in an

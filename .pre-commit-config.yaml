@@ -13,15 +13,18 @@ repos:
 
   # Ruff runs through uv, so it's always the exact version locked in uv.lock
   # (the same one CI and your editor use), not a second copy that can drift.
+  # --locked: fail if uv.lock is out of date instead of rewriting it mid-commit.
   - repo: local
     hooks:
       - id: ruff-check
         name: ruff check
-        entry: uv run ruff check
+        entry: uv run --locked ruff check
         language: system
         types_or: [python, pyi]
       - id: ruff-format
         name: ruff format (check only)
-        entry: uv run ruff format --check
+        entry: uv run --locked ruff format --check
         language: system
-        types_or: [python, pyi]
+        # Markdown too: ruff also formats Python code blocks in .md files,
+        # and CI checks them, so the hook must as well.
+        types_or: [python, pyi, markdown]
