@@ -25,7 +25,7 @@ Run each check and report the results plainly. Never hide a failure.
 
 ## 3. Fix what came up
 - Present the findings, most important first, and say which ones you suggest fixing now and which can be follow-ups.
-- Fix the ones the developer approves, one at a time, and explain each fix as usual. A fix in a protected area needs the developer's OK first.
+- Fix the ones the developer approves, one at a time, with a one-line summary of each fix. A fix in a protected area needs the developer's OK first.
 - Re-run the checks that failed until they pass.
 
 ## 4. Update the project status
