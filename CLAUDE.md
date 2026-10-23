@@ -11,7 +11,7 @@ The developer (the user) must understand every part of the codebase. Claude is a
 - Follow-ups:
   - Starlette warns that `httpx` for `TestClient` is deprecated in favour of `httpx2`. Look into it; swapping needs the developer's OK.
   - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config (milestone 6, after hosting).
-  - After CI has run once on GitHub: add branch protection on `main` requiring the "Lint and test" and "Scan for secrets" checks.
+  - Add branch protection on `main` requiring the "Lint and test" and "Scan for secrets" checks (CI has run on PR #1, so they can be selected now). Remove this line once it's set up.
   - Dependabot for the SHA-pinned GitHub Actions (milestone 6).
   - Before "first-run setup & staff sessions": settle whether the lock screen belongs in milestone 1 or 4, and PIN vs password (see decision 0008).
 - Milestones: 1 Foundation → 2 Customers, prices & plans → 3 Phone linking & check-in → 4 Admin screens → 5 Report → 6 Operations
@@ -26,7 +26,7 @@ The developer (the user) must understand every part of the codebase. Claude is a
 - Decision records: `docs/decisions/`. Check them before changing anything they cover.
 - Server-rendered Jinja2 HTML + HTMX for interactivity (customer pages mobile-first), no build step
 - **UI language: Hebrew, right-to-left** (`<html lang="he" dir="rtl">`); the code, comments and commits stay in English
-- Tooling: uv (packages), ruff (lint + format), pytest (tests), GitHub Actions (CI)
+- Tooling: uv (packages), ruff (lint + format), pytest (tests), GitHub Actions (CI), pre-commit (gitleaks + ruff). Rules, hooks and SHA pinning: decision 0011
 - Reports: openpyxl (Excel) + fpdf2 with an embedded Hebrew font (PDF, RTL). Not WeasyPrint.
 - Other: `keyring` (secrets), `pyzipper` (encrypted backups), `tzdata` (needed for `zoneinfo` on Windows)
 - One codebase, two app instances: admin on `127.0.0.1:8000`, public on `127.0.0.1:8001` (exposed via Cloudflare Tunnel)
