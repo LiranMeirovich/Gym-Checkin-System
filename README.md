@@ -64,4 +64,4 @@ This repository is public. It contains no real customer data and no secrets: tes
 
 ## Built with Claude Code
 
-This project is built with [Claude Code](https://claude.com/claude-code) as a helper, not the owner. The working rules and workflow are public: [`CLAUDE.md`](CLAUDE.md) sets the rules, `.claude/skills/` holds the workflow commands (start a feature, record a decision, explain changes, finish a feature), and every significant choice is recorded in [`docs/decisions/`](docs/decisions/).
+This project is built with [Claude Code](https://claude.com/claude-code) : Claude writes the code, and the developer owns the architecture, the decisions and the review ([decision 0012](docs/decisions/0012-claude-builds-developer-supervises.md)). The working rules and workflow are public: [`CLAUDE.md`](CLAUDE.md) sets the rules, `.claude/skills/` holds the workflow commands (start a feature, record a decision, explain changes, finish a feature), and every significant choice is recorded in [`docs/decisions/`](docs/decisions/).

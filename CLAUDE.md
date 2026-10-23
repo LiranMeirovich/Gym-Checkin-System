@@ -1,7 +1,7 @@
 # Gym Check-In & Subscription System
 
 A check-in and subscription system for a real local gym. It runs on the gym's front-desk PC and will be used in production. It is also a portfolio project.
-The developer (the user) must understand every part of the codebase. Claude is a helper, not the owner.
+Claude writes the code. The developer (the user) supervises: approves plans, makes the architectural and product decisions, and reviews the work at the architecture level (decision 0012).
 
 ## Project status
 - Design doc: `Gym Check-In & Subscription System — Design Doc.md` in the project root (the source of truth; read the relevant section before starting a milestone)
@@ -42,19 +42,19 @@ The developer (the user) must understand every part of the codebase. Claude is a
 One feature = one branch = one PR = **one Claude session**. New sessions don't remember earlier ones; they rely on this file, the design doc, `docs/decisions/` and git history.
 
 1. Start a **new session** and run `/start-feature <feature>`: read the docs, plan, approve, create the branch.
-2. For each step: build (Claude, or the developer in hint mode) → review → **commit**.
+2. For each step: Claude builds → short architecture-level summary → developer OK → **commit**.
 3. Run `/finish-feature`: check the whole branch (tests, lint, gitleaks, `/code-review`), fix, and update the Project status above.
 4. Commit the wrap-up, push, open a PR, and merge into `main`. Close the session.
 
-Use `/explain-changes` any time to understand code, and `/decision` to record a technical choice. Subagents are only for side jobs inside a session (searching, research), never for building a feature. Work on one feature at a time.
+Use `/explain-changes` any time for an architecture-level walkthrough of a change, and `/decision` to record a technical choice. Subagents are only for side jobs inside a session (searching, research), never for building a feature. Work on one feature at a time.
 
 ## How we work
-- **Explain non-trivial code.** After writing anything beyond boilerplate, briefly explain what it does and why it is built that way.
+- **Talk architecture, not code.** Explain changes in terms of components, responsibilities, data flow, boundaries and trade-offs. Don't walk through code line by line; show a snippet only when it carries a decision (a schema, a route contract, a security check) or when asked.
 - **Ask before architectural decisions.** Don't choose libraries, change the database schema, change the folder structure or change route contracts without asking first. Suggest options and give a recommendation.
+- **Flag what's risky.** In every summary, call out anything surprising, security-relevant or hard to undo, even if it's small.
 - **Add a dependency only in the feature that first uses it** (decision 0010).
 - **Keep changes small and focused.** Do one feature or fix at a time, so each change can be reviewed and committed on its own.
 - **Never commit or push** unless asked.
-- **"Hint mode":** when I say a feature is mine to write, give hints, reviews and pointers only, never the full solution.
 - **If the code and the design doc disagree, stop and ask.** Don't silently pick one.
 
 ## Protected areas (ask before touching)
