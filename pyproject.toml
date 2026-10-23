@@ -1,0 +1,41 @@
+[project]
+name = "gym-checkin-system"
+version = "0.1.0"
+description = "Check-in and subscription system for a single gym: wall-QR phone check-ins, staff admin app and a monthly billing report."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.156.8",
+    "uvicorn>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.uv]
+# This is an application, not a library: uv installs its dependencies
+# but does not build or install the project itself as a package.
+package = false
+
+[tool.ruff.lint]
+# Ruff's defaults (E4, E7, E9, F) plus:
+#   I   - import sorting
+#   B   - bugbear: likely bugs (mutable default arguments, ...)
+#   UP  - pyupgrade: modern Python syntax
+#   SIM - simplifications
+#   S   - bandit: security checks (hard-coded secrets, `random` for tokens, ...)
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest tests are built on plain `assert`, which S101 flags.
+"tests/**" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Make `import app...` work in tests (the project isn't installed as a package).
+pythonpath = ["."]
+# Fail on typos in marker names or in this config instead of ignoring them.
+addopts = ["--strict-markers", "--strict-config"]

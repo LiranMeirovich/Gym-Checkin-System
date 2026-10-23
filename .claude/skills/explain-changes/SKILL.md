@@ -15,7 +15,7 @@ The developer must understand every part of this codebase (see CLAUDE.md). Your 
 
 ## 2. Explain it
 For each meaningful piece:
-- **What it does**, in plain words, with a short excerpt of the key lines (`path:line`). Don't paste whole files.
+- **What it does**, in plain words, with a short excerpt of the key lines (`path:line`). You should show the user important lines that were added / changed with emphasis on showcasing the user what was changed in the code, treat it as a sort of code review before commiting just that instead of the user reviewing you, he learns from the changes
 - **Why it's built this way**: the design-doc rule, decision record or constraint behind it. If there was a reasonable alternative, name it and say why it wasn't used.
 - **New concepts**: explain any Python, FastAPI, SQLAlchemy, HTMX or security idea the developer may not know yet (for example dependency injection, a context manager, CSRF, password hashing), in 2–4 sentences.
 - **How it connects**: what calls this code, and what it calls.

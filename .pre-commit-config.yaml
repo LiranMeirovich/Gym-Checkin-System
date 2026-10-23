@@ -1,0 +1,30 @@
+# Checks that run on every `git commit` and block it if they fail.
+# Set up once per clone:  pre-commit install
+# Run on all files:       pre-commit run --all-files
+
+repos:
+  # Blocks commits that contain something that looks like a secret
+  # (decision 0007). Pinned to a commit SHA; pre-commit builds gitleaks
+  # from that exact source, so every machine runs the same version.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # frozen: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # Ruff runs through uv, so it's always the exact version locked in uv.lock
+  # (the same one CI and your editor use), not a second copy that can drift.
+  # --locked: fail if uv.lock is out of date instead of rewriting it mid-commit.
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --locked ruff check
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format (check only)
+        entry: uv run --locked ruff format --check
+        language: system
+        # Markdown too: ruff also formats Python code blocks in .md files,
+        # and CI checks them, so the hook must as well.
+        types_or: [python, pyi, markdown]

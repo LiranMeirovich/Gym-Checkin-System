@@ -5,11 +5,18 @@ The developer (the user) must understand every part of the codebase. Claude is a
 
 ## Project status
 - Design doc: `Gym Check-In & Subscription System — Design Doc.md` in the project root (the source of truth; read the relevant section before starting a milestone)
-- Current milestone: 1 — Foundation (not started). Planning is done: design doc updated, decisions 0001–0007 recorded, local git repo created (nothing committed yet).
-- Next feature: project setup (uv project, ruff, pytest, gitleaks pre-commit, GitHub Actions CI), followed by the first commit.
+- Current milestone: 1 — Foundation, split into six features (decision 0008): ~~project setup~~ → **settings** → database foundation → staff accounts & permissions → first-run setup & staff sessions → activity log.
+- Done: project setup (uv, ruff, pytest, pre-commit with gitleaks + ruff, GitHub Actions CI, admin/public apps with `/health`, README).
+- Next feature: settings (`.env` + the `settings` table; the config library needs the developer's OK).
+- Follow-ups:
+  - Starlette warns that `httpx` for `TestClient` is deprecated in favour of `httpx2`. Look into it; swapping needs the developer's OK.
+  - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config (milestone 6, after hosting).
+  - After CI has run once on GitHub: add branch protection on `main` requiring the "Lint and test" and "Scan for secrets" checks.
+  - Dependabot for the SHA-pinned GitHub Actions (milestone 6).
+  - Before "first-run setup & staff sessions": settle whether the lock screen belongs in milestone 1 or 4, and PIN vs password (see decision 0008).
 - Milestones: 1 Foundation → 2 Customers, prices & plans → 3 Phone linking & check-in → 4 Admin screens → 5 Report → 6 Operations
 - **Open: hosting.** A free server may replace the gym-PC + tunnel setup. Don't build anything host-specific until this is decided.
-- **New requirement: health form** (not in the design doc yet). Built into the system, filled in on the phone with a signature, stored with a PDF snapshot and an expiry date. It is **blocking**: no check-in (phone or manual) without a valid form, because the gym isn't insured without one. Instructors see only valid / not valid; the full form is for the manager.
+- **Health form** (design doc "Health form" section, decision 0004). Built into the system, filled in on the phone with a signature, stored with a PDF snapshot and an expiry date. It is **blocking**: no check-in (phone or manual) without a valid form, because the gym isn't insured without one. Instructors see only valid / not valid; the full form is for the manager.
 - **Upcoming: punch cards** (12 entries for a fixed price). Details are pending, so don't build them yet, but don't design anything that would block adding them later.
 
 ## Tech stack
@@ -44,6 +51,7 @@ Use `/explain-changes` any time to understand code, and `/decision` to record a 
 ## How we work
 - **Explain non-trivial code.** After writing anything beyond boilerplate, briefly explain what it does and why it is built that way.
 - **Ask before architectural decisions.** Don't choose libraries, change the database schema, change the folder structure or change route contracts without asking first. Suggest options and give a recommendation.
+- **Add a dependency only in the feature that first uses it** (decision 0010).
 - **Keep changes small and focused.** Do one feature or fix at a time, so each change can be reviewed and committed on its own.
 - **Never commit or push** unless asked.
 - **"Hint mode":** when I say a feature is mine to write, give hints, reviews and pointers only, never the full solution.
@@ -74,7 +82,12 @@ Use `/explain-changes` any time to understand code, and `/decision` to record a 
 - Testing priorities: report calculation, subscription status logic, and the linking/cookie flow get the most tests
 
 ## Commands
-- Admin: `uvicorn app.admin.main:app --host 127.0.0.1 --port 8000`
-- Public: `uvicorn app.public.main:app --host 127.0.0.1 --port 8001`
+- Install: `uv sync`, then once per clone `pre-commit install` (pre-commit itself: `uv tool install pre-commit`)
+- Admin: `uv run uvicorn app.admin.main:app --host 127.0.0.1 --port 8000`
+- Public: `uv run uvicorn app.public.main:app --host 127.0.0.1 --port 8001`
+- Test: `uv run pytest`
+- Lint / format: `uv run ruff check .` / `uv run ruff format .`
+- All hooks on every file: `pre-commit run --all-files`
+- Secret scan of the branch: `gitleaks git --log-opts="main..HEAD"`
 - Phone testing tunnel: `cloudflared tunnel --url http://127.0.0.1:8001`
-- (fill in once the project is set up: install, test, lint)
+- Windows note: the Claude desktop app sandboxes `AppData`, so run `uv python install`, `uv tool install` and `pre-commit install` from your own terminal, not through Claude.
