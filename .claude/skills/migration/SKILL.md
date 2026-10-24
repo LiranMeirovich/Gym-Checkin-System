@@ -18,6 +18,7 @@ The schema is a protected area (CLAUDE.md) and holds a real gym's data, so every
 ## 2. Change the models
 - Models live in `app/core/models/<area>.py`, one module per area. Import each new module in `app/core/models/__init__.py`, or Alembic won't see its tables.
 - A `Mapped[datetime]` column is a `UTCDateTime` automatically. Calendar dates (birthdays, form expiry) use `date`.
+- Timestamps are always set from Python (`default=utc_now`), never by SQL (`server_default=func.now()`, `CURRENT_TIMESTAMP`): SQL writes a shorter text format that breaks time comparisons. A test enforces this, and data migrations that write timestamps must use the same `YYYY-MM-DD HH:MM:SS.ffffff` UTC format.
 - Don't name constraints by hand: the naming convention on `Base.metadata` does it, and batch mode needs those names.
 - Declare foreign keys on every relation. Pick `ondelete` deliberately: the system archives and deactivates instead of deleting, so the default (no cascade) is usually right.
 

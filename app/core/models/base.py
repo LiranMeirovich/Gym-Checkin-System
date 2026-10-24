@@ -27,6 +27,12 @@ class UTCDateTime(TypeDecorator[datetime]):
     value read back is timezone-aware UTC. SQLite stores it as fixed-width
     text ("2026-10-24 09:02:00.000000"), so sorting and comparing the text
     in SQL gives the same order as the times.
+
+    That only holds if every value is written from Python. SQL's own clock
+    (``server_default=func.now()``, ``CURRENT_TIMESTAMP``) writes a shorter
+    format ("2026-10-24 09:02:00"), and mixing the two breaks comparisons,
+    so these columns never get a SQL-side default: set them with
+    ``default=utc_now`` instead. A test checks every model for this.
     """
 
     impl = DateTime

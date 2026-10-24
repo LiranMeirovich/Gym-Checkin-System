@@ -16,11 +16,13 @@ from sqlalchemy import (
     Integer,
     MetaData,
     Table,
+    func,
     insert,
     select,
 )
 from sqlalchemy.exc import StatementError
 
+from app.core.clock import utc_now
 from app.core.db import create_db_engine
 from app.core.models import Base, UTCDateTime
 from app.core.models.base import NAMING_CONVENTION
@@ -124,3 +126,35 @@ def test_constraints_get_conventional_names() -> None:
         "ix_child_parent_id",
     }
     assert Base.metadata.naming_convention == NAMING_CONVENTION
+
+
+def sql_side_timestamp_defaults(metadata: MetaData) -> list[str]:
+    """UTCDateTime columns whose value the database would fill in itself."""
+    return [
+        f"{table.name}.{column.name}"
+        for table in metadata.tables.values()
+        for column in table.columns
+        if isinstance(column.type, UTCDateTime)
+        and (column.server_default is not None or column.server_onupdate is not None)
+    ]
+
+
+def test_no_model_lets_sql_fill_in_a_timestamp() -> None:
+    # SQL's clock writes a shorter text format than UTCDateTime, which breaks
+    # comparisons. Use default=utc_now instead of server_default=func.now().
+    assert sql_side_timestamp_defaults(Base.metadata) == []
+
+
+def test_sql_side_timestamp_defaults_are_detected() -> None:
+    # The check above passes trivially while there are no tables; this shows
+    # it catches the mistake once there are.
+    checked = MetaData()
+    Table(
+        "visit",
+        checked,
+        Column("id", Integer, primary_key=True),
+        Column("at", UTCDateTime, server_default=func.now()),
+        Column("seen_at", UTCDateTime, default=utc_now),
+    )
+
+    assert sql_side_timestamp_defaults(checked) == ["visit.at"]

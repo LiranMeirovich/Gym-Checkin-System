@@ -1,17 +1,17 @@
 """Database engine and request sessions: pragmas, and one transaction per
 request."""
 
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Annotated
 
 import pytest
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from starlette.types import Receive, Scope, Send
 
-from app.core.db import BUSY_TIMEOUT_MS, create_db_engine, get_db, get_engine
+from app.core.db import BUSY_TIMEOUT_MS, DbSession, create_db_engine, get_engine
 
 
 def test_pragmas_are_set_on_every_connection(tmp_path: Path) -> None:
@@ -62,8 +62,39 @@ def test_get_engine_uses_the_configured_path(
     assert get_engine() is get_engine()
 
 
+@pytest.mark.parametrize("name", ["gym?mode=ro.db", "gym #1 100%.db"])
+def test_special_characters_in_the_path_are_part_of_the_file_name(
+    tmp_path: Path, name: str
+) -> None:
+    # In a URL "?" starts a query string; it must stay part of the file name
+    # (Windows forbids it in file names, Linux doesn't). Nothing is opened
+    # here, so the test runs on both.
+    path = tmp_path / name
+    engine = create_db_engine(path)
+
+    assert engine.url.database == str(path)
+    assert not engine.url.query
+
+
+def saved_notes() -> list[str]:
+    """The notes committed so far, read on a connection of its own."""
+    with get_engine().connect() as connection:
+        return list(connection.exec_driver_sql("SELECT body FROM note").scalars())
+
+
+class RecordingResponse(Response):
+    """Records which notes were committed at the moment the response starts
+    going out to the client."""
+
+    seen_while_sending: list[list[str]] = []
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        self.seen_while_sending.append(saved_notes())
+        await super().__call__(scope, receive, send)
+
+
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """A throwaway app with one route that writes a row, then succeeds or
     fails depending on the request."""
     monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
@@ -72,27 +103,26 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     app = FastAPI()
 
-    @app.post("/notes/{body}")
-    def add_note(
-        body: str, db: Annotated[Session, Depends(get_db)], fail: str = ""
-    ) -> None:
+    @app.post("/notes/{body}", response_class=RecordingResponse)
+    def add_note(body: str, db: DbSession, fail: str = "") -> RecordingResponse:
         db.execute(text("INSERT INTO note (body) VALUES (:body)"), {"body": body})
         if fail == "http":
             raise HTTPException(status_code=400)
         if fail == "crash":
             raise RuntimeError("boom")
+        return RecordingResponse()
 
-    return TestClient(app, raise_server_exceptions=False)
-
-
-def saved_notes() -> list[str]:
-    with get_engine().connect() as connection:
-        return list(connection.exec_driver_sql("SELECT body FROM note").scalars())
+    RecordingResponse.seen_while_sending = []
+    yield TestClient(app, raise_server_exceptions=False)
 
 
-def test_request_changes_are_committed(client: TestClient) -> None:
+def test_request_changes_are_committed_before_the_response_is_sent(
+    client: TestClient,
+) -> None:
     assert client.post("/notes/kept").status_code == 200
 
+    # Already saved when the response went out, not some time after.
+    assert RecordingResponse.seen_while_sending == [["kept"]]
     assert saved_notes() == ["kept"]
 
 

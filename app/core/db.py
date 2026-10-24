@@ -10,9 +10,10 @@ from collections.abc import Iterator
 from functools import lru_cache
 from pathlib import Path
 from sqlite3 import Connection as SQLiteConnection
-from typing import Any
+from typing import Annotated, Any
 
-from sqlalchemy import Engine, create_engine, event
+from fastapi import Depends
+from sqlalchemy import URL, Engine, create_engine, event
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -25,7 +26,9 @@ BUSY_TIMEOUT_MS = 5000
 def create_db_engine(path: Path) -> Engine:
     """An engine for the SQLite file at ``path``, with our pragmas applied
     to every connection it opens. The file is created if it doesn't exist."""
-    engine = create_engine(f"sqlite:///{path}")
+    # URL.create, not an f-string: characters like "#" or "%" in the path
+    # would otherwise be read as URL syntax and open a different file.
+    engine = create_engine(URL.create("sqlite", database=str(path)))
     event.listen(engine, "connect", _on_connect)
     event.listen(engine, "begin", _on_begin)
     return engine
@@ -65,10 +68,19 @@ def get_engine() -> Engine:
 
 
 def get_db() -> Iterator[Session]:
-    """FastAPI dependency: a session whose transaction covers the request.
+    """A session whose transaction covers the request. Routes don't use this
+    directly; they declare a ``DbSession`` parameter.
 
     Commits when the route returns, rolls back if it raises (including an
     ``HTTPException``), so a request's changes are saved all or nothing.
     """
     with Session(get_engine()) as session, session.begin():
         yield session
+
+
+# The one way routes get the database: ``def route(db: DbSession)``.
+# scope="function" makes FastAPI finish get_db (commit or roll back) before
+# the response is sent. With the default ("request") the commit would run
+# after the client already got its response: it could see "saved" for a
+# change that then fails to commit, or reload a page before the change lands.
+DbSession = Annotated[Session, Depends(get_db, scope="function")]

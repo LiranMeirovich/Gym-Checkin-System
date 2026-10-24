@@ -141,3 +141,9 @@ def test_app_connections_still_enforce_foreign_keys_after_migrating(
 
     with get_engine().connect() as connection:
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+
+
+def test_offline_sql_scripts_are_refused(alembic_config: Config) -> None:
+    # A printed SQL script would run without the foreign-key handling.
+    with pytest.raises(RuntimeError, match="offline migrations"):
+        command.upgrade(alembic_config, "head", sql=True)

@@ -59,14 +59,13 @@ def configure(**kwargs: Any) -> None:
 
 
 def run_migrations_offline() -> None:
-    """``alembic upgrade --sql``: print the SQL instead of running it."""
-    configure(
-        url=f"sqlite:///{get_settings().database_path}",
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
+    """``alembic upgrade --sql`` would print SQL to run by hand. Refused: a
+    printed script runs without the foreign-key handling above, so a table
+    rebuild in it could cascade-delete rows."""
+    raise RuntimeError(
+        "offline migrations (--sql) aren't supported: run "
+        "`uv run alembic upgrade head` so foreign keys are handled safely"
     )
-    with context.begin_transaction():
-        context.run_migrations()
 
 
 def run_migrations_online() -> None:
