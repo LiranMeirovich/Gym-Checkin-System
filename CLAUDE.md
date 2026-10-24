@@ -5,12 +5,14 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 
 ## Project status
 - Design doc: `Gym Check-In & Subscription System — Design Doc.md` in the project root (the source of truth; read the relevant section before starting a milestone)
-- Current milestone: 1 — Foundation, split into seven features (decisions 0008, 0014): ~~project setup~~ → ~~settings (`.env`)~~ → **database foundation** → settings table → staff accounts & permissions → first-run setup & staff sessions → activity log.
-- Done: project setup (uv, ruff, pytest, pre-commit with gitleaks + ruff, GitHub Actions CI, admin/public apps with `/health`, README); settings (`.env`): `app/core/config.py` (`get_settings()`), `GYM_*` env vars / `.env`, validated at app startup, `.env.example` (decision 0013).
-- Next feature: database foundation. It reads the DB path from `get_settings().database_path`.
+- Current milestone: 1 — Foundation, split into seven features (decisions 0008, 0014): ~~project setup~~ → ~~settings (`.env`)~~ → ~~database foundation~~ → **settings table** → staff accounts & permissions → first-run setup & staff sessions → activity log.
+- Done: project setup (uv, ruff, pytest, pre-commit with gitleaks + ruff, GitHub Actions CI, admin/public apps with `/health`, README); settings (`.env`): `app/core/config.py` (`get_settings()`), `GYM_*` env vars / `.env`, validated at app startup, `.env.example` (decision 0013); database foundation: SQLite engine + `DbSession` (`app/core/db.py`), `UTCDateTime` + `Base` (`app/core/models/`), `utc_now`/`to_local` (`app/core/clock.py`), Alembic with FK-safe migrations and an empty baseline, shared startup that refuses an out-of-date DB (`app/core/startup.py`), `/migration` skill (decision 0015).
+- Next feature: settings table, the first real table (decision 0014). Follow the `/migration` skill; the schema needs the developer's OK.
 - Follow-ups:
-  - Relative `GYM_DATABASE_PATH` and the `.env` lookup depend on the process's working directory. A service started elsewhere could create a fresh empty `gym.db`, or the two apps could open different files. Pin a base folder or require absolute paths in prod (milestone 6 / hosting).
-  - Both apps copy the same startup step (`lifespan` → `get_settings()`). Move it into a shared helper in `app/core` once startup does more (DB engine, scheduler).
+  - Relative `GYM_DATABASE_PATH` and the `.env` lookup depend on the process's working directory. A missing DB file now stops startup, but the two apps could still open different files if started from different folders. Pin a base folder or require absolute paths in prod (milestone 6 / hosting).
+  - Packaging (milestone 6): the apps need `alembic.ini` and `migrations/` next to the code at runtime (the startup check reads them).
+  - Code review leftovers (low priority): two migration heads give Alembic's raw error at startup instead of `DatabaseNotReadyError`; the naive-datetime checks test `tzinfo is None` rather than `utcoffset() is None`; the `both_apps` test marker is duplicated in `test_apps.py` and `test_startup.py`.
+  - If "database is locked" shows up in practice, switch write requests to `BEGIN IMMEDIATE` in `app/core/db.py` (decision 0015).
   - Starlette warns that `httpx` for `TestClient` is deprecated in favour of `httpx2`. Look into it; swapping needs the developer's OK.
   - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config (milestone 6, after hosting).
   - Add branch protection on `main` requiring the "Lint and test" and "Scan for secrets" checks (CI has run on PR #1, so they can be selected now). Remove this line once it's set up.
@@ -23,7 +25,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 
 ## Tech stack
 - Python 3.12 + FastAPI, SQLite (`gym.db`, WAL mode)
-- SQLAlchemy 2.0 (ORM) + Alembic (migrations)
+- SQLAlchemy 2.x (ORM, 2.1 in use) + Alembic (migrations); conventions in decision 0015
 - SQLCipher encrypts the whole database file (added in milestone 6; plain SQLite until then). No field-level encryption.
 - Decision records: `docs/decisions/`. Check them before changing anything they cover.
 - Server-rendered Jinja2 HTML + HTMX for interactivity (customer pages mobile-first), no build step
@@ -37,6 +39,9 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 
 ## Implementation notes
 - Use plain `def` routes, not `async def`, because SQLite and SQLAlchemy are synchronous.
+- Routes get the database by declaring a `db: DbSession` parameter (`app/core/db.py`): one transaction per request, committed before the response is sent, rolled back on any exception. Never use `Depends(get_db)` directly: FastAPI's default would commit after the response (decision 0015).
+- Get "now" from `app.core.clock.utc_now()` and display times with `to_local()`. Timestamp columns are `Mapped[datetime]` (stored as `UTCDateTime`); naive datetimes are refused.
+- The apps never create or migrate the database; they refuse to start unless it's at the newest migration.
 - The admin app needs CSRF protection (FastAPI doesn't include it).
 - Run uvicorn with a single worker, so scheduled jobs (report, backups) never run twice.
 - Behind Cloudflare, the client IP is in `CF-Connecting-IP`, not the socket address. Use that header for rate limiting.
@@ -64,7 +69,7 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - Staff auth: PINs, lock screen, roles and permissions
 - Customer login: link codes, device sessions, the `gym_device` cookie
 - Plan, price and report calculation logic
-- Database schema & migrations
+- Database schema & migrations: every schema change follows the `/migration` skill
 
 ## Hard rules (from the design doc)
 - Never bind either app to `0.0.0.0`. Never register admin routes on the public app.
@@ -86,6 +91,8 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 
 ## Commands
 - Install: `uv sync`, then once per clone `pre-commit install` (pre-commit itself: `uv tool install pre-commit`)
+- Create / upgrade the database (before starting the apps; in prod, stop both apps and back up first): `uv run alembic upgrade head`
+- New migration (follow the `/migration` skill): `uv run alembic revision --autogenerate -m "<what changes>"`
 - Admin: `uv run uvicorn app.admin.main:app --host 127.0.0.1 --port 8000`
 - Public: `uv run uvicorn app.public.main:app --host 127.0.0.1 --port 8001`
 - Test: `uv run pytest`

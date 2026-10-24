@@ -15,10 +15,9 @@ both_apps = pytest.mark.parametrize(
 
 
 @both_apps
-def test_health_returns_ok(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
-
-    # The `with` block runs the app's startup, including the config check.
+@pytest.mark.usefixtures("migrated_db")
+def test_health_returns_ok(app: FastAPI) -> None:
+    # The `with` block runs the app's startup: the config and database checks.
     with TestClient(app) as client:
         response = client.get("/health")
 

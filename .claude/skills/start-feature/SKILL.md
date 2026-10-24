@@ -9,6 +9,11 @@ disable-model-invocation: true
 
 Feature: $ARGUMENTS
 
+## 0. Name the session
+Before anything else, rename this session so it's easy to find in the sidebar. Use a short title in the form `M<milestone> · <Feature name>`, for example `M1 · Database foundation` (take the milestone from CLAUDE.md's Project status; for a fix, use `Fix · <what>`).
+- In the Claude desktop app, call `mcp__ccd_session_mgmt__set_session_title` with that title. If it's only listed as a deferred tool, load it first with ToolSearch (`select:mcp__ccd_session_mgmt__set_session_title`).
+- If the tool isn't available (for example in the terminal CLI), skip this step silently.
+
 ## 1. Understand it
 - Read the relevant sections of the design doc (`Gym Check-In & Subscription System — Design Doc.md`) and of CLAUDE.md. Check `docs/decisions/` for any decision that applies.
 - Look at the existing code this feature touches.
