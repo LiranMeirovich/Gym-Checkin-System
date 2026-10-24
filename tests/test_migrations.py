@@ -1,9 +1,6 @@
 """Alembic migrations: they apply cleanly, undo cleanly, and match the
 models."""
 
-import os
-from pathlib import Path
-
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
@@ -13,16 +10,7 @@ from alembic.script import ScriptDirectory
 
 from app.core.db import get_engine
 from app.core.models import Base
-
-ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
-
-
-@pytest.fixture
-def alembic_config(monkeypatch: pytest.MonkeyPatch) -> Config:
-    # isolated_env runs each test in its own directory, so the default
-    # database path (gym.db) is a fresh file there.
-    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
-    return Config(ALEMBIC_INI)
+from tests.conftest import AddMigration
 
 
 def current_revision() -> str | None:
@@ -107,29 +95,6 @@ def upgrade() -> None:
 """
 
 
-def add_test_migration(config: Config, folder: Path, body: str) -> str:
-    """Write a migration with ``body`` after the current head and make
-    Alembic look in ``folder`` too. Returns its revision id."""
-    head = ScriptDirectory.from_config(config).get_current_head()
-    (folder / "test_migration.py").write_text(
-        "import sqlalchemy as sa\n"
-        "from alembic import op\n\n"
-        "revision = 'test_migration'\n"
-        f"down_revision = {head!r}\n"
-        "branch_labels = None\n"
-        "depends_on = None\n"
-        f"{body}\n\n"
-        "def downgrade() -> None:\n"
-        "    pass\n",
-        encoding="utf-8",
-    )
-    real_versions = ALEMBIC_INI.parent / "migrations" / "versions"
-    config.set_main_option(
-        "version_locations", os.pathsep.join([str(real_versions), str(folder)])
-    )
-    return "test_migration"
-
-
 def table_names() -> set[str]:
     with get_engine().connect() as connection:
         return set(
@@ -140,13 +105,11 @@ def table_names() -> set[str]:
 
 
 def test_rebuilding_a_referenced_table_keeps_the_rows_pointing_at_it(
-    alembic_config: Config, tmp_path: Path
+    alembic_config: Config, add_test_migration: AddMigration
 ) -> None:
     # With foreign keys on, dropping "parent" during the rebuild would
     # cascade and delete the child row.
-    folder = tmp_path / "test_versions"
-    folder.mkdir()
-    revision = add_test_migration(alembic_config, folder, REBUILD_REFERENCED_TABLE)
+    revision = add_test_migration(REBUILD_REFERENCED_TABLE)
 
     command.upgrade(alembic_config, "head")
 
@@ -157,13 +120,11 @@ def test_rebuilding_a_referenced_table_keeps_the_rows_pointing_at_it(
 
 
 def test_a_migration_that_breaks_foreign_keys_is_rolled_back(
-    alembic_config: Config, tmp_path: Path
+    alembic_config: Config, add_test_migration: AddMigration
 ) -> None:
     command.upgrade(alembic_config, "head")
     before = current_revision()
-    folder = tmp_path / "test_versions"
-    folder.mkdir()
-    add_test_migration(alembic_config, folder, LEAVE_AN_ORPHAN)
+    add_test_migration(LEAVE_AN_ORPHAN)
 
     with pytest.raises(RuntimeError, match="child row 1 -> parent"):
         command.upgrade(alembic_config, "head")
