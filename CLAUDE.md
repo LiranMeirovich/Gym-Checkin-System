@@ -5,10 +5,12 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 
 ## Project status
 - Design doc: `Gym Check-In & Subscription System — Design Doc.md` in the project root (the source of truth; read the relevant section before starting a milestone)
-- Current milestone: 1 — Foundation, split into seven features (decisions 0008, 0014): ~~project setup~~ → **settings (`.env`)** → database foundation → settings table → staff accounts & permissions → first-run setup & staff sessions → activity log.
-- Done: project setup (uv, ruff, pytest, pre-commit with gitleaks + ruff, GitHub Actions CI, admin/public apps with `/health`, README).
-- In progress: settings (`.env`), deployment config via pydantic-settings, validated at startup (decision 0013).
+- Current milestone: 1 — Foundation, split into seven features (decisions 0008, 0014): ~~project setup~~ → ~~settings (`.env`)~~ → **database foundation** → settings table → staff accounts & permissions → first-run setup & staff sessions → activity log.
+- Done: project setup (uv, ruff, pytest, pre-commit with gitleaks + ruff, GitHub Actions CI, admin/public apps with `/health`, README); settings (`.env`): `app/core/config.py` (`get_settings()`), `GYM_*` env vars / `.env`, validated at app startup, `.env.example` (decision 0013).
+- Next feature: database foundation. It reads the DB path from `get_settings().database_path`.
 - Follow-ups:
+  - Relative `GYM_DATABASE_PATH` and the `.env` lookup depend on the process's working directory. A service started elsewhere could create a fresh empty `gym.db`, or the two apps could open different files. Pin a base folder or require absolute paths in prod (milestone 6 / hosting).
+  - Both apps copy the same startup step (`lifespan` → `get_settings()`). Move it into a shared helper in `app/core` once startup does more (DB engine, scheduler).
   - Starlette warns that `httpx` for `TestClient` is deprecated in favour of `httpx2`. Look into it; swapping needs the developer's OK.
   - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config (milestone 6, after hosting).
   - Add branch protection on `main` requiring the "Lint and test" and "Scan for secrets" checks (CI has run on PR #1, so they can be selected now). Remove this line once it's set up.

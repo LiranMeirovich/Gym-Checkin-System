@@ -33,11 +33,18 @@ class Settings(BaseSettings):
         env_prefix="GYM_",
         env_file=".env",
         env_file_encoding="utf-8",
-        # An unknown key in .env is an error, not ignored: a misspelt one
-        # (GYM_TIMEZNE) or a foreign one (SMTP_HOST). .env is ours alone.
-        # pydantic-settings does silently skip an unprefixed key that matches
-        # a field name (TIMEZONE), so the GYM_ prefix still has to be right.
+        # An unknown key in the .env *file* is an error, not ignored: a
+        # misspelt one (GYM_TIMEZNE) or a foreign one (SMTP_HOST). .env is
+        # ours alone. Known gaps, both silently ignored: an unprefixed key
+        # that matches a field name (TIMEZONE), and any misspelt *real*
+        # environment variable, since those are only read by field name.
         extra="forbid",
+        # A blank value ("GYM_PUBLIC_HOSTNAME=") means unset, so the default
+        # (or prod's "required" check) applies instead of an empty string.
+        env_ignore_empty=True,
+        # One instance is cached and shared by the whole process
+        # (get_settings), so nothing may change it after loading.
+        frozen=True,
     )
 
     # "prod" is the default so a missing setting fails closed: a production
@@ -60,7 +67,9 @@ class Settings(BaseSettings):
     def _timezone_exists(cls, value: str) -> str:
         try:
             ZoneInfo(value)
-        except (ZoneInfoNotFoundError, ValueError) as error:
+        # OSError: a zone *folder* such as "Asia" reaches the file system
+        # and fails there (PermissionError on Windows) instead of not-found.
+        except (ZoneInfoNotFoundError, ValueError, OSError) as error:
             raise ValueError(f"unknown timezone {value!r}") from error
         return value
 
@@ -75,6 +84,11 @@ class Settings(BaseSettings):
                 f"{value!r} is not a bare hostname (expected e.g. "
                 f"'checkin.example.com', without https:// or a path)"
             )
+        # The regex also matches IPv4 addresses ("10.0.0.1"). No real
+        # top-level domain is all digits, so that tells them apart. Phones
+        # must come in through the tunnel's DNS name, never a bare IP.
+        if value.rsplit(".", 1)[-1].isdigit():
+            raise ValueError(f"{value!r} is an IP address, not a hostname")
         return value
 
     @model_validator(mode="after")

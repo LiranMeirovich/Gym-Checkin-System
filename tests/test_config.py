@@ -95,7 +95,7 @@ def test_unknown_environment_is_rejected(monkeypatch: pytest.MonkeyPatch) -> Non
         Settings()
 
 
-@pytest.mark.parametrize("timezone", ["Israel/Tel_Aviv", "", "../etc/passwd"])
+@pytest.mark.parametrize("timezone", ["Israel/Tel_Aviv", "Asia", "../etc/passwd"])
 def test_unknown_timezone_is_rejected(
     timezone: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -161,3 +161,41 @@ def test_env_example_is_a_valid_config() -> None:
     settings = Settings(_env_file=ENV_EXAMPLE)
 
     assert settings.environment == "dev"
+
+
+@pytest.mark.parametrize("hostname", ["10.0.0.1", "192.168.1.20"])
+def test_ip_address_is_not_a_hostname(
+    hostname: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", hostname)
+
+    with pytest.raises(ValidationError, match="is an IP address"):
+        Settings()
+
+
+def test_blank_values_in_dotenv_file_mean_unset(isolated_env: Path) -> None:
+    (isolated_env / ".env").write_text(
+        "GYM_ENVIRONMENT=dev\nGYM_TIMEZONE=\nGYM_PUBLIC_HOSTNAME=\n", encoding="utf-8"
+    )
+
+    settings = Settings()
+
+    assert settings.timezone == "Asia/Jerusalem"
+    assert settings.public_hostname is None
+
+
+def test_blank_hostname_still_fails_in_prod(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "")
+
+    with pytest.raises(ValidationError, match="GYM_PUBLIC_HOSTNAME is required"):
+        Settings()
+
+
+def test_settings_cannot_be_changed_after_loading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    settings = get_settings()
+
+    with pytest.raises(ValidationError, match="frozen"):
+        settings.environment = "prod"

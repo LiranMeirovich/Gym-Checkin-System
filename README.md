@@ -46,7 +46,7 @@ Never bind either app to `0.0.0.0`.
 
 ## Configuration
 
-Deployment config comes from `GYM_`-prefixed environment variables or a `.env` file in the folder the apps are started from. Real environment variables win. [`.env.example`](.env.example) lists every key with a comment. Both apps check the config when they start, and refuse to start if a value is invalid or a key is unknown ([decision 0013](docs/decisions/0013-deployment-config-with-pydantic-settings.md)).
+Deployment config comes from `GYM_`-prefixed environment variables or a `.env` file in the folder the apps are started from. Real environment variables win. [`.env.example`](.env.example) lists every key with a comment. Both apps check the config when they start, and refuse to start if a value is invalid or the `.env` file has an unknown key. A blank value counts as unset. A misspelt *environment variable* can't be detected and is simply ignored, so double-check names set outside `.env` ([decision 0013](docs/decisions/0013-deployment-config-with-pydantic-settings.md)).
 
 | Key | Default | Notes |
 | --- | --- | --- |
