@@ -29,6 +29,12 @@ uv tool install pre-commit
 pre-commit install         # run gitleaks and ruff on every commit
 ```
 
+Create your local config from the template (on Windows PowerShell: `Copy-Item .env.example .env`):
+
+```bash
+cp .env.example .env
+```
+
 Run the apps:
 
 ```bash
@@ -37,6 +43,19 @@ uv run uvicorn app.public.main:app --host 127.0.0.1 --port 8001
 ```
 
 Never bind either app to `0.0.0.0`.
+
+## Configuration
+
+Deployment config comes from `GYM_`-prefixed environment variables or a `.env` file in the folder the apps are started from. Real environment variables win. [`.env.example`](.env.example) lists every key with a comment. Both apps check the config when they start, and refuse to start if a value is invalid or the `.env` file has an unknown key. A blank value counts as unset. A misspelt *environment variable* can't be detected and is simply ignored, so double-check names set outside `.env` ([decision 0013](docs/decisions/0013-deployment-config-with-pydantic-settings.md)).
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `GYM_ENVIRONMENT` | `prod` | `dev` or `prod` |
+| `GYM_DATABASE_PATH` | `gym.db` | SQLite file |
+| `GYM_TIMEZONE` | `Asia/Jerusalem` | Timezone used to show times; timestamps are stored in UTC |
+| `GYM_PUBLIC_HOSTNAME` | none | Bare hostname phones reach the public app on; required in `prod` |
+
+Values the manager edits in the app (gym name, emails, lock-screen minutes) will live in the database's `settings` table instead ([decision 0014](docs/decisions/0014-settings-table-after-database-foundation.md)).
 
 ## Development
 
