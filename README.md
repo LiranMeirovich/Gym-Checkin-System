@@ -61,7 +61,18 @@ Deployment config comes from `GYM_`-prefixed environment variables or a `.env` f
 | `GYM_TIMEZONE` | `Asia/Jerusalem` | Timezone used to show times; timestamps are stored in UTC |
 | `GYM_PUBLIC_HOSTNAME` | none | Bare hostname phones reach the public app on; required in `prod` |
 
-Values the manager edits in the app (gym name, emails, lock-screen minutes) will live in the database's `settings` table instead ([decision 0014](docs/decisions/0014-settings-table-after-database-foundation.md)).
+### Gym settings
+
+Values the manager edits in the app live in the database's `settings` table instead, one row per key ([decision 0014](docs/decisions/0014-settings-table-after-database-foundation.md), [decision 0016](docs/decisions/0016-gym-settings-in-a-key-value-table.md)). Every key, with its type, default and validation, is defined in `GymSettings` (`app/core/gym_settings.py`); a key with no row uses its default. Adding a setting means adding a field there, with no migration.
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `gym_name` | not set | 1–100 characters; filled in at first-run setup |
+| `manager_email` | not set | Gets the monthly report to approve |
+| `report_recipients` | empty | Get the report after approval |
+| `lock_screen_minutes` | `5` | 1–60 minutes without activity before the admin app locks |
+
+The SMTP password and other secrets are never stored here.
 
 ## Development
 
