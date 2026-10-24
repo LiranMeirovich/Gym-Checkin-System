@@ -1,8 +1,6 @@
 """Deployment config: defaults, where values come from, and validation
 (decision 0013)."""
 
-import os
-from collections.abc import Iterator
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -10,19 +8,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings, get_settings
-
-
-@pytest.fixture(autouse=True)
-def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """Run each test in an empty directory with no GYM_* variables, so the
-    developer's own .env or environment never leaks into a test."""
-    for name in list(os.environ):
-        if name.startswith("GYM_"):
-            monkeypatch.delenv(name)
-    monkeypatch.chdir(tmp_path)
-    get_settings.cache_clear()
-    yield tmp_path
-    get_settings.cache_clear()
 
 
 def test_dev_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,3 +141,23 @@ def test_get_settings_loads_once(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert get_settings() is first
     assert get_settings().timezone == "Asia/Jerusalem"
+
+
+ENV_EXAMPLE = Path(__file__).resolve().parent.parent / ".env.example"
+
+
+def test_env_example_lists_every_setting() -> None:
+    # Keys count whether they're set or commented out ("# GYM_X=...").
+    keys = {
+        line.lstrip("# ").split("=", 1)[0]
+        for line in ENV_EXAMPLE.read_text(encoding="utf-8").splitlines()
+        if line.lstrip("# ").startswith("GYM_") and "=" in line
+    }
+
+    assert keys == {f"GYM_{name.upper()}" for name in Settings.model_fields}
+
+
+def test_env_example_is_a_valid_config() -> None:
+    settings = Settings(_env_file=ENV_EXAMPLE)
+
+    assert settings.environment == "dev"

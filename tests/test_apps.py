@@ -4,19 +4,37 @@ nothing beyond what it should."""
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.admin.main import app as admin_app
 from app.public.main import app as public_app
 
+both_apps = pytest.mark.parametrize(
+    "app", [admin_app, public_app], ids=["admin", "public"]
+)
 
-@pytest.mark.parametrize("app", [admin_app, public_app], ids=["admin", "public"])
-def test_health_returns_ok(app: FastAPI) -> None:
-    client = TestClient(app)
 
-    response = client.get("/health")
+@both_apps
+def test_health_returns_ok(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+
+    # The `with` block runs the app's startup, including the config check.
+    with TestClient(app) as client:
+        response = client.get("/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+@both_apps
+def test_app_refuses_to_start_on_invalid_config(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    monkeypatch.setenv("GYM_TIMEZONE", "Not/A_Zone")
+
+    with pytest.raises(ValidationError, match="timezone"), TestClient(app):
+        pass
 
 
 def test_public_app_registers_only_expected_routes() -> None:
