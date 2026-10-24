@@ -15,10 +15,11 @@ The manager edits some values from the admin app: the gym name, the manager's em
 ## Decision
 Key/value rows, defined in code. The table is `settings` (`key` primary key, `value` JSON text, `updated_at`). `GymSettings` in `app/core/gym_settings.py` is the one place a setting is defined.
 
-- **A missing row means the default** from the code. The migration adds no rows; settings with no sensible default (gym name, manager email) read as "not set" until first-run setup.
+- **A missing row means the default** from the code. The migration adds no rows; settings with no sensible default (gym name, manager email) read as "not set" until first-run setup. Clearing a setting deletes its row, so it follows the default again.
 - **Read on every request, never cached**, so a change saved in the admin app reaches the public app immediately.
-- **Bad stored data fails loudly.** An unknown key, text that isn't JSON or an invalid value raises an error instead of falling back to the default.
-- **Updates are all or nothing.** Each change is validated on its own, so a value broken by a hand edit can still be fixed from the settings screen. Unchanged values aren't rewritten.
+- **Bad stored data fails loudly.** An unknown key, text that isn't JSON or an invalid value raises an error instead of falling back to the default. The one exception is the settings screen: its loader shows the default for a bad row and reports the problem next to the field, so the manager can save a good value over it.
+- **Updates are all or nothing.** Each change is validated on its own, and saved with one insert-or-update statement, so two saves of a new key can't collide. Unchanged values aren't rewritten.
+- **Email addresses are plain ASCII.** Commas, angle brackets, quotes and control characters are refused, so a stored address can't add recipients or headers when the report is emailed.
 - **Error messages never repeat values**, since they can be email addresses and end up in logs.
 
 ## Consequences
@@ -27,3 +28,5 @@ Key/value rows, defined in code. The table is `settings` (`key` primary key, `va
 - Settings are current state, overwritten in place. Anything that must be reproducible later (who a past report was sent to) has to be stored with that record, not read from settings.
 - Setting changes aren't logged yet: the activity log arrives in a later milestone 1 feature, which must wire it into `update_gym_settings()`.
 - A rule involving two settings would need checking against the stored values; none exists yet.
+- Removing or renaming a setting needs a data migration that deletes or re-keys its rows (the `/migration` skill says so); adding one doesn't.
+- Saving uses SQLite's `INSERT ... ON CONFLICT`, which ties this code to SQLite (and SQLCipher, which is SQLite).

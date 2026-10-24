@@ -47,6 +47,7 @@ Autogenerate is a first draft. Read every line and fix:
 - **One linear history:** if two branches each add a migration (two heads), re-point the newer one's `down_revision` before merging. Don't use `alembic merge`.
 - **Back up before upgrading a production database.** Until automatic backups exist (milestone 6), copy `gym.db` while both apps are stopped.
 - No real customer data in migrations, tests or seeds (the repo is public).
+- **Gym settings are rows, not columns.** Adding a field to `GymSettings` (`app/core/gym_settings.py`) needs no migration. Removing or renaming one does: a data migration deletes (or re-keys) its rows in `settings`, or every page in both apps fails on the unknown key.
 
 ## 7. Report it
 In the step summary, show the schema change (a table outline is fine) and call out: anything destructive, any data migration, which tables get rebuilt (batch mode), and whether `downgrade()` is a full undo.

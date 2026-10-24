@@ -11,6 +11,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 - Follow-ups:
   - Relative `GYM_DATABASE_PATH` and the `.env` lookup depend on the process's working directory. A missing DB file now stops startup, but the two apps could still open different files if started from different folders. Pin a base folder or require absolute paths in prod (milestone 6 / hosting).
   - Packaging (milestone 6): the apps need `alembic.ini` and `migrations/` next to the code at runtime (the startup check reads them).
+  - Activity log feature: `update_gym_settings()` (`app/core/gym_settings.py`) doesn't write to `activity_log` yet. Wire it in there (who, which keys, before and after), then remove its TODO.
   - Code review leftovers (low priority): two migration heads give Alembic's raw error at startup instead of `DatabaseNotReadyError`; the naive-datetime checks test `tzinfo is None` rather than `utcoffset() is None`; the `both_apps` test marker is duplicated in `test_apps.py` and `test_startup.py`.
   - If "database is locked" shows up in practice, switch write requests to `BEGIN IMMEDIATE` in `app/core/db.py` (decision 0015).
   - Starlette warns that `httpx` for `TestClient` is deprecated in favour of `httpx2`. Look into it; swapping needs the developer's OK.
