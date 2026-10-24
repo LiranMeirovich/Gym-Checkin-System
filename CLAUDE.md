@@ -5,9 +5,9 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 
 ## Project status
 - Design doc: `Gym Check-In & Subscription System — Design Doc.md` in the project root (the source of truth; read the relevant section before starting a milestone)
-- Current milestone: 1 — Foundation, split into six features (decision 0008): ~~project setup~~ → **settings** → database foundation → staff accounts & permissions → first-run setup & staff sessions → activity log.
+- Current milestone: 1 — Foundation, split into seven features (decisions 0008, 0014): ~~project setup~~ → **settings (`.env`)** → database foundation → settings table → staff accounts & permissions → first-run setup & staff sessions → activity log.
 - Done: project setup (uv, ruff, pytest, pre-commit with gitleaks + ruff, GitHub Actions CI, admin/public apps with `/health`, README).
-- Next feature: settings (`.env` + the `settings` table; the config library needs the developer's OK).
+- In progress: settings (`.env`), deployment config via pydantic-settings, validated at startup (decision 0013).
 - Follow-ups:
   - Starlette warns that `httpx` for `TestClient` is deprecated in favour of `httpx2`. Look into it; swapping needs the developer's OK.
   - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config (milestone 6, after hosting).
@@ -28,6 +28,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 - **UI language: Hebrew, right-to-left** (`<html lang="he" dir="rtl">`); the code, comments and commits stay in English
 - Tooling: uv (packages), ruff (lint + format), pytest (tests), GitHub Actions (CI), pre-commit (gitleaks + ruff). Rules, hooks and SHA pinning: decision 0011
 - Reports: openpyxl (Excel) + fpdf2 with an embedded Hebrew font (PDF, RTL). Not WeasyPrint.
+- Config: `pydantic-settings` reads deployment config from env vars / `.env` into `app/core/config.py` (decision 0013); manager-editable values go in the `settings` table
 - Other: `keyring` (secrets), `pyzipper` (encrypted backups), `tzdata` (needed for `zoneinfo` on Windows)
 - One codebase, two app instances: admin on `127.0.0.1:8000`, public on `127.0.0.1:8001` (exposed via Cloudflare Tunnel)
 - Layout: `app/core` (db, models, plan/price rules, reports, email), `app/admin`, `app/public`, `tests/`

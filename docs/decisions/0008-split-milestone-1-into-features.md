@@ -1,6 +1,6 @@
 # 0008. Split milestone 1 into one-session features
 
-- Status: Accepted
+- Status: Accepted, amended by [0014](0014-settings-table-after-database-foundation.md) (feature order)
 - Date: 2026-10-21
 
 ## Context
