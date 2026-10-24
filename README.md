@@ -15,7 +15,7 @@ A check-in and subscription system for a single gym. Customers check in by scann
 
 ## Tech stack
 
-Python 3.12 · FastAPI · SQLite (SQLAlchemy 2.0 + Alembic) · Jinja2 + HTMX · uv · ruff · pytest · GitHub Actions
+Python 3.12 · FastAPI · SQLite (SQLAlchemy 2 + Alembic) · Jinja2 + HTMX · uv · ruff · pytest · GitHub Actions
 
 One codebase runs as two apps: an **admin** app for staff (`127.0.0.1:8000`) and a **public** app with only the customer pages (`127.0.0.1:8001`). Admin routes are never registered on the public app.
 
@@ -33,6 +33,12 @@ Create your local config from the template (on Windows PowerShell: `Copy-Item .e
 
 ```bash
 cp .env.example .env
+```
+
+Create the database (and re-run after pulling changes that add migrations). The apps never create or upgrade it themselves, and refuse to start until it's up to date:
+
+```bash
+uv run alembic upgrade head
 ```
 
 Run the apps:
@@ -67,12 +73,24 @@ uv run ruff format .       # format
 
 CI runs lint, format check, tests and a gitleaks scan of the full history on every pull request.
 
+### Database and migrations
+
+The schema lives in SQLAlchemy models in `app/core/models/` and changes only through Alembic migrations in `migrations/versions/`:
+
+```bash
+uv run alembic revision --autogenerate -m "add customers"   # draft a migration from model changes
+uv run alembic upgrade head                                  # apply it
+```
+
+Generated migrations are drafts: review each one by hand (the [`/migration`](.claude/skills/migration/SKILL.md) skill lists what to check). Foreign keys are switched off while migrations run and checked before the upgrade commits, so a schema change can't silently break or cascade-delete related rows ([decision 0015](docs/decisions/0015-database-access-and-migration-conventions.md)). Tests fail if the models and migrations disagree. In production, stop both apps and back up `gym.db` before upgrading.
+
 ## Project layout
 
 ```
 app/core     shared logic: database, models, plan and price rules, reports, email
 app/admin    the staff app
 app/public   the customer app (phone pages)
+migrations/  Alembic database migrations
 tests/
 docs/decisions/   decision records: why each technical choice was made
 ```

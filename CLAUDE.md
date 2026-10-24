@@ -23,7 +23,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 
 ## Tech stack
 - Python 3.12 + FastAPI, SQLite (`gym.db`, WAL mode)
-- SQLAlchemy 2.0 (ORM) + Alembic (migrations)
+- SQLAlchemy 2.x (ORM, 2.1 in use) + Alembic (migrations); conventions in decision 0015
 - SQLCipher encrypts the whole database file (added in milestone 6; plain SQLite until then). No field-level encryption.
 - Decision records: `docs/decisions/`. Check them before changing anything they cover.
 - Server-rendered Jinja2 HTML + HTMX for interactivity (customer pages mobile-first), no build step
@@ -37,6 +37,9 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 
 ## Implementation notes
 - Use plain `def` routes, not `async def`, because SQLite and SQLAlchemy are synchronous.
+- Routes get the database through the `get_db` dependency (`app/core/db.py`): one transaction per request, committed on return, rolled back on any exception (decision 0015).
+- Get "now" from `app.core.clock.utc_now()` and display times with `to_local()`. Timestamp columns are `Mapped[datetime]` (stored as `UTCDateTime`); naive datetimes are refused.
+- The apps never create or migrate the database; they refuse to start unless it's at the newest migration.
 - The admin app needs CSRF protection (FastAPI doesn't include it).
 - Run uvicorn with a single worker, so scheduled jobs (report, backups) never run twice.
 - Behind Cloudflare, the client IP is in `CF-Connecting-IP`, not the socket address. Use that header for rate limiting.
@@ -86,6 +89,8 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 
 ## Commands
 - Install: `uv sync`, then once per clone `pre-commit install` (pre-commit itself: `uv tool install pre-commit`)
+- Create / upgrade the database (before starting the apps; in prod, stop both apps and back up first): `uv run alembic upgrade head`
+- New migration (follow the `/migration` skill): `uv run alembic revision --autogenerate -m "<what changes>"`
 - Admin: `uv run uvicorn app.admin.main:app --host 127.0.0.1 --port 8000`
 - Public: `uv run uvicorn app.public.main:app --host 127.0.0.1 --port 8001`
 - Test: `uv run pytest`
