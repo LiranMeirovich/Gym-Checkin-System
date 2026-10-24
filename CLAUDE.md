@@ -64,7 +64,7 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - Staff auth: PINs, lock screen, roles and permissions
 - Customer login: link codes, device sessions, the `gym_device` cookie
 - Plan, price and report calculation logic
-- Database schema & migrations
+- Database schema & migrations: every schema change follows the `/migration` skill
 
 ## Hard rules (from the design doc)
 - Never bind either app to `0.0.0.0`. Never register admin routes on the public app.
