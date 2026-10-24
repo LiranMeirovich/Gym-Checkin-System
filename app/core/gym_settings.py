@@ -21,6 +21,7 @@ from pydantic import (
     Field,
     StrictInt,
     StrictStr,
+    StringConstraints,
     ValidationError,
 )
 from sqlalchemy import select
@@ -60,7 +61,16 @@ class GymSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     # Shown in page titles and the report. Not set until first-run setup.
-    gym_name: Annotated[StrictStr, Field(min_length=1, max_length=100)] | None = None
+    # Surrounding spaces are trimmed first, so "   " counts as empty.
+    gym_name: (
+        Annotated[
+            str,
+            StringConstraints(
+                strict=True, strip_whitespace=True, min_length=1, max_length=100
+            ),
+        ]
+        | None
+    ) = None
 
     # Gets the monthly report first, to check and approve.
     manager_email: Email | None = None
@@ -95,14 +105,65 @@ def load_gym_settings(db: Session) -> GymSettings:
     try:
         return GymSettings.model_validate(values)
     except ValidationError as error:
-        raise InvalidStoredSettingError(_describe(error)) from None
+        raise InvalidStoredSettingError(
+            "invalid stored settings: " + _join(_problems(error))
+        ) from None
 
 
-def _describe(error: ValidationError) -> str:
+class InvalidSettingsChangeError(ValueError):
+    """A requested change was refused; nothing was written.
+
+    ``problems`` maps each failing setting (``report_recipients.1`` for one
+    item of a list) to what's wrong with it, for the settings screen to
+    show next to the field.
+    """
+
+    def __init__(self, problems: dict[str, str]) -> None:
+        super().__init__("invalid settings change: " + _join(problems))
+        self.problems = problems
+
+
+def update_gym_settings(db: Session, changes: dict[str, object]) -> None:
+    """Validate ``changes`` and write them, inside the caller's transaction.
+
+    All or nothing: if any change is invalid (or names an unknown setting),
+    nothing is written and ``InvalidSettingsChangeError`` says why. A change
+    to the value already stored is skipped, so ``updated_at`` only moves
+    when something really changed. ``None`` clears an optional setting.
+
+    Each change is validated on its own, not together with the rest of the
+    stored settings, so a bad row written by hand can still be fixed from
+    the settings screen. (No rule spans two settings yet; one that does
+    would need checking against the stored values here.)
+
+    TODO(activity log): record each change, with its before and after
+    value, once the activity log exists (CLAUDE.md follow-ups).
+    """
+    try:
+        validated = GymSettings.model_validate(changes)
+    except ValidationError as error:
+        raise InvalidSettingsChangeError(_problems(error)) from None
+
+    # mode="json" turns tuples into lists, so the stored text is plain JSON.
+    new_values = validated.model_dump(mode="json", include=set(changes))
+    for key, value in new_values.items():
+        # ensure_ascii=False keeps Hebrew readable in a database browser.
+        text = json.dumps(value, ensure_ascii=False)
+        row = db.get(Setting, key)
+        if row is None:
+            db.add(Setting(key=key, value=text))
+        elif row.value != text:
+            row.value = text
+
+
+def _problems(error: ValidationError) -> dict[str, str]:
     """Which settings failed and why, without repeating the values: they
-    can be email addresses, and this message ends up in logs."""
-    problems = [
-        f"{'.'.join(str(part) for part in problem['loc'])}: {problem['msg']}"
+    can be email addresses, and these messages end up in logs."""
+    return {
+        ".".join(str(part) for part in problem["loc"]): problem["msg"]
         for problem in error.errors(include_input=False, include_url=False)
-    ]
-    return "invalid stored settings: " + "; ".join(problems)
+    }
+
+
+def _join(problems: dict[str, str]) -> str:
+    return "; ".join(f"{key}: {message}" for key, message in problems.items())
