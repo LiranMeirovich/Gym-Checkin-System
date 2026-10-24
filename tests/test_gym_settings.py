@@ -258,7 +258,7 @@ def test_none_clears_an_optional_setting(db: Session) -> None:
     [
         "manager@example.com",
         "first.last+gym@mail.example.co.il",
-        "o'brien@example-gym.com",
+        "o'brien@my-gym.example.com",
         "MANAGER@EXAMPLE.COM",
     ],
 )
