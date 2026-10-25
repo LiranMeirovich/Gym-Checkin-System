@@ -37,6 +37,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 - Tooling: uv (packages), ruff (lint + format), pytest (tests), GitHub Actions (CI), pre-commit (gitleaks + ruff). Rules, hooks and SHA pinning: decision 0011
 - Reports: openpyxl (Excel) + fpdf2 with an embedded Hebrew font (PDF, RTL). Not WeasyPrint.
 - Config: `pydantic-settings` reads deployment config from env vars / `.env` into `app/core/config.py` (decision 0013); manager-editable values go in the `settings` table
+- **Secrets have a home now:** whatever host runs the apps (gym PC or a server) always has an env / secrets file. A feature that needs a secret (a signing key, a password) adds it to `config.py` as a `SecretStr` read from `GYM_*` env vars / `.env`, required in prod, with a placeholder and a generator command in `.env.example`. Never treat "where secrets live" as a blocker or a reason to avoid a design that needs a key. Only the production *store* (plain env file vs the OS secret store via `keyring`) waits on the hosting decision, and moving between them only changes how `config.py` gets the value.
 - Other: `argon2-cffi` (staff PIN hashing, decision 0018), `keyring` (secrets), `pyzipper` (encrypted backups), `tzdata` (needed for `zoneinfo` on Windows)
 - One codebase, two app instances: admin on `127.0.0.1:8000`, public on `127.0.0.1:8001` (exposed via Cloudflare Tunnel)
 - Layout: `app/core` (db, models, plan/price rules, reports, email), `app/admin`, `app/public`, `tests/`
@@ -83,7 +84,7 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - Money is always integer agorot, never floats. Timestamps are stored in UTC and shown in Israel time.
 - History is never overwritten. Plan corrections add a new row, prices have `valid_from_month`, and past reports must regenerate identically.
 - Every staff change writes to `activity_log` (who, what, before, after).
-- Secrets (SMTP password, encryption keys) are read from environment variables or a secret store, never written in code, the DB or the repo. (Where they're stored depends on the hosting decision.)
+- Secrets (SMTP password, encryption keys) are read from environment variables or a secret store, never written in code, the DB or the repo. They're read through `app/core/config.py` from env vars / the host's `.env` (see Tech stack); only the production secret store depends on the hosting decision.
 - **The repo is public.** Real customer data lives only in the database: never in tests, fixtures, examples, logs or screenshots. Use made-up data.
 - **Nothing gym-specific in code** (one installation per gym, see decision 0006): the gym's name, domain, emails and prices come from settings.
 
