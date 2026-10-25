@@ -4,10 +4,20 @@ Run with: uvicorn app.admin.main:app --host 127.0.0.1 --port 8000
 """
 
 from fastapi import FastAPI
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.startup import lifespan
 
+# The only names the admin app answers to. Binding to 127.0.0.1 keeps other
+# machines out, but not a website open in the gym PC's own browser: with DNS
+# rebinding, a page on evil.example can point its name at 127.0.0.1 and send
+# requests here as its "own" site. Those carry Host: evil.example, so this
+# refuses them (400). It matters most before first-run setup, when nobody
+# is logged in yet. Changes if hosting puts the admin app behind a domain.
+ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
 app = FastAPI(title="Gym admin", lifespan=lifespan)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
 
 @app.get("/health")
