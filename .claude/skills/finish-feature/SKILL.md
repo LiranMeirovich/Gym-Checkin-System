@@ -46,6 +46,13 @@ Suggest `/decision` for any significant technical choice made during the feature
   - **How it was tested:** tests added, manual checks.
   - **Notes:** follow-ups, known limits, anything a reviewer should look at closely.
 - If the repo has a GitHub remote, offer to push the branch and open the PR (only after the developer agrees). If not, give them the description to use later.
+- **After the push, give a quick summary of what the feature added**, so the developer can judge it before deciding to merge. Keep it to about 5–8 bullets, at the architecture level (no code), based on `git diff --stat main...HEAD` and the branch's commits:
+  - **What it does now:** the new behaviour, from the staff's or customer's side, in a line or two.
+  - **Components:** modules, tables, routes, templates or jobs added or changed, each with what it's responsible for.
+  - **Contracts and data:** new migrations, settings or `.env` keys, route contracts, and new dependencies.
+  - **Decisions:** decision records added in this branch.
+  - **Left out:** follow-ups and known limits.
+  - The PR link.
 
 ## 6. Merge into main
 Only after the PR is open, and only when the developer says to merge. Ask once: "Merge into main?"
