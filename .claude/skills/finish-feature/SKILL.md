@@ -1,6 +1,6 @@
 ---
 name: finish-feature
-description: Wrap up a finished feature branch. Checks the whole branch (tests, lint, secrets, code review), fixes what comes up, updates the project status in CLAUDE.md, and prepares the final commit and pull request.
+description: Wrap up a finished feature branch. Checks the whole branch (tests, lint, secrets, code review), fixes what comes up, updates the project status in CLAUDE.md, opens the pull request and, on the developer's OK, merges it into main once CI is green.
 disable-model-invocation: true
 ---
 
@@ -47,5 +47,12 @@ Suggest `/decision` for any significant technical choice made during the feature
   - **Notes:** follow-ups, known limits, anything a reviewer should look at closely.
 - If the repo has a GitHub remote, offer to push the branch and open the PR (only after the developer agrees). If not, give them the description to use later.
 
-## 6. Close out
-End with a short summary: checks passed, what was fixed, what's left as a follow-up, and the next feature. Remind the developer that the next feature should start in a **new session** with `/start-feature`.
+## 6. Merge into main
+Only after the PR is open, and only when the developer says to merge. Ask once: "Merge into main?"
+- **CI must be green.** Check the PR's checks once with `gh pr checks <number>`. If any are pending, stop and say so (don't poll or wait in a loop); the developer can ask again once they finish. If any failed, report which, and fix them like the findings in step 3 before merging. `main` has no branch protection yet, so this check is the only thing that stops a red PR going in.
+- **Merge** with a merge commit, as the earlier PRs were: `gh pr merge <number> --merge --delete-branch`.
+- **Tidy up:** switch to `main`, `git pull`, and delete the local feature branch (`git branch -d <branch>`). If `main` is checked out in another worktree, or the working tree isn't clean, skip the switch and tell the developer instead of forcing it.
+- If the merge fails (conflicts, a check turned red), stop and report it. Never force-merge or use `--admin`.
+
+## 7. Close out
+End with a short summary: checks passed, what was fixed, whether the PR was merged, what's left as a follow-up, and the next feature. Remind the developer that the next feature should start in a **new session** with `/start-feature`.
