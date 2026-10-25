@@ -41,6 +41,10 @@ def test_every_migration_can_be_undone_and_reapplied(alembic_config: Config) -> 
     assert current_revision() == head
 
 
+# SQLite can't reflect expression indexes, so this comparison can't see
+# them (uq_staff_users_active_display_name); test_models_staff.py checks
+# that one directly.
+@pytest.mark.filterwarnings("ignore:.*expression-based index")
 def test_migrations_match_the_models(alembic_config: Config) -> None:
     # Fails when a model changed without a migration (or the other way
     # round). Fix: `uv run alembic revision --autogenerate -m "..."`.

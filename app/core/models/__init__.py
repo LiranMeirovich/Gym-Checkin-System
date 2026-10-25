@@ -4,5 +4,6 @@ tables."""
 
 from app.core.models.base import Base, UTCDateTime
 from app.core.models.settings import Setting
+from app.core.models.staff import StaffUser
 
-__all__ = ["Base", "Setting", "UTCDateTime"]
+__all__ = ["Base", "Setting", "StaffUser", "UTCDateTime"]

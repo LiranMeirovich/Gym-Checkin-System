@@ -49,7 +49,8 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | Action | Instructor | Manager |
 | --- | --- | --- |
 | See the dashboard, today's check-ins, customer list and customer pages | Yes | Yes |
-| Manual check-in, and pick a plan if the customer has none this month | Yes | Yes |
+| Manual check-in (with no plan this month, an instructor's check-in records single entry) | Yes | Yes |
+| Pick a plan for a customer who has none this month | No | Yes |
 | Add a customer; edit name, phone and notes | Yes | Yes |
 | Link or unlink a customer's phone | Yes | Yes |
 | See whether a customer's health form is valid and when it expires | Yes | Yes |
@@ -62,7 +63,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | Edit prices | No | Yes |
 | View, regenerate, approve and send reports | No | Yes |
 | Settings, backups and restore | No | Yes |
-| Manage staff accounts and reset their passwords | No | Yes |
+| Manage staff accounts and reset their PINs | No | Yes |
 | View the activity log | No | Yes |
 
 Permissions are defined in code as named permissions (e.g. `prices.edit`, `plans.correct`) mapped to roles in one place, so moving an action from one role to the other is a one-line change. Every action is checked on the server; hiding a button in the interface is never the only protection.
@@ -155,7 +156,8 @@ Customers choose their own plan on their phone at their first check-in of each m
 - At a customer's first check-in in a calendar month, if no plan covers that month, the phone shows the plan page: the three plans with this customer's prices. Tapping one confirms it and completes the check-in. The choice doubles as the customer's confirmation to keep training that month.
 - Inside a tri-monthly period there's nothing to choose; the status page says "Covered by your 3-month plan until 31 Dec".
 - Once chosen, the plan is fixed for that month on the phone. Corrections are manager-only, and the row records who made them.
-- If staff check in someone who has no plan for the month, the check-in dialog asks them to pick one. Instructors can set a plan where there is none, but not change one already chosen.
+- Instructors never choose or change plans. If an instructor checks in someone who has no plan for the month, the check-in records single entry for that month (chosen by staff, with the instructor recorded), so the visit is counted and the month is never left without a plan. A customer who wants a different plan asks the manager, who corrects it (a new row; the single-entry row is kept). Because the month now has a plan, the phone doesn't show the plan page for it.
+- If the manager checks in someone who has no plan for the month, the check-in dialog asks them to pick one.
 - With single entry chosen, every visit that month counts as one paid entry.
 - A customer who doesn't check in during a month chooses nothing and doesn't appear in that month's report (*assumption*).
 
@@ -223,7 +225,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable), entered\_by | Single-entry payments count these |
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes |
-| staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
+| staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
 | activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change; read-only in the app |
 | `health_forms` | id, customer\_id, source (phone / paper), form\_version, answers\_json (nullable for paper), signer\_name, signed\_by\_guardian, signed\_on, expires\_on, document (blob: PDF snapshot or uploaded scan), uploaded\_by (nullable), created\_at | Never overwritten; the newest valid row counts. The document is stored inside the database, not as a loose file, so it gets the same encryption and backups |
 
@@ -234,7 +236,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 - Linking a phone fails after 5 wrong codes for the same phone number, locking that number for 15 minutes. The public app also rate-limits by IP.
 - No check-in (phone or manual) is recorded for a customer without a valid health form on that day.
 - A second check-in by the same customer within 10 minutes is ignored (shown as "already checked in") and doesn't count as an extra single entry.
-- Staff PINs are stored as bcrypt or argon2 hashes, and 5 wrong PINs lock that account for 5 minutes; the SMTP password is kept in the OS secret store or an environment variable (TBD), not in the database.
+- Staff PINs (6–12 digits) are stored as Argon2id hashes, and 5 wrong PINs in a row (each within 15 minutes of the last) lock that account for 5 minutes; the SMTP password is kept in the OS secret store or an environment variable (TBD), not in the database.
 
 ## Monthly report
 
@@ -321,7 +323,7 @@ The link page appears only on a phone that isn't linked yet; the plan page only 
 
 &#91;embedded content: admin dashboard · sample data\]
 
-The home screen, as the manager sees it. Instructors don't get the Reports, Prices, Staff or Settings menus, or the report card. The report card shows where the latest month's report stands (generated, emailed to the manager, approved, sent); the backup card turns red if no backup succeeded in 2 days. "Locked · Unlock" opens the password prompt for edit mode.
+The home screen, as the manager sees it. Instructors don't get the Reports, Prices, Staff or Settings menus, or the report card. The report card shows where the latest month's report stands (generated, emailed to the manager, approved, sent); the backup card turns red if no backup succeeded in 2 days. "Locked · Unlock" opens the PIN prompt for edit mode.
 
 ### Admin: customer page
 
