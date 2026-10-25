@@ -40,6 +40,7 @@ def upgrade() -> None:
         ),
         sa.Column("pin_hash", sa.Text(), nullable=False),
         sa.Column("failed_attempts", sa.Integer(), nullable=False),
+        sa.Column("last_failed_at", sa.DateTime(), nullable=True),
         sa.Column("locked_until", sa.DateTime(), nullable=True),
         sa.Column(
             "active", sa.Boolean(create_constraint=True, name="active"), nullable=False

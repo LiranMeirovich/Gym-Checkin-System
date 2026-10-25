@@ -54,6 +54,7 @@ def test_a_new_row_gets_its_defaults(db: Session) -> None:
     row = db.query(StaffUser).one()
     assert row.role is Role.MANAGER
     assert row.failed_attempts == 0
+    assert row.last_failed_at is None
     assert row.locked_until is None
     assert row.active is True
     assert row.created_at.tzinfo is UTC

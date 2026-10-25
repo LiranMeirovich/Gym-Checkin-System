@@ -15,7 +15,7 @@ Staff log in on the shared front-desk PC by tapping their name and typing a secr
 ## Decision
 - **A PIN of 6–12 ASCII digits.** All-one-digit PINs (`000000`) and straight runs (`123456`, `987654`) are refused. "Password" in the design doc was loose wording and now says PIN. The rules apply when a PIN is set, not when it's checked, so a later rule change doesn't lock anyone out.
 - **Argon2id through `argon2-cffi`**, with the library's default parameters. `app/core/pins.py` is the only module that touches it. A correct PIN whose hash used older parameters is re-hashed on the spot. A CHECK constraint lets only Argon2id hashes into `staff_users.pin_hash`.
-- **Lockout:** the 5th wrong PIN in a row locks the account for 5 minutes and starts the count again. While locked or inactive, attempts are refused without checking the PIN and don't count. A manager's PIN reset lifts a lockout.
+- **Lockout:** the 5th wrong PIN in a row locks the account for 5 minutes and starts the count again. Wrong PINs only add up while each comes within 15 minutes of the last (`last_failed_at`), so typos weeks apart never lock anyone out. While locked or inactive, attempts are refused without checking the PIN and don't count. A manager's PIN reset lifts a lockout.
 - **Names are unique among active staff, ignoring case** (a partial unique index), since the lock screen tells people apart by name. A deactivated member's name can be reused.
 - **There's always an active manager:** the last one can't be demoted or deactivated.
 - **All permissions are defined now** in `app/core/permissions.py`: 20 named `area.action` permissions and one read-only role map. The manager gets all of them; instructors get the desk work (see [0017](0017-instructors-never-choose-plans.md) for plans).

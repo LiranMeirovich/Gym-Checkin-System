@@ -93,6 +93,38 @@ def test_a_name_must_be_1_to_50_characters(db: Session, name: str) -> None:
         create_staff_user(db, name, Role.INSTRUCTOR, PIN)
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Dana​",  # zero-width space
+        "Da‍na",  # zero-width joiner
+        "‏Dana",  # right-to-left mark
+        "Da\x00na",
+        "Da\x1bna",
+    ],
+    ids=ascii,
+)
+def test_a_name_cannot_hide_invisible_characters(db: Session, name: str) -> None:
+    with pytest.raises(InvalidDisplayNameError, match="invisible"):
+        create_staff_user(db, name, Role.INSTRUCTOR, PIN)
+
+
+def test_spaces_inside_a_name_are_tidied(db: Session) -> None:
+    created = create_staff_user(db, " Dana \t  Levi\n", Role.INSTRUCTOR, PIN)
+    assert created.display_name == "Dana Levi"
+
+
+def test_hebrew_names_are_allowed(db: Session) -> None:
+    created = create_staff_user(db, "דנה לוי", Role.INSTRUCTOR, PIN)
+    assert created.display_name == "דנה לוי"
+
+
+def test_the_same_letters_typed_two_ways_are_one_name(db: Session) -> None:
+    create_staff_user(db, "René", Role.INSTRUCTOR, PIN)  # é as one character
+    with pytest.raises(DuplicateDisplayNameError):
+        create_staff_user(db, "René", Role.INSTRUCTOR, OTHER_PIN)  # e + accent
+
+
 @pytest.mark.parametrize("name", ["Dana", "DANA", " dana "])
 def test_an_active_name_cannot_be_used_twice(
     db: Session, instructor: StaffUser, name: str
@@ -170,6 +202,21 @@ def test_the_last_manager_cannot_be_deactivated(
     with pytest.raises(LastManagerError):
         deactivate(db, manager)
     assert manager.active
+
+
+def test_the_guard_holds_for_a_role_given_as_text(db: Session) -> None:
+    # Built straight from the model with the stored text, the way seed or
+    # setup code might; the attribute stays a plain string until reloaded.
+    only_manager = StaffUser(
+        display_name="Noa", role="manager", pin_hash=pins.hash_pin(PIN)
+    )
+    db.add(only_manager)
+    db.flush()
+
+    with pytest.raises(LastManagerError):
+        deactivate(db, only_manager)
+    with pytest.raises(LastManagerError):
+        change_role(db, only_manager, Role.INSTRUCTOR)
 
 
 def test_an_inactive_manager_does_not_count(
@@ -288,6 +335,48 @@ def test_after_a_lock_the_count_starts_again(
     clock.now = START + timedelta(minutes=6)
 
     assert check_pin(db, instructor, OTHER_PIN) is PinCheck.WRONG_PIN
+
+
+def test_wrong_pins_far_apart_never_lock(
+    db: Session, instructor: StaffUser, clock: Clock
+) -> None:
+    for day in range(10):
+        clock.now = START + timedelta(days=day)
+        assert check_pin(db, instructor, OTHER_PIN) is PinCheck.WRONG_PIN
+    assert instructor.failed_attempts == 1
+
+
+def test_wrong_pins_within_the_window_of_each_other_add_up(
+    db: Session, instructor: StaffUser, clock: Clock
+) -> None:
+    # Each one exactly 15 minutes after the last still counts.
+    results = []
+    for attempt in range(staff.MAX_FAILED_ATTEMPTS):
+        clock.now = START + attempt * staff.FAILED_ATTEMPTS_WINDOW
+        results.append(check_pin(db, instructor, OTHER_PIN))
+
+    assert results[-1] is PinCheck.LOCKED
+
+
+def test_a_gap_longer_than_the_window_starts_the_count_again(
+    db: Session, instructor: StaffUser, clock: Clock
+) -> None:
+    for _ in range(staff.MAX_FAILED_ATTEMPTS - 1):
+        check_pin(db, instructor, OTHER_PIN)
+    clock.now = START + staff.FAILED_ATTEMPTS_WINDOW + timedelta(seconds=1)
+
+    assert check_pin(db, instructor, OTHER_PIN) is PinCheck.WRONG_PIN
+    assert instructor.failed_attempts == 1
+    assert instructor.last_failed_at == clock.now
+
+
+def test_the_right_pin_clears_the_last_failure(
+    db: Session, instructor: StaffUser, clock: Clock
+) -> None:
+    check_pin(db, instructor, OTHER_PIN)
+    check_pin(db, instructor, PIN)
+
+    assert instructor.last_failed_at is None
 
 
 def test_an_inactive_member_cannot_log_in(

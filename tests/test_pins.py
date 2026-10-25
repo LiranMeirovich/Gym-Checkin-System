@@ -10,6 +10,7 @@ from app.core.pins import (
     hash_pin,
     needs_rehash,
     pin_matches,
+    rehash_pin,
     validate_pin,
 )
 
@@ -95,6 +96,14 @@ def test_a_stored_value_that_is_not_a_hash_raises() -> None:
 
 def test_a_current_hash_needs_no_rehash() -> None:
     assert not needs_rehash(hash_pin("482913"))
+
+
+def test_a_rehash_is_current_and_skips_the_format_rules() -> None:
+    # "111111" breaks today's rules but may predate them.
+    pin_hash = rehash_pin("111111")
+
+    assert pin_matches(pin_hash, "111111")
+    assert not needs_rehash(pin_hash)
 
 
 def test_a_hash_with_weaker_parameters_needs_a_rehash() -> None:

@@ -4,13 +4,15 @@ and lock screen"; decision 0018).
 
 These are the rules the database can't check on its own: there's always at
 least one active manager, PINs follow the format rules, and 5 wrong PINs in
-a row lock the account for 5 minutes. Every function works inside the
+a row, each within 15 minutes of the last, lock the account for 5 minutes.
+Every function works inside the
 caller's transaction and never commits.
 
 Who made a change isn't recorded yet. TODO(activity log): log every change
 here (who, what, before and after) once the activity log exists.
 """
 
+import unicodedata
 from datetime import timedelta
 from enum import StrEnum
 
@@ -24,11 +26,12 @@ from app.core.pins import hash_pin, needs_rehash, pin_matches, rehash_pin
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT = timedelta(minutes=5)
+FAILED_ATTEMPTS_WINDOW = timedelta(minutes=15)
 DISPLAY_NAME_MAX_LENGTH = 50
 
 
 class InvalidDisplayNameError(ValueError):
-    """The name is empty or too long."""
+    """The name is empty, too long, or contains invisible characters."""
 
 
 class DuplicateDisplayNameError(ValueError):
@@ -70,8 +73,7 @@ def reset_pin(db: Session, staff: StaffUser, pin: str) -> None:
     let a locked-out instructor straight back in. Raises
     ``pins.InvalidPinError``."""
     staff.pin_hash = hash_pin(pin)
-    staff.failed_attempts = 0
-    staff.locked_until = None
+    _clear_failures(staff)
     db.flush()
 
 
@@ -108,8 +110,10 @@ def check_pin(db: Session, staff: StaffUser, pin: str) -> PinCheck:
     """Check a login attempt and update the lockout counters.
 
     A locked or inactive account is refused without looking at the PIN,
-    and that attempt doesn't count. A wrong PIN counts; the fifth in a row
-    locks the account for ``LOCKOUT`` and starts the count again. A correct
+    and that attempt doesn't count. A wrong PIN counts, unless the previous
+    one was more than ``FAILED_ATTEMPTS_WINDOW`` ago, which starts the count
+    again; the fifth in a row locks the account for ``LOCKOUT`` and starts
+    the count again. A correct
     PIN clears the count, and replaces a hash made with older parameters.
 
     The counters are written in the caller's transaction, and a refused
@@ -123,29 +127,50 @@ def check_pin(db: Session, staff: StaffUser, pin: str) -> PinCheck:
         return PinCheck.LOCKED
 
     if pin_matches(staff.pin_hash, pin):
-        staff.failed_attempts = 0
-        staff.locked_until = None
+        _clear_failures(staff)
         if needs_rehash(staff.pin_hash):
             staff.pin_hash = rehash_pin(pin)
         db.flush()
         return PinCheck.OK
 
+    # Wrong PINs further apart than the window don't add up: an occasional
+    # typo over weeks shouldn't end in a lockout.
+    if (
+        staff.last_failed_at is None
+        or now - staff.last_failed_at > FAILED_ATTEMPTS_WINDOW
+    ):
+        staff.failed_attempts = 0
     staff.failed_attempts += 1
+    staff.last_failed_at = now
     result = PinCheck.WRONG_PIN
     if staff.failed_attempts >= MAX_FAILED_ATTEMPTS:
         staff.failed_attempts = 0
+        staff.last_failed_at = None
         staff.locked_until = now + LOCKOUT
         result = PinCheck.LOCKED
     db.flush()
     return result
 
 
+def _clear_failures(staff: StaffUser) -> None:
+    staff.failed_attempts = 0
+    staff.last_failed_at = None
+    staff.locked_until = None
+
+
 def _clean_display_name(display_name: str) -> str:
-    name = display_name.strip()
+    # NFC, so the same letters typed two ways are the same name, and runs
+    # of spaces become one, so "Dana  Levi" can't pass as a second "Dana Levi".
+    name = " ".join(unicodedata.normalize("NFC", display_name).split())
     if not 1 <= len(name) <= DISPLAY_NAME_MAX_LENGTH:
         raise InvalidDisplayNameError(
             f"a name is 1 to {DISPLAY_NAME_MAX_LENGTH} characters"
         )
+    # Control, format (zero-width, direction marks) and unassigned
+    # characters are invisible: "Dana" plus a zero-width space would look
+    # like a second "Dana" on the lock screen.
+    if any(unicodedata.category(char).startswith("C") for char in name):
+        raise InvalidDisplayNameError("a name can't contain invisible characters")
     return name
 
 
@@ -162,7 +187,9 @@ def _ensure_name_is_free(db: Session, name: str) -> None:
 
 
 def _ensure_not_last_manager(db: Session, staff: StaffUser) -> None:
-    if not (staff.active and staff.role is Role.MANAGER):
+    # ==, not "is": a row built with role="manager" holds the plain string
+    # until it's reloaded, and "is" would skip this guard for it.
+    if not (staff.active and staff.role == Role.MANAGER):
         return
     other_managers = db.scalar(
         select(func.count()).where(

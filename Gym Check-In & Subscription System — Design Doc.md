@@ -225,7 +225,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable), entered\_by | Single-entry payments count these |
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes |
-| staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
+| staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
 | activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change; read-only in the app |
 | `health_forms` | id, customer\_id, source (phone / paper), form\_version, answers\_json (nullable for paper), signer\_name, signed\_by\_guardian, signed\_on, expires\_on, document (blob: PDF snapshot or uploaded scan), uploaded\_by (nullable), created\_at | Never overwritten; the newest valid row counts. The document is stored inside the database, not as a loose file, so it gets the same encryption and backups |
 
@@ -236,7 +236,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 - Linking a phone fails after 5 wrong codes for the same phone number, locking that number for 15 minutes. The public app also rate-limits by IP.
 - No check-in (phone or manual) is recorded for a customer without a valid health form on that day.
 - A second check-in by the same customer within 10 minutes is ignored (shown as "already checked in") and doesn't count as an extra single entry.
-- Staff PINs (6–12 digits) are stored as Argon2id hashes, and 5 wrong PINs lock that account for 5 minutes; the SMTP password is kept in the OS secret store or an environment variable (TBD), not in the database.
+- Staff PINs (6–12 digits) are stored as Argon2id hashes, and 5 wrong PINs in a row (each within 15 minutes of the last) lock that account for 5 minutes; the SMTP password is kept in the OS secret store or an environment variable (TBD), not in the database.
 
 ## Monthly report
 

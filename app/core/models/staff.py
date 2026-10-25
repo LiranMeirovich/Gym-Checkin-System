@@ -45,6 +45,9 @@ class StaffUser(Base):
     pin_hash: Mapped[str] = mapped_column(Text)
     # Wrong PINs in a row; reset by a correct one.
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    # The latest of those wrong PINs. A wrong PIN long after it starts the
+    # count again, so typos weeks apart don't add up to a lockout.
+    last_failed_at: Mapped[datetime | None]
     # Set after too many wrong PINs; no login until it passes.
     locked_until: Mapped[datetime | None]
     # Deactivate instead of deleting.
