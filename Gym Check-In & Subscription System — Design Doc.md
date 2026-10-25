@@ -63,7 +63,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | Edit prices | No | Yes |
 | View, regenerate, approve and send reports | No | Yes |
 | Settings, backups and restore | No | Yes |
-| Manage staff accounts and reset their passwords | No | Yes |
+| Manage staff accounts and reset their PINs | No | Yes |
 | View the activity log | No | Yes |
 
 Permissions are defined in code as named permissions (e.g. `prices.edit`, `plans.correct`) mapped to roles in one place, so moving an action from one role to the other is a one-line change. Every action is checked on the server; hiding a button in the interface is never the only protection.
@@ -236,7 +236,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 - Linking a phone fails after 5 wrong codes for the same phone number, locking that number for 15 minutes. The public app also rate-limits by IP.
 - No check-in (phone or manual) is recorded for a customer without a valid health form on that day.
 - A second check-in by the same customer within 10 minutes is ignored (shown as "already checked in") and doesn't count as an extra single entry.
-- Staff PINs are stored as bcrypt or argon2 hashes, and 5 wrong PINs lock that account for 5 minutes; the SMTP password is kept in the OS secret store or an environment variable (TBD), not in the database.
+- Staff PINs (6–12 digits) are stored as Argon2id hashes, and 5 wrong PINs lock that account for 5 minutes; the SMTP password is kept in the OS secret store or an environment variable (TBD), not in the database.
 
 ## Monthly report
 
@@ -323,7 +323,7 @@ The link page appears only on a phone that isn't linked yet; the plan page only 
 
 &#91;embedded content: admin dashboard · sample data\]
 
-The home screen, as the manager sees it. Instructors don't get the Reports, Prices, Staff or Settings menus, or the report card. The report card shows where the latest month's report stands (generated, emailed to the manager, approved, sent); the backup card turns red if no backup succeeded in 2 days. "Locked · Unlock" opens the password prompt for edit mode.
+The home screen, as the manager sees it. Instructors don't get the Reports, Prices, Staff or Settings menus, or the report card. The report card shows where the latest month's report stands (generated, emailed to the manager, approved, sent); the backup card turns red if no backup succeeded in 2 days. "Locked · Unlock" opens the PIN prompt for edit mode.
 
 ### Admin: customer page
 

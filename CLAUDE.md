@@ -35,7 +35,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 - Tooling: uv (packages), ruff (lint + format), pytest (tests), GitHub Actions (CI), pre-commit (gitleaks + ruff). Rules, hooks and SHA pinning: decision 0011
 - Reports: openpyxl (Excel) + fpdf2 with an embedded Hebrew font (PDF, RTL). Not WeasyPrint.
 - Config: `pydantic-settings` reads deployment config from env vars / `.env` into `app/core/config.py` (decision 0013); manager-editable values go in the `settings` table
-- Other: `keyring` (secrets), `pyzipper` (encrypted backups), `tzdata` (needed for `zoneinfo` on Windows)
+- Other: `argon2-cffi` (staff PIN hashing, decision 0018), `keyring` (secrets), `pyzipper` (encrypted backups), `tzdata` (needed for `zoneinfo` on Windows)
 - One codebase, two app instances: admin on `127.0.0.1:8000`, public on `127.0.0.1:8001` (exposed via Cloudflare Tunnel)
 - Layout: `app/core` (db, models, plan/price rules, reports, email), `app/admin`, `app/public`, `tests/`
 
@@ -77,7 +77,7 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - Never bind either app to `0.0.0.0`. Never register admin routes on the public app.
 - Every permission is checked on the server, using named permissions (e.g. `prices.edit`) mapped to roles in one place. Hiding a button is never the only protection.
 - The customer login lives only in the server-set `gym_device` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, 1 year). Never use `localStorage`, `sessionStorage` or IndexedDB.
-- Tokens, link codes and PINs are stored only as hashes (SHA-256 for tokens and codes, bcrypt or argon2 for PINs).
+- Tokens, link codes and PINs are stored only as hashes (SHA-256 for tokens and codes, Argon2id for PINs, decision 0018).
 - Money is always integer agorot, never floats. Timestamps are stored in UTC and shown in Israel time.
 - History is never overwritten. Plan corrections add a new row, prices have `valid_from_month`, and past reports must regenerate identically.
 - Every staff change writes to `activity_log` (who, what, before, after).
