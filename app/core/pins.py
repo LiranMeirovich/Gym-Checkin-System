@@ -1,5 +1,5 @@
 """Staff PINs: the format rules, hashing and checking (design doc: "Staff
-login and lock screen"; decision 0017).
+login and lock screen"; decision 0018).
 
 PINs are stored only as Argon2id hashes. This is the one module that uses
 the hashing library, so its parameters and any later change of algorithm

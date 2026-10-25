@@ -49,7 +49,8 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | Action | Instructor | Manager |
 | --- | --- | --- |
 | See the dashboard, today's check-ins, customer list and customer pages | Yes | Yes |
-| Manual check-in, and pick a plan if the customer has none this month | Yes | Yes |
+| Manual check-in (with no plan this month, an instructor's check-in records single entry) | Yes | Yes |
+| Pick a plan for a customer who has none this month | No | Yes |
 | Add a customer; edit name, phone and notes | Yes | Yes |
 | Link or unlink a customer's phone | Yes | Yes |
 | See whether a customer's health form is valid and when it expires | Yes | Yes |
@@ -155,7 +156,8 @@ Customers choose their own plan on their phone at their first check-in of each m
 - At a customer's first check-in in a calendar month, if no plan covers that month, the phone shows the plan page: the three plans with this customer's prices. Tapping one confirms it and completes the check-in. The choice doubles as the customer's confirmation to keep training that month.
 - Inside a tri-monthly period there's nothing to choose; the status page says "Covered by your 3-month plan until 31 Dec".
 - Once chosen, the plan is fixed for that month on the phone. Corrections are manager-only, and the row records who made them.
-- If staff check in someone who has no plan for the month, the check-in dialog asks them to pick one. Instructors can set a plan where there is none, but not change one already chosen.
+- Instructors never choose or change plans. If an instructor checks in someone who has no plan for the month, the check-in records single entry for that month (chosen by staff, with the instructor recorded), so the visit is counted and the month is never left without a plan. A customer who wants a different plan asks the manager, who corrects it (a new row; the single-entry row is kept). Because the month now has a plan, the phone doesn't show the plan page for it.
+- If the manager checks in someone who has no plan for the month, the check-in dialog asks them to pick one.
 - With single entry chosen, every visit that month counts as one paid entry.
 - A customer who doesn't check in during a month chooses nothing and doesn't appear in that month's report (*assumption*).
 
