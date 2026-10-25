@@ -52,6 +52,13 @@ def hash_pin(pin: str) -> str:
     return _hasher.hash(pin)
 
 
+def rehash_pin(pin: str) -> str:
+    """A fresh hash of a PIN that just matched its old hash (see
+    ``needs_rehash``). The format rules aren't applied: a PIN set under
+    older rules must keep working."""
+    return _hasher.hash(pin)
+
+
 def pin_matches(pin_hash: str, pin: str) -> bool:
     """Whether ``pin`` is the PIN behind ``pin_hash``.
 
