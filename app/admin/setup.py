@@ -22,13 +22,12 @@ from app.admin.templating import templates
 from app.core.db import DbSession
 from app.core.gym_settings import InvalidSettingsChangeError, update_gym_settings
 from app.core.models import StaffUser
-from app.core.permissions import Role
 from app.core.pins import InvalidPinError, validate_pin
 from app.core.staff import (
     DuplicateDisplayNameError,
     InvalidDisplayNameError,
     any_staff_exists,
-    create_staff_user,
+    create_first_manager,
 )
 from app.core.staff_sessions import start_session
 
@@ -102,7 +101,7 @@ def _create_manager(
     except InvalidSettingsChangeError:
         errors["gym_name"] = GYM_NAME_ERROR
     try:
-        manager = create_staff_user(db, display_name, Role.MANAGER, pin)
+        manager = create_first_manager(db, display_name, pin)
     except (InvalidDisplayNameError, DuplicateDisplayNameError):
         # A duplicate can't happen on an empty table; kept so a wrong guess
         # about that shows as a field error, not a crash.

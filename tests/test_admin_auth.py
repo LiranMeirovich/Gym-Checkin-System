@@ -17,7 +17,12 @@ from app.core import pins
 from app.core.db import get_engine
 from app.core.models import Setting, StaffSession, StaffUser
 from app.core.permissions import Role
-from app.core.staff import MAX_FAILED_ATTEMPTS, create_staff_user, deactivate
+from app.core.staff import (
+    MAX_FAILED_ATTEMPTS,
+    create_first_manager,
+    create_staff_user,
+    deactivate,
+)
 
 ORIGIN = "http://127.0.0.1:8000"
 SAME_ORIGIN = {"Origin": ORIGIN, "Sec-Fetch-Site": "same-origin"}
@@ -46,14 +51,14 @@ def db(client: TestClient) -> Iterator[Session]:
 
 @pytest.fixture
 def noa(db: Session) -> StaffUser:
-    staff = create_staff_user(db, "נועה", Role.MANAGER, PIN)
+    staff = create_first_manager(db, "נועה", PIN)
     db.commit()
     return staff
 
 
 @pytest.fixture
-def dana(db: Session) -> StaffUser:
-    staff = create_staff_user(db, "דנה", Role.INSTRUCTOR, PIN)
+def dana(db: Session, noa: StaffUser) -> StaffUser:
+    staff = create_staff_user(db, "דנה", Role.INSTRUCTOR, PIN, by=noa)
     db.commit()
     return staff
 
@@ -82,8 +87,8 @@ def test_before_setup_the_lock_screen_sends_to_setup(client: TestClient) -> None
 def test_the_lock_screen_lists_only_active_staff(
     client: TestClient, db: Session, noa: StaffUser, dana: StaffUser
 ) -> None:
-    tal = create_staff_user(db, "טל", Role.INSTRUCTOR, PIN)
-    deactivate(db, tal)
+    tal = create_staff_user(db, "טל", Role.INSTRUCTOR, PIN, by=noa)
+    deactivate(db, tal, by=noa)
     db.commit()
 
     response = client.get("/login")
@@ -167,7 +172,7 @@ def test_too_many_wrong_pins_lock_the_account(
 def test_a_deactivated_staff_member_cant_log_in(
     client: TestClient, db: Session, noa: StaffUser, dana: StaffUser
 ) -> None:
-    deactivate(db, dana)
+    deactivate(db, dana, by=noa)
     db.commit()
 
     response = log_in(client, dana)
