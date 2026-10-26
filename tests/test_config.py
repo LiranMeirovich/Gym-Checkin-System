@@ -9,6 +9,9 @@ from pydantic import ValidationError
 
 from app.core.config import Settings, get_settings
 
+# Made up and obviously not random; real keys never appear in the repo.
+TEST_KEY = "x" * 40
+
 
 def test_dev_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
@@ -22,17 +25,65 @@ def test_dev_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.public_hostname is None
 
 
-def test_environment_defaults_to_prod_and_then_needs_a_hostname() -> None:
+def test_environment_defaults_to_prod_and_then_needs_a_hostname_and_key() -> None:
     # Fails closed: no config at all means prod, which refuses to start
-    # without knowing its public hostname.
-    with pytest.raises(ValidationError, match="GYM_PUBLIC_HOSTNAME is required"):
+    # without its public hostname and secret key. Both are reported at once.
+    with pytest.raises(ValidationError) as error:
+        Settings()
+
+    assert "GYM_PUBLIC_HOSTNAME is required in prod" in str(error.value)
+    assert "GYM_SECRET_KEY is required in prod" in str(error.value)
+
+
+def test_prod_with_hostname_and_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "checkin.example.com")
+    monkeypatch.setenv("GYM_SECRET_KEY", TEST_KEY)
+
+    settings = Settings()
+
+    assert settings.environment == "prod"
+    assert settings.signing_key == TEST_KEY.encode()
+
+
+def test_prod_needs_a_secret_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "checkin.example.com")
+
+    with pytest.raises(ValidationError, match="GYM_SECRET_KEY is required in prod"):
         Settings()
 
 
-def test_prod_with_hostname(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "checkin.example.com")
+def test_a_short_secret_key_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    monkeypatch.setenv("GYM_SECRET_KEY", "x" * 31)
 
-    assert Settings().environment == "prod"
+    with pytest.raises(ValidationError, match="at least 32"):
+        Settings()
+
+
+def test_dev_without_a_key_gets_a_random_one_each_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+
+    first, second = Settings(), Settings()
+
+    assert len(first.signing_key) >= 32
+    assert first.signing_key != second.signing_key
+
+
+def test_dev_keeps_a_key_it_was_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    monkeypatch.setenv("GYM_SECRET_KEY", TEST_KEY)
+
+    assert Settings().signing_key == TEST_KEY.encode()
+
+
+def test_the_secret_key_never_shows_in_a_repr(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    monkeypatch.setenv("GYM_SECRET_KEY", TEST_KEY)
+
+    assert TEST_KEY not in repr(Settings())
+    assert TEST_KEY not in str(Settings().model_dump())
 
 
 def test_values_come_from_environment_variables(
@@ -108,6 +159,7 @@ def test_unknown_timezone_is_rejected(
 
 def test_hostname_is_normalised_to_lowercase(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "  CheckIn.Example.COM ")
+    monkeypatch.setenv("GYM_SECRET_KEY", TEST_KEY)
 
     assert Settings().public_hostname == "checkin.example.com"
 

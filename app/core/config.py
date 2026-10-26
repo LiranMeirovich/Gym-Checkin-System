@@ -8,17 +8,20 @@ stops the app at startup instead of letting it run on a wrong value.
 
 Values the manager edits in the UI (gym name, emails, lock-screen minutes)
 are not here; they belong in the ``settings`` table (decision 0014).
-Secrets are not here either, until the hosting decision settles where they
-live.
+Secrets are, as ``SecretStr`` fields, so they never show up in a repr or a
+log line. The host keeps them in its environment or ``.env``; only the
+production secret store waits on the hosting decision, and moving to one
+only changes how these fields get their values.
 """
 
 import re
+import secrets
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Self
+from typing import Any, Literal, Self
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # One DNS label: letters, digits and inner hyphens, at most 63 characters.
@@ -62,6 +65,28 @@ class Settings(BaseSettings):
     # Optional in dev; required in prod.
     public_hostname: str | None = None
 
+    # Signs the admin app's CSRF tokens. Random, at least 32 characters;
+    # generate one with
+    #   uv run python -c "import secrets; print(secrets.token_urlsafe(32))"
+    # Required in prod. In dev a missing key gets a random one per run (see
+    # _dev_gets_a_random_key). Changing it only makes forms on pages that
+    # are already open fail once (a reload fixes them); nothing stored
+    # depends on it.
+    secret_key: SecretStr | None = Field(default=None, min_length=32)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _dev_gets_a_random_key(cls, data: Any) -> Any:
+        # In dev, nobody should have to make up a key to try the app. In
+        # prod a missing key is an error (_prod_needs_these), never this.
+        if (
+            isinstance(data, dict)
+            and data.get("environment") == "dev"
+            and not data.get("secret_key")
+        ):
+            return {**data, "secret_key": secrets.token_urlsafe(32)}
+        return data
+
     @field_validator("timezone")
     @classmethod
     def _timezone_exists(cls, value: str) -> str:
@@ -92,15 +117,31 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def _prod_needs_hostname(self) -> Self:
-        if self.environment == "prod" and self.public_hostname is None:
-            raise ValueError("GYM_PUBLIC_HOSTNAME is required in prod")
+    def _prod_needs_these(self) -> Self:
+        if self.environment != "prod":
+            return self
+        # Every missing one at once, so a new install is fixed in one go.
+        missing = [
+            f"GYM_{name.upper()} is required in prod"
+            for name in ("public_hostname", "secret_key")
+            if getattr(self, name) is None
+        ]
+        if missing:
+            raise ValueError("; ".join(missing))
         return self
 
     @property
     def tz(self) -> ZoneInfo:
         """The display timezone as a ``ZoneInfo``."""
         return ZoneInfo(self.timezone)
+
+    @property
+    def signing_key(self) -> bytes:
+        """``secret_key`` as bytes, for HMAC. Always set once loaded: prod
+        requires it and dev makes one up."""
+        if self.secret_key is None:
+            raise RuntimeError("no secret key loaded")
+        return self.secret_key.get_secret_value().encode()
 
 
 @lru_cache

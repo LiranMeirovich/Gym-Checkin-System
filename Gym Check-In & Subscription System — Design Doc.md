@@ -68,7 +68,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 
 Permissions are defined in code as named permissions (e.g. `prices.edit`, `plans.correct`) mapped to roles in one place, so moving an action from one role to the other is a one-line change. Every action is checked on the server; hiding a button in the interface is never the only protection.
 
-**Staff login and lock screen.** The admin app opens on a lock screen: tap your name, enter your PIN (at least 6 digits). The app locks again after 5 minutes without activity or when someone presses "Lock", so the next person logs in as themselves. The header always shows who is logged in and their role. Menus and buttons a role can't use are hidden.
+**Staff login and lock screen.** The admin app opens on a lock screen: tap your name, enter your PIN (at least 6 digits). The app locks again when someone presses "Lock", and on its own after a stretch without activity: 5 minutes for a manager, 60 for an instructor (instructors mostly watch the desk screen and check people in). Both times are settings the manager can change. Any session ends after 12 hours. Staff should still lock or log in as themselves, since the activity log records whoever is logged in. The header always shows who is logged in and their role. Menus and buttons a role can't use are hidden.
 
 **Activity log.** Every change made by staff (who, what, when, before and after) is recorded, so the manager can see what instructors did.
 
@@ -212,7 +212,7 @@ Every customer needs a valid signed health declaration before they can train. Wi
 
 ## Data model
 
-One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch cards are added). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
+One SQLite file (`gym.db`, WAL mode) with thirteen tables (fourteen once punch cards are added). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
@@ -224,8 +224,9 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | `freezes` | id, customer\_id, start\_month, end\_month, reason | Whole calendar months; extends a tri-monthly period |
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable), entered\_by | Single-entry payments count these |
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
-| `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes |
+| `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
 | staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
+| staff\_sessions | id, staff\_user\_id, token\_hash (unique), created\_at, last\_seen\_at, ended\_at | One row per staff login; the `gym_staff` cookie holds the token, only its SHA-256 hash is stored. Ends on Lock, a new login, the role's idle time or 12 hours; ended, never deleted |
 | activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change; read-only in the app |
 | `health_forms` | id, customer\_id, source (phone / paper), form\_version, answers\_json (nullable for paper), signer\_name, signed\_by\_guardian, signed\_on, expires\_on, document (blob: PDF snapshot or uploaded scan), uploaded\_by (nullable), created\_at | Never overwritten; the newest valid row counts. The document is stored inside the database, not as a loose file, so it gets the same encryption and backups |
 
@@ -285,7 +286,7 @@ The only thing reachable from outside is the public app's check-in pages; everyt
 
 - **BitLocker** (or Device encryption on Windows Home) encrypts the whole disk, protecting the data if the PC or its drive is stolen.
 - **Windows password** with auto-lock after 10 minutes idle.
-- **Staff logins with roles**: every action is checked against the logged-in staff member's role, and the app locks after 5 idle minutes (see Users and roles).
+- **Staff logins with roles**: every action is checked against the logged-in staff member's role, and the app locks after a few idle minutes, longer for instructors (see Users and roles).
 - **Admin app** listens on `127.0.0.1:8000` only, so nothing on the gym WiFi or the internet can reach it.
 - **No field-level encryption** of names or phones: it would break name search and the key would sit on the same machine anyway.
 - **Whole-database encryption (SQLCipher)**: because the system now stores health forms, the whole database file is encrypted at rest, whichever hosting is chosen. Search keeps working. It protects against the file or a disk snapshot leaking; it does not protect against someone with full access to the running machine, so who has access to the host matters as much as the encryption.

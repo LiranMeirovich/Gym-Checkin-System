@@ -87,9 +87,15 @@ class GymSettings(BaseModel):
     # Get the report after the manager approves it.
     report_recipients: Annotated[tuple[Email, ...], AfterValidator(_no_duplicates)] = ()
 
-    # Minutes without activity before the admin app locks (design doc:
-    # "Staff login and lock screen").
+    # Minutes without activity before the admin app locks a manager's
+    # session (design doc: "Staff login and lock screen"). The name predates
+    # the per-role split; renaming it would need a data migration.
     lock_screen_minutes: Annotated[StrictInt, Field(ge=1, le=60)] = 5
+
+    # The same for instructors: longer, since they mostly watch the desk
+    # screen and check people in. At most 12 hours, the longest any session
+    # lasts anyway (staff_sessions.MAX_SESSION_AGE).
+    instructor_lock_screen_minutes: Annotated[StrictInt, Field(ge=1, le=720)] = 60
 
 
 class InvalidStoredSettingError(RuntimeError):
