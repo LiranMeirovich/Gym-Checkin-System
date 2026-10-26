@@ -20,6 +20,7 @@ from app.core.staff_sessions import (
     end_session,
     find_session,
     hash_token,
+    idle_timeout,
     start_session,
     touch,
 )
@@ -52,7 +53,8 @@ def db(migrated_db: Path) -> Iterator[Session]:
 
 @pytest.fixture
 def dana(db: Session) -> StaffUser:
-    staff = StaffUser(display_name="Dana", role=Role.INSTRUCTOR, pin_hash=FAKE_PIN_HASH)
+    """A manager, so the idle timeout below is the 5-minute one."""
+    staff = StaffUser(display_name="Dana", role=Role.MANAGER, pin_hash=FAKE_PIN_HASH)
     db.add(staff)
     db.flush()
     return staff
@@ -175,6 +177,42 @@ def test_the_lock_time_comes_from_the_gym_settings(
     assert find_session(db, token) is not None
     clock.now += timedelta(minutes=2)
     assert find_session(db, token) is None
+
+
+def test_an_instructor_gets_the_instructor_lock_time(db: Session, clock: Clock) -> None:
+    tal = StaffUser(display_name="Tal", role=Role.INSTRUCTOR, pin_hash=FAKE_PIN_HASH)
+    db.add(tal)
+    db.flush()
+    token = start_session(db, tal)
+
+    clock.now += timedelta(minutes=60)
+    assert find_session(db, token) is not None
+    clock.now += timedelta(seconds=1)
+    assert find_session(db, token) is None
+
+
+def test_each_roles_lock_time_comes_from_its_own_setting(db: Session) -> None:
+    update_gym_settings(
+        db, {"lock_screen_minutes": 3, "instructor_lock_screen_minutes": 90}
+    )
+
+    assert idle_timeout(db, Role.MANAGER) == timedelta(minutes=3)
+    assert idle_timeout(db, Role.INSTRUCTOR) == timedelta(minutes=90)
+    # The stored text works too.
+    assert idle_timeout(db, "instructor") == timedelta(minutes=90)
+
+
+def test_a_role_change_switches_the_lock_time(
+    db: Session, dana: StaffUser, clock: Clock
+) -> None:
+    token = start_session(db, dana)
+    clock.now += timedelta(minutes=10)
+    assert find_session(db, token) is None
+
+    dana.role = Role.INSTRUCTOR
+    db.flush()
+
+    assert find_session(db, token) is not None
 
 
 def test_activity_restarts_the_idle_timeout(

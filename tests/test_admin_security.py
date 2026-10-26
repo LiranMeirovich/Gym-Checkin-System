@@ -210,13 +210,24 @@ def test_each_request_counts_as_activity(
     assert session.last_seen_at == clock.now
 
 
-def test_an_idle_session_is_sent_to_the_lock_screen(
+def test_an_idle_managers_session_is_sent_to_the_lock_screen(
+    db: Session, client: TestClient, clock: Clock
+) -> None:
+    log_in(db, client, add_staff(db, "Noa", Role.MANAGER))
+
+    clock.now += timedelta(minutes=6)
+
+    assert client.get("/who").status_code == 303
+
+
+def test_an_instructor_stays_logged_in_longer(
     db: Session, client: TestClient, clock: Clock
 ) -> None:
     log_in(db, client, add_staff(db, "Dana", Role.INSTRUCTOR))
 
-    clock.now += timedelta(minutes=6)
-
+    clock.now += timedelta(minutes=59)
+    assert client.get("/who").status_code == 200
+    clock.now += timedelta(minutes=61)
     assert client.get("/who").status_code == 303
 
 

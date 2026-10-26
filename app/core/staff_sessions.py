@@ -5,8 +5,8 @@ A session is a random token in the browser's cookie; the database keeps
 only its SHA-256 hash. A session counts only while all of these hold:
 
 - it hasn't been ended (Lock, or a new login on the same browser),
-- its last activity was at most ``lock_screen_minutes`` ago (a gym
-  setting, 5 by default),
+- its last activity was at most ``idle_timeout()`` ago: a gym setting per
+  role, 5 minutes for managers and 60 for instructors by default,
 - it started at most ``MAX_SESSION_AGE`` ago, however active it was,
 - its staff member is still active.
 
@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.core.clock import utc_now
 from app.core.gym_settings import load_gym_settings
 from app.core.models import StaffSession, StaffUser
+from app.core.permissions import Role
 
 # A working day. Even a session kept busy all day has to log in again.
 MAX_SESSION_AGE = timedelta(hours=12)
@@ -74,12 +75,24 @@ def find_session(db: Session, token: str) -> StaffSession | None:
     if session is None:
         return None
     now = utc_now()
-    idle_timeout = timedelta(minutes=load_gym_settings(db).lock_screen_minutes)
-    if now - session.last_seen_at > idle_timeout:
+    if now - session.last_seen_at > idle_timeout(db, session.staff.role):
         return None
     if now - session.created_at > MAX_SESSION_AGE:
         return None
     return session
+
+
+def idle_timeout(db: Session, role: Role) -> timedelta:
+    """How long a session of ``role`` may go without activity. Managers
+    lock sooner: they're the ones who can change prices, plans and staff,
+    while instructors mostly watch the desk screen."""
+    settings = load_gym_settings(db)
+    minutes = (
+        settings.lock_screen_minutes
+        if Role(role) is Role.MANAGER
+        else settings.instructor_lock_screen_minutes
+    )
+    return timedelta(minutes=minutes)
 
 
 def touch(db: Session, session: StaffSession) -> None:

@@ -45,6 +45,7 @@ def test_an_empty_table_gives_the_defaults(db: Session) -> None:
     assert settings.manager_email is None
     assert settings.report_recipients == ()
     assert settings.lock_screen_minutes == 5
+    assert settings.instructor_lock_screen_minutes == 60
 
 
 def test_stored_values_override_only_their_own_defaults(db: Session) -> None:
@@ -127,6 +128,9 @@ def test_a_json_error_does_not_carry_the_stored_text(db: Session) -> None:
         ("lock_screen_minutes", "5.5"),
         ("lock_screen_minutes", "0"),
         ("lock_screen_minutes", "61"),
+        ("instructor_lock_screen_minutes", "0"),
+        ("instructor_lock_screen_minutes", "721"),
+        ("instructor_lock_screen_minutes", "null"),
         ("gym_name", '""'),
         ("gym_name", "5"),
         ("manager_email", '"not an email"'),
