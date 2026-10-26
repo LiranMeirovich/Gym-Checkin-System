@@ -20,15 +20,18 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from app.admin.security import SETUP_PATH, set_session_cookie
 from app.admin.templating import templates
 from app.core.db import DbSession
-from app.core.gym_settings import InvalidSettingsChangeError, update_gym_settings
+from app.core.gym_settings import (
+    InvalidSettingsChangeError,
+    check_gym_settings,
+    update_gym_settings,
+)
 from app.core.models import StaffUser
-from app.core.permissions import Role
 from app.core.pins import InvalidPinError, validate_pin
 from app.core.staff import (
     DuplicateDisplayNameError,
     InvalidDisplayNameError,
     any_staff_exists,
-    create_staff_user,
+    create_first_manager,
 )
 from app.core.staff_sessions import start_session
 
@@ -77,8 +80,6 @@ def finish_setup(
             values={"gym_name": gym_name, "display_name": display_name},
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
-    # TODO(activity log): record the first manager's creation and the gym
-    # name once the activity log exists (CLAUDE.md follow-ups).
     token = start_session(db, manager)
     response = RedirectResponse("/", status.HTTP_303_SEE_OTHER)
     set_session_cookie(response, token)
@@ -98,11 +99,11 @@ def _create_manager(
         if pin != pin_again:
             errors["pin_again"] = PIN_MISMATCH_ERROR
     try:
-        update_gym_settings(db, {"gym_name": gym_name})
+        check_gym_settings({"gym_name": gym_name})
     except InvalidSettingsChangeError:
         errors["gym_name"] = GYM_NAME_ERROR
     try:
-        manager = create_staff_user(db, display_name, Role.MANAGER, pin)
+        manager = create_first_manager(db, display_name, pin)
     except (InvalidDisplayNameError, DuplicateDisplayNameError):
         # A duplicate can't happen on an empty table; kept so a wrong guess
         # about that shows as a field error, not a crash.
@@ -111,6 +112,8 @@ def _create_manager(
         pass  # already reported above
     if errors:
         raise _SetupFailed(errors)
+    # Saved once the manager exists, who is logged as setting it.
+    update_gym_settings(db, {"gym_name": gym_name}, by=manager)
     return manager
 
 

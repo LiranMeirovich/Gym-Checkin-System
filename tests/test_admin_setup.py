@@ -2,6 +2,7 @@
 saved together or not at all, and the page gone once it's done. Names and
 PINs are made up."""
 
+import json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from app.admin.security import SESSION_COOKIE
 from app.core import pins
 from app.core.db import get_engine
 from app.core.gym_settings import load_gym_settings
-from app.core.models import StaffSession, StaffUser
+from app.core.models import ActivityLogEntry, StaffSession, StaffUser
 from app.core.permissions import Role
 from app.core.staff_sessions import find_session
 
@@ -58,6 +59,7 @@ def assert_nothing_saved(db: Session) -> None:
     db.expire_all()
     assert db.scalar(select(func.count()).select_from(StaffUser)) == 0
     assert load_gym_settings(db).gym_name is None
+    assert db.scalar(select(func.count()).select_from(ActivityLogEntry)) == 0
 
 
 # ── Before setup ────────────────────────────────────────────────────────
@@ -94,6 +96,37 @@ def test_setup_saves_the_manager_and_gym_name_and_logs_in(
     session = find_session(db, token)
     assert session is not None
     assert session.staff_user_id == manager.id
+
+
+def test_setup_logs_the_manager_as_making_both_changes(
+    client: TestClient, db: Session
+) -> None:
+    submit(client)
+
+    manager = db.scalars(select(StaffUser)).one()
+    entries = db.scalars(select(ActivityLogEntry).order_by(ActivityLogEntry.id))
+    assert [
+        (
+            entry.staff_user_id,
+            entry.action,
+            entry.before_json and json.loads(entry.before_json),
+            json.loads(entry.after_json),
+        )
+        for entry in entries
+    ] == [
+        (
+            manager.id,
+            "staff.create",
+            None,
+            {"display_name": "נועה", "role": "manager", "active": True},
+        ),
+        (
+            manager.id,
+            "settings.update",
+            {"gym_name": None},
+            {"gym_name": "מכון הדוגמה"},
+        ),
+    ]
 
 
 def test_the_session_cookie_is_locked_down(client: TestClient) -> None:

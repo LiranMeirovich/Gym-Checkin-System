@@ -28,8 +28,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
+from app.core.activity_log import Action, Target, record
 from app.core.clock import utc_now
-from app.core.models import Setting
+from app.core.models import Setting, StaffUser
 
 # A plain ASCII address: dot-atom characters before the "@", letters,
 # digits and hyphens in each part of the domain. Stricter than the email
@@ -171,7 +172,19 @@ class InvalidSettingsChangeError(ValueError):
         self.problems = problems
 
 
-def update_gym_settings(db: Session, changes: dict[str, object]) -> None:
+def check_gym_settings(changes: dict[str, object]) -> GymSettings:
+    """Validate ``changes`` the way ``update_gym_settings`` does, without
+    writing anything. Raises ``InvalidSettingsChangeError``. For a form
+    that checks every field before it saves anything."""
+    try:
+        return GymSettings.model_validate(changes)
+    except ValidationError as error:
+        raise InvalidSettingsChangeError(_problems(error)) from None
+
+
+def update_gym_settings(
+    db: Session, changes: dict[str, object], *, by: StaffUser
+) -> None:
     """Validate ``changes`` and write them, inside the caller's transaction.
 
     Values must already have their Python type: an ``int`` for minutes, a
@@ -190,23 +203,33 @@ def update_gym_settings(db: Session, changes: dict[str, object]) -> None:
     two settings yet; one that does would need checking against the stored
     values here.
 
-    TODO(activity log): record each change, with its before and after
-    value, once the activity log exists (CLAUDE.md follow-ups).
+    The save is written to the activity log as one entry, with ``by`` as
+    the actor and only the settings whose value really changed, each with
+    the value in effect before (the default, if no row was stored) and
+    after. A save that changes nothing writes no entry.
     """
-    try:
-        validated = GymSettings.model_validate(changes)
-    except ValidationError as error:
-        raise InvalidSettingsChangeError(_problems(error)) from None
+    validated = check_gym_settings(changes)
 
     # mode="json" turns tuples into lists, so the stored text is plain JSON.
     new_values = validated.model_dump(mode="json", include=set(changes))
+    stored = _stored_text(db, set(new_values))
+    defaults = GymSettings().model_dump(mode="json", include=set(new_values))
+    changed = [
+        key
+        for key, value in new_values.items()
+        # A stored row is compared as text, the way the upsert below
+        # compares it: in Python, True == 1 and 5.0 == 5, so comparing
+        # decoded values would miss the repair of a broken row. With no
+        # row, the default was in effect; writing that same value isn't a
+        # change, even though it adds a row.
+        if (stored[key] != _encode(value) if key in stored else value != defaults[key])
+    ]
     cleared = [key for key, value in new_values.items() if value is None]
     if cleared:
         db.execute(delete(Setting).where(Setting.key.in_(cleared)))
 
     rows = [
-        # ensure_ascii=False keeps Hebrew readable in a database browser.
-        {"key": key, "value": json.dumps(value, ensure_ascii=False)}
+        {"key": key, "value": _encode(value)}
         for key, value in new_values.items()
         if value is not None
     ]
@@ -223,6 +246,47 @@ def update_gym_settings(db: Session, changes: dict[str, object]) -> None:
                 where=Setting.value != statement.excluded.value,
             )
         )
+
+    if changed:
+        record(
+            db,
+            by,
+            Action.SETTINGS_UPDATE,
+            Target.SETTINGS,
+            before={
+                key: _decode(stored[key]) if key in stored else defaults[key]
+                for key in changed
+            },
+            after={key: new_values[key] for key in changed},
+        )
+
+
+def _stored_text(db: Session, keys: set[str]) -> dict[str, str]:
+    """The stored text of each of ``keys`` that has a row."""
+    # populate_existing, as in load_gym_settings_for_editing: an earlier
+    # save in this transaction may have changed a row the session holds.
+    query = (
+        select(Setting)
+        .where(Setting.key.in_(keys))
+        .execution_options(populate_existing=True)
+    )
+    return {row.key: row.value for row in db.scalars(query)}
+
+
+def _encode(value: object) -> str | None:
+    """A value's stored text; ``None`` for a cleared setting, which has no
+    row. ensure_ascii=False keeps Hebrew readable in a database browser."""
+    return None if value is None else json.dumps(value, ensure_ascii=False)
+
+
+def _decode(text: str) -> object:
+    """A stored value, for the activity log. A row that isn't JSON (a broken
+    hand edit) shows as its raw text, so the log says what was really
+    there."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return text
 
 
 def _problems(error: ValidationError) -> dict[str, str]:
