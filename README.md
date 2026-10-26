@@ -50,6 +50,8 @@ uv run uvicorn app.public.main:app --host 127.0.0.1 --port 8001
 
 Never bind either app to `0.0.0.0`.
 
+On a fresh database, open the admin app at `http://127.0.0.1:8000`: it asks for the gym's name and the first manager account (first-run setup). After that it opens on the lock screen: tap your name and enter your PIN. Do this right after installing, since until then anyone at the PC can become the manager.
+
 ## Configuration
 
 Deployment config comes from `GYM_`-prefixed environment variables or a `.env` file in the folder the apps are started from. Real environment variables win. [`.env.example`](.env.example) lists every key with a comment. Both apps check the config when they start, and refuse to start if a value is invalid or the `.env` file has an unknown key. A blank value counts as unset. A misspelt *environment variable* can't be detected and is simply ignored, so double-check names set outside `.env` ([decision 0013](docs/decisions/0013-deployment-config-with-pydantic-settings.md)).
@@ -60,6 +62,7 @@ Deployment config comes from `GYM_`-prefixed environment variables or a `.env` f
 | `GYM_DATABASE_PATH` | `gym.db` | SQLite file |
 | `GYM_TIMEZONE` | `Asia/Jerusalem` | Timezone used to show times; timestamps are stored in UTC |
 | `GYM_PUBLIC_HOSTNAME` | none | Bare hostname phones reach the public app on; required in `prod` |
+| `GYM_SECRET_KEY` | random per run in `dev` | Signs the admin app's CSRF tokens; at least 32 characters; required in `prod` (both apps and `alembic` read it). Generate with `uv run python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 
 ### Gym settings
 
@@ -70,9 +73,14 @@ Values the manager edits in the app live in the database's `settings` table inst
 | `gym_name` | not set | 1–100 characters; filled in at first-run setup |
 | `manager_email` | not set | Gets the monthly report to approve |
 | `report_recipients` | empty | Get the report after approval |
-| `lock_screen_minutes` | `5` | 1–60 minutes without activity before the admin app locks |
+| `lock_screen_minutes` | `5` | 1–60 minutes without activity before a manager's session locks |
+| `instructor_lock_screen_minutes` | `60` | 1–720 minutes without activity before an instructor's session locks |
 
 The SMTP password and other secrets are never stored here.
+
+### Staff logins
+
+Staff log in on the lock screen with a 6–12 digit PIN ([decision 0018](docs/decisions/0018-staff-pins-and-the-permission-map.md)). A session lives in the `gym_staff` cookie and the `staff_sessions` table (token hash only); it ends on Lock, after the role's idle time, after 12 hours, or when the staff member is deactivated. Every admin form is protected against CSRF by an origin check and a signed per-session token, and the admin app answers only to `127.0.0.1` and `localhost` ([decision 0019](docs/decisions/0019-staff-sessions-csrf-and-lock-times.md)).
 
 ## Development
 

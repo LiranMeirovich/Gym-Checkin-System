@@ -1,6 +1,6 @@
 # 0008. Split milestone 1 into one-session features
 
-- Status: Accepted, amended by [0014](0014-settings-table-after-database-foundation.md) (feature order)
+- Status: Accepted, amended by [0014](0014-settings-table-after-database-foundation.md) (feature order); the open lock-screen question is settled by [0019](0019-staff-sessions-csrf-and-lock-times.md) (built in milestone 1)
 - Date: 2026-10-21
 
 ## Context

@@ -47,7 +47,8 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 - Routes get the database by declaring a `db: DbSession` parameter (`app/core/db.py`): one transaction per request, committed before the response is sent, rolled back on any exception. Never use `Depends(get_db)` directly: FastAPI's default would commit after the response (decision 0015).
 - Get "now" from `app.core.clock.utc_now()` and display times with `to_local()`. Timestamp columns are `Mapped[datetime]` (stored as `UTCDateTime`); naive datetimes are refused.
 - The apps never create or migrate the database; they refuse to start unless it's at the newest migration.
-- The admin app needs CSRF protection (FastAPI doesn't include it).
+- Every admin route except `/login`, `/setup` and `/health` declares `CurrentStaff` or `require_permission(Permission.X)` (`app/admin/security.py`); forgetting it leaves the route open. Logged-in pages render through `staff_page()` (`app/admin/templating.py`), which adds the CSRF token, the auto-lock timer and `Cache-Control: no-store`. Every logged-in form includes the hidden `csrf_token` field; HTMX sends it as `X-CSRF-Token` from `base.html` (decision 0019).
+- Admin test clients use `base_url="http://127.0.0.1:8000"` (the host guard refuses `testserver`), and POSTs need a matching `Origin` header.
 - Run uvicorn with a single worker, so scheduled jobs (report, backups) never run twice.
 - Behind Cloudflare, the client IP is in `CF-Connecting-IP`, not the socket address. Use that header for rate limiting.
 

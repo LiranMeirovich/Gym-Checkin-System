@@ -1,6 +1,6 @@
 # 0013. Load deployment config with pydantic-settings, validated at startup
 
-- Status: Accepted
+- Status: Accepted, amended by [0019](0019-staff-sessions-csrf-and-lock-times.md) (secrets: `GYM_SECRET_KEY`)
 - Date: 2026-10-24
 
 ## Context
