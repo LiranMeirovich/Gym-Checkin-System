@@ -28,8 +28,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
+from app.core.activity_log import Action, Target, record
 from app.core.clock import utc_now
-from app.core.models import Setting
+from app.core.models import Setting, StaffUser
 
 # A plain ASCII address: dot-atom characters before the "@", letters,
 # digits and hyphens in each part of the domain. Stricter than the email
@@ -171,7 +172,19 @@ class InvalidSettingsChangeError(ValueError):
         self.problems = problems
 
 
-def update_gym_settings(db: Session, changes: dict[str, object]) -> None:
+def check_gym_settings(changes: dict[str, object]) -> GymSettings:
+    """Validate ``changes`` the way ``update_gym_settings`` does, without
+    writing anything. Raises ``InvalidSettingsChangeError``. For a form
+    that checks every field before it saves anything."""
+    try:
+        return GymSettings.model_validate(changes)
+    except ValidationError as error:
+        raise InvalidSettingsChangeError(_problems(error)) from None
+
+
+def update_gym_settings(
+    db: Session, changes: dict[str, object], *, by: StaffUser
+) -> None:
     """Validate ``changes`` and write them, inside the caller's transaction.
 
     Values must already have their Python type: an ``int`` for minutes, a
@@ -190,16 +203,17 @@ def update_gym_settings(db: Session, changes: dict[str, object]) -> None:
     two settings yet; one that does would need checking against the stored
     values here.
 
-    TODO(activity log): record each change, with its before and after
-    value, once the activity log exists (CLAUDE.md follow-ups).
+    The save is written to the activity log as one entry, with ``by`` as
+    the actor and only the settings whose value really changed, each with
+    the value in effect before (the default, if no row was stored) and
+    after. A save that changes nothing writes no entry.
     """
-    try:
-        validated = GymSettings.model_validate(changes)
-    except ValidationError as error:
-        raise InvalidSettingsChangeError(_problems(error)) from None
+    validated = check_gym_settings(changes)
 
     # mode="json" turns tuples into lists, so the stored text is plain JSON.
     new_values = validated.model_dump(mode="json", include=set(changes))
+    old_values = _values_in_effect(db, set(new_values))
+    changed = [key for key in new_values if new_values[key] != old_values[key]]
     cleared = [key for key, value in new_values.items() if value is None]
     if cleared:
         db.execute(delete(Setting).where(Setting.key.in_(cleared)))
@@ -223,6 +237,30 @@ def update_gym_settings(db: Session, changes: dict[str, object]) -> None:
                 where=Setting.value != statement.excluded.value,
             )
         )
+
+    if changed:
+        record(
+            db,
+            by,
+            Action.SETTINGS_UPDATE,
+            Target.SETTINGS,
+            before={key: old_values[key] for key in changed},
+            after={key: new_values[key] for key in changed},
+        )
+
+
+def _values_in_effect(db: Session, keys: set[str]) -> dict[str, object]:
+    """What each of ``keys`` is set to before a save, for the activity log:
+    the stored value, or the default when there's no row. A row that isn't
+    JSON (a broken hand edit) shows as its raw text, so the log says what
+    was really there."""
+    values: dict[str, object] = GymSettings().model_dump(mode="json", include=keys)
+    for row in db.scalars(select(Setting).where(Setting.key.in_(keys))):
+        try:
+            values[row.key] = json.loads(row.value)
+        except json.JSONDecodeError:
+            values[row.key] = row.value
+    return values
 
 
 def _problems(error: ValidationError) -> dict[str, str]:

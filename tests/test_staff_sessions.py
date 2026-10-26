@@ -171,7 +171,7 @@ def test_a_session_idle_past_the_lock_time_is_refused(
 def test_the_lock_time_comes_from_the_gym_settings(
     db: Session, dana: StaffUser, clock: Clock
 ) -> None:
-    update_gym_settings(db, {"lock_screen_minutes": 15})
+    update_gym_settings(db, {"lock_screen_minutes": 15}, by=dana)
     token = start_session(db, dana)
 
     clock.now += timedelta(minutes=14)
@@ -192,9 +192,11 @@ def test_an_instructor_gets_the_instructor_lock_time(db: Session, clock: Clock) 
     assert find_session(db, token) is None
 
 
-def test_each_roles_lock_time_comes_from_its_own_setting(db: Session) -> None:
+def test_each_roles_lock_time_comes_from_its_own_setting(
+    db: Session, dana: StaffUser
+) -> None:
     update_gym_settings(
-        db, {"lock_screen_minutes": 3, "instructor_lock_screen_minutes": 90}
+        db, {"lock_screen_minutes": 3, "instructor_lock_screen_minutes": 90}, by=dana
     )
 
     settings = lock_settings(db)
