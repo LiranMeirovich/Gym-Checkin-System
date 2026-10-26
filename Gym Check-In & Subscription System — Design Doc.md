@@ -89,7 +89,7 @@ The tunnel is an outbound connection from the PC, so no router ports are opened.
 | Backend | Python 3.12 + FastAPI | Simple, well supported, easy for Claude Code to build and test |
 | Database | SQLite (single file, WAL mode) | No database server; two local apps can share it safely |
 | Apps | Same codebase, two instances: admin on `127.0.0.1:8000`, public on `127.0.0.1:8001` | Admin routes are never mounted on the public instance |
-| Frontend | Server-rendered HTML + a little JavaScript; customer pages mobile-first | No build step; works in any phone browser |
+| Frontend | React + TypeScript (Vite), two builds (admin and public) served by each FastAPI app from the same domain, talking to a JSON API under `/api`; customer pages mobile-first | Typed end to end (types generated from the OpenAPI spec); no Node needed at runtime; works in any phone browser (decision 0020) |
 | Tunnel | Cloudflare Tunnel (`cloudflared` as a Windows service), free plan | HTTPS handled by Cloudflare; no open ports; no static IP needed |
 | Domain | A gym domain on Cloudflare, e.g. `checkin.<gym-domain>` | Needed for a named tunnel and a stable QR URL; about $10–15/year |
 | Scheduled jobs | Run inside the admin app at startup and every hour (APScheduler or a simple loop) | Monthly report on or after the 1st, daily backup; catches up if the PC was off |
@@ -383,16 +383,16 @@ Each answer replaces an *assumption* above; none of them changes the architectur
 
 Build in six milestones, each usable and testable on its own; hand them to Claude Code one at a time.
 
-1. **Foundation**: project layout, settings, SQLite schema and migrations, first manager account on first run, staff accounts with roles and server-side permission checks, the activity log, and the two app entry points (admin and public) sharing one core package.
+1. **Foundation**: project layout, settings, SQLite schema and migrations, first manager account on first run, staff accounts with roles and server-side permission checks, the activity log, and the two app entry points (admin and public) sharing one core package. It ends with the frontend foundation: the React + TypeScript project with its admin and public builds, served by the two apps, with the first screens (setup, login) moved to React (decision 0020).
 2. **Customers, prices and plans**: customer create/edit/archive with date of birth, the price table with valid-from months, plan choices and corrections, freezes, and the monthly plan logic, with unit tests for every rule in Plans, prices and billing.
 3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, rate limiting, and manual check-in with plan selection and paper-form upload.
-4. **Admin screens**: dashboard with live check-ins and expiring health forms, customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role. Test every manager-only action as an instructor and confirm it's refused.
+4. **Admin screens**: dashboard with live check-ins and expiring health forms, customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role. Style every screen, admin and customer (including the milestone 3 phone pages), using the `frontend-design` skill. Test every manager-only action as an instructor and confirm it's refused.
 5. **Report**: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan, age group and edge case.
 6. **Operations**: encrypted backups and restore, Windows services for both apps and `cloudflared`, the named Cloudflare tunnel on the gym domain, SMTP setup, a printable wall-QR page, and a setup guide for the gym PC.
 
 **Notes for Claude Code**
 
-- Suggested layout: `app/core` (database, models, plan and price rules, reports, email), `app/admin` (routes, templates), `app/public` (routes, templates), `tests/`.
+- Suggested layout: `app/core` (database, models, plan and price rules, reports, email), `app/admin` (JSON routes), `app/public` (JSON routes), `frontend/` (React + TypeScript, admin and public builds), `tests/`.
 - Run locally: admin with `uvicorn app.admin.main:app --host 127.0.0.1 --port 8000`, public with `uvicorn app.public.main:app --host 127.0.0.1 --port 8001`.
 - Test on a real phone before the domain exists with a temporary quick tunnel: `cloudflared tunnel --url http://127.0.0.1:8001`.
 - Never bind either app to `0.0.0.0`, and never register admin routes on the public app.

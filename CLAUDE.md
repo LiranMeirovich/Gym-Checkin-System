@@ -5,9 +5,10 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 
 ## Project status
 - Design doc: `Gym Check-In & Subscription System — Design Doc.md` in the project root (the source of truth; read the relevant section before starting a milestone)
-- Current milestone: 1 — Foundation, split into seven features (decisions 0008, 0014): ~~project setup~~ → ~~settings (`.env`)~~ → ~~database foundation~~ → ~~settings table~~ → ~~staff accounts & permissions~~ → ~~first-run setup & staff sessions~~ → **activity log**.
+- Current milestone: 1 — Foundation, split into eight features (decisions 0008, 0014, 0020): ~~project setup~~ → ~~settings (`.env`)~~ → ~~database foundation~~ → ~~settings table~~ → ~~staff accounts & permissions~~ → ~~first-run setup & staff sessions~~ → **activity log** → frontend foundation.
 - Done: project setup (uv, ruff, pytest, pre-commit with gitleaks + ruff, GitHub Actions CI, admin/public apps with `/health`, README); settings (`.env`): `app/core/config.py` (`get_settings()`), `GYM_*` env vars / `.env`, validated at app startup, `.env.example` (decision 0013); database foundation: SQLite engine + `DbSession` (`app/core/db.py`), `UTCDateTime` + `Base` (`app/core/models/`), `utc_now`/`to_local` (`app/core/clock.py`), Alembic with FK-safe migrations and an empty baseline, shared startup that refuses an out-of-date DB (`app/core/startup.py`), `/migration` skill (decision 0015); settings table: `settings` key/value table, `GymSettings` with `load_gym_settings()`, `load_gym_settings_for_editing()` (settings screen only) and `update_gym_settings()` in `app/core/gym_settings.py` (decision 0016); staff accounts & permissions: `staff_users` table, Argon2id PINs (`app/core/pins.py`), `Role`/`Permission` and the one `ROLE_PERMISSIONS` map with `has_permission()` (`app/core/permissions.py`), staff-account service with the last-manager guard and the PIN lockout (`check_pin()` in `app/core/staff.py`) (decisions 0017, 0018); first-run setup & staff sessions: `/setup` for the gym name and first manager, the lock screen (`/login`, `/lock`, placeholder `/` in `app/admin/auth.py`), `staff_sessions` table and service (`app/core/staff_sessions.py`, lock time per role: managers 5 min, instructors 60, 12-hour cap), `CurrentStaff` / `require_permission` (`app/admin/security.py`), CSRF origin check + signed token (`app/admin/csrf.py`, `GYM_SECRET_KEY`), host guard on the admin app, `staff_page()` (decision 0019).
 - Next feature: activity log (design doc "Activity log", data model `activity_log`). Schema change: follow `/migration`. Every staff change writes who, what, before and after, in the same transaction as the change.
+- Then: **frontend foundation** (decision 0020). Vite + React + TypeScript in `frontend/` with separate admin and public builds, FastAPI serving the built files, the Vite dev proxy, TypeScript types generated from OpenAPI, a Node job in CI, and setup, login and home rebuilt in React with JSON routes. Decide how the CSRF token reaches the React app. Remove Jinja2 and the templates once nothing uses them, and update the README stack line. New libraries beyond those named in 0020 need the developer's OK.
 - Follow-ups:
   - Relative `GYM_DATABASE_PATH` and the `.env` lookup depend on the process's working directory. A missing DB file now stops startup, but the two apps could still open different files if started from different folders. Pin a base folder or require absolute paths in prod (milestone 6 / hosting).
   - Packaging (milestone 6): the apps need `alembic.ini` and `migrations/` next to the code at runtime (the startup check reads them).
@@ -20,7 +21,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
   - Add branch protection on `main` requiring the "Lint and test" and "Scan for secrets" checks (CI has run on PR #1, so they can be selected now). Remove this line once it's set up.
   - Dependabot for the SHA-pinned GitHub Actions (milestone 6).
   - Hosting follow-ups for staff sessions (decision 0019): if the admin app moves behind HTTPS on a real hostname, change `ALLOWED_HOSTS` in `app/admin/main.py` and add `Secure` to the `gym_staff` cookie. Prod needs `GYM_SECRET_KEY` (both apps and `alembic`).
-  - Lock screen (milestone 4): style it, add the role-filtered menus. A polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`. Confirm the lock times with the manager.
+  - Lock screen (milestone 4): style it, add the role-filtered menus (in React, after the frontend foundation). A polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`. Confirm the lock times with the manager.
   - Code review leftovers from staff sessions (low priority): a huge `?staff=` id on `/login` (beyond SQLite's 64-bit range) gives a 500 instead of "not found"; the test helpers (`Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN`) are copied across six test files and belong in `tests/conftest.py`.
   - Check-in (milestone 3): an instructor's manual check-in with no plan for the month records single entry; only the manager picks or changes plans (decision 0017). The change-plan route decides whether a single-entry → monthly correction covers the visits already made.
   - The instructor/manager permission split is still the design doc's proposal; the manager confirms it (one-line change in `ROLE_PERMISSIONS` plus its test).
@@ -28,28 +29,31 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 - **Open: hosting.** A free server may replace the gym-PC + tunnel setup. Don't build anything host-specific until this is decided.
 - **Health form** (design doc "Health form" section, decision 0004). Built into the system, filled in on the phone with a signature, stored with a PDF snapshot and an expiry date. It is **blocking**: no check-in (phone or manual) without a valid form, because the gym isn't insured without one. Instructors see only valid / not valid; the full form is for the manager.
 - **Upcoming: punch cards** (12 entries for a fixed price). Details are pending, so don't build them yet, but don't design anything that would block adding them later.
+- **Styling: milestone 4, with the `frontend-design` skill.** Until then screens stay plainly styled. In milestone 4, `frontend-design` designs the look once (shared layout, styling approach, Hebrew font, colours) and applies it to every screen, admin and customer, including milestone 3's phone pages. It works within the React + TypeScript stack (decision 0020) and must handle Hebrew RTL; customer pages are mobile-first.
 
 ## Tech stack
 - Python 3.12 + FastAPI, SQLite (`gym.db`, WAL mode)
 - SQLAlchemy 2.x (ORM, 2.1 in use) + Alembic (migrations); conventions in decision 0015
 - SQLCipher encrypts the whole database file (added in milestone 6; plain SQLite until then). No field-level encryption.
 - Decision records: `docs/decisions/`. Check them before changing anything they cover.
-- Server-rendered Jinja2 HTML + HTMX for interactivity (customer pages mobile-first), no build step
-- **UI language: Hebrew, right-to-left** (`<html lang="he" dir="rtl">`); the code, comments and commits stay in English
+- Frontend (decision 0020): React + TypeScript, built with Vite, TanStack Query for data; types generated from FastAPI's OpenAPI spec (`openapi-typescript`). One project in `frontend/`, two builds (admin and public). FastAPI serves the built files from the same domain, so production needs no Node at runtime. Customer pages are mobile-first. (Until the frontend foundation feature lands, the existing screens are still Jinja2 + HTMX.)
+- API: JSON under `/api/...` with Pydantic request/response schemas. Not a separate API server: each FastAPI app serves its own React build and its own API.
+- **UI language: Hebrew, right-to-left** (`<html lang="he" dir="rtl">` in both React builds' `index.html`); the code, comments and commits stay in English
 - Tooling: uv (packages), ruff (lint + format), pytest (tests), GitHub Actions (CI), pre-commit (gitleaks + ruff). Rules, hooks and SHA pinning: decision 0011
 - Reports: openpyxl (Excel) + fpdf2 with an embedded Hebrew font (PDF, RTL). Not WeasyPrint.
 - Config: `pydantic-settings` reads deployment config from env vars / `.env` into `app/core/config.py` (decision 0013); manager-editable values go in the `settings` table
 - **Secrets have a home now:** whatever host runs the apps (gym PC or a server) always has an env / secrets file. A feature that needs a secret (a signing key, a password) adds it to `config.py` as a `SecretStr` read from `GYM_*` env vars / `.env`, required in prod, with a placeholder and a generator command in `.env.example`. Never treat "where secrets live" as a blocker or a reason to avoid a design that needs a key. Only the production *store* (plain env file vs the OS secret store via `keyring`) waits on the hosting decision, and moving between them only changes how `config.py` gets the value.
 - Other: `argon2-cffi` (staff PIN hashing, decision 0018), `keyring` (secrets), `pyzipper` (encrypted backups), `tzdata` (needed for `zoneinfo` on Windows)
 - One codebase, two app instances: admin on `127.0.0.1:8000`, public on `127.0.0.1:8001` (exposed via Cloudflare Tunnel)
-- Layout: `app/core` (db, models, plan/price rules, reports, email), `app/admin`, `app/public`, `tests/`
+- Layout: `app/core` (db, models, plan/price rules, reports, email), `app/admin`, `app/public`, `frontend/` (React, from the frontend foundation feature), `tests/`
 
 ## Implementation notes
 - Use plain `def` routes, not `async def`, because SQLite and SQLAlchemy are synchronous.
+- **Thin routes:** a route checks permissions, validates input with its Pydantic schema, calls `app/core` and returns the result. Business rules live only in `app/core`, never in routes or React components.
 - Routes get the database by declaring a `db: DbSession` parameter (`app/core/db.py`): one transaction per request, committed before the response is sent, rolled back on any exception. Never use `Depends(get_db)` directly: FastAPI's default would commit after the response (decision 0015).
 - Get "now" from `app.core.clock.utc_now()` and display times with `to_local()`. Timestamp columns are `Mapped[datetime]` (stored as `UTCDateTime`); naive datetimes are refused.
 - The apps never create or migrate the database; they refuse to start unless it's at the newest migration.
-- Every admin route except `/login`, `/setup` and `/health` declares `CurrentStaff` or `require_permission(Permission.X)` (`app/admin/security.py`); forgetting it leaves the route open. Logged-in pages render through `staff_page()` (`app/admin/templating.py`), which adds the CSRF token, the auto-lock timer and `Cache-Control: no-store`. Every logged-in form includes the hidden `csrf_token` field; HTMX sends it as `X-CSRF-Token` from `base.html` (decision 0019).
+- Every admin route except `/login`, `/setup` and `/health` declares `CurrentStaff` or `require_permission(Permission.X)` (`app/admin/security.py`); forgetting it leaves the route open. Logged-in pages render through `staff_page()` (`app/admin/templating.py`), which adds the CSRF token, the auto-lock timer and `Cache-Control: no-store`. Every logged-in form includes the hidden `csrf_token` field; HTMX sends it as `X-CSRF-Token` from `base.html` (decision 0019). With React (decision 0020), `fetch` sends it as the `X-CSRF-Token` header and the auto-lock timer runs in React; the server-side checks stay the same.
 - Admin test clients use `base_url="http://127.0.0.1:8000"` (the host guard refuses `testserver`), and POSTs need a matching `Origin` header.
 - Run uvicorn with a single worker, so scheduled jobs (report, backups) never run twice.
 - Behind Cloudflare, the client IP is in `CF-Connecting-IP`, not the socket address. Use that header for rate limiting.
@@ -80,9 +84,9 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - Database schema & migrations: every schema change follows the `/migration` skill
 
 ## Hard rules (from the design doc)
-- Never bind either app to `0.0.0.0`. Never register admin routes on the public app.
+- Never bind either app to `0.0.0.0`. Never register admin routes on the public app, and never put admin screens or admin API calls in the public React build.
 - Every permission is checked on the server, using named permissions (e.g. `prices.edit`) mapped to roles in one place. Hiding a button is never the only protection.
-- The customer login lives only in the server-set `gym_device` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, 1 year). Never use `localStorage`, `sessionStorage` or IndexedDB.
+- The customer login lives only in the server-set `gym_device` cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, 1 year). Never use `localStorage`, `sessionStorage` or IndexedDB, and React never reads or stores a login token.
 - Tokens, link codes and PINs are stored only as hashes (SHA-256 for tokens and codes, Argon2id for PINs, decision 0018).
 - Money is always integer agorot, never floats. Timestamps are stored in UTC and shown in Israel time.
 - History is never overwritten. Plan corrections add a new row, prices have `valid_from_month`, and past reports must regenerate identically.

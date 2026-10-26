@@ -1,6 +1,6 @@
 # 0003. Stack additions: SQLAlchemy, Alembic, HTMX and tooling
 
-- Status: Accepted
+- Status: Accepted; the frontend part (Jinja2 + HTMX) is superseded by [0020](0020-react-typescript-frontend-with-a-json-api.md)
 - Date: 2026-10-13
 
 ## Context
@@ -13,7 +13,7 @@ The design doc set the core stack (Python, FastAPI, SQLite, server-rendered HTML
 
 ## Decision
 - **SQLAlchemy 2.0** for the ORM and **Alembic** for migrations.
-- **Jinja2 templates + HTMX** for the live dashboard, check-in dialog and search.
+- **Jinja2 templates + HTMX** for the live dashboard, check-in dialog and search. *(Superseded by [0020](0020-react-typescript-frontend-with-a-json-api.md): React + TypeScript with a JSON API.)*
 - **uv** (packages), **ruff** (lint + format), **pytest** (tests), **GitHub Actions** (CI on every pull request).
 - Supporting libraries: **fpdf2** (PDF with Hebrew), **pyzipper** (encrypted backup zips; the standard `zipfile` can't encrypt), **tzdata** (`zoneinfo` has no time-zone data on Windows), **keyring** (secrets on Windows; may be replaced by environment variables if we move to a server).
 
