@@ -6,7 +6,7 @@ Run with: uvicorn app.admin.main:app --host 127.0.0.1 --port 8000
 from fastapi import FastAPI
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.admin import security
+from app.admin import security, setup
 from app.admin.csrf import SameOriginMiddleware
 from app.core.startup import lifespan
 
@@ -24,6 +24,7 @@ app = FastAPI(title="Gym admin", lifespan=lifespan)
 app.add_middleware(SameOriginMiddleware)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 security.install(app)
+app.include_router(setup.router)
 
 
 @app.get("/health")

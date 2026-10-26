@@ -14,9 +14,10 @@ activity, restarting the idle timeout. On a POST, PUT, PATCH or DELETE
 both also check the session's CSRF token (``app.admin.csrf``), and refuse
 the request with 403 without it.
 
-Not logged in: a page load is redirected to the lock screen; an HTMX
-request gets ``HX-Redirect`` so the whole page goes there, not just the
-fragment. Logged in without the permission: 403.
+Not logged in: a page load is redirected to the lock screen (or to
+first-run setup, while there are no staff accounts yet); an HTMX request
+gets ``HX-Redirect`` so the whole page goes there, not just the fragment.
+Logged in without the permission: 403.
 """
 
 from collections.abc import Callable
@@ -25,6 +26,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response
+from sqlalchemy.orm import Session
 
 from app.admin.csrf import (
     CSRF_FIELD,
@@ -33,9 +35,10 @@ from app.admin.csrf import (
     csrf_token,
     csrf_token_matches,
 )
-from app.core.db import DbSession
+from app.core.db import DbSession, get_engine
 from app.core.models import StaffSession, StaffUser
 from app.core.permissions import Permission, has_permission
+from app.core.staff import any_staff_exists
 from app.core.staff_sessions import find_session, touch
 
 # The browser's session token. HttpOnly, SameSite=Strict, no expiry (gone
@@ -43,6 +46,7 @@ from app.core.staff_sessions import find_session, touch
 SESSION_COOKIE = "gym_staff"
 
 LOGIN_PATH = "/login"
+SETUP_PATH = "/setup"
 
 
 @dataclass(frozen=True)
@@ -119,20 +123,42 @@ def require_permission(permission: Permission) -> Callable[..., StaffLogin]:
     return check
 
 
+def set_session_cookie(response: Response, token: str) -> None:
+    """Hand the browser a new session's token.
+
+    HttpOnly: page scripts can't read it. SameSite=Strict: the browser
+    never sends it on a request started by another site. No expiry: it's
+    gone when the browser closes, and the server's timeouts end it sooner.
+    Not Secure, because the admin app is plain http on 127.0.0.1; that
+    changes if hosting puts the admin app behind HTTPS.
+    """
+    response.set_cookie(
+        SESSION_COOKIE, token, httponly=True, samesite="strict", path="/"
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(SESSION_COOKIE, httponly=True, samesite="strict", path="/")
+
+
 def install(app: FastAPI) -> None:
     """Register the not-logged-in handling on ``app``."""
     app.add_exception_handler(NotLoggedInError, _send_to_login)
 
 
 def _send_to_login(request: Request, _error: Exception) -> Response:
+    # Runs after the request's own transaction has ended, so it reads in a
+    # short one of its own.
+    with Session(get_engine()) as db:
+        target = LOGIN_PATH if any_staff_exists(db) else SETUP_PATH
     if request.headers.get("HX-Request") == "true":
         response: Response = Response(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            headers={"HX-Redirect": LOGIN_PATH},
+            headers={"HX-Redirect": target},
         )
     else:
-        response = RedirectResponse(LOGIN_PATH, status.HTTP_303_SEE_OTHER)
+        response = RedirectResponse(target, status.HTTP_303_SEE_OTHER)
     # A dead token is no use to the browser; drop it.
     if SESSION_COOKIE in request.cookies:
-        response.delete_cookie(SESSION_COOKIE, httponly=True, samesite="strict")
+        clear_session_cookie(response)
     return response

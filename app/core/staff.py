@@ -55,6 +55,12 @@ class PinCheck(StrEnum):
     INACTIVE = "inactive"
 
 
+def any_staff_exists(db: Session) -> bool:
+    """Whether any staff account exists, active or not. Until one does, the
+    admin app is waiting for first-run setup to create the first manager."""
+    return db.scalar(select(StaffUser.id).limit(1)) is not None
+
+
 def create_staff_user(
     db: Session, display_name: str, role: Role, pin: str
 ) -> StaffUser:

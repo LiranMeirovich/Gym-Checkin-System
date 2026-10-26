@@ -103,6 +103,14 @@ def log_in(db: Session, client: TestClient, staff: StaffUser) -> str:
 # ── Not logged in ───────────────────────────────────────────────────────
 
 
+@pytest.fixture
+def setup_done(db: Session) -> None:
+    """Some staff account exists, so logged-out requests go to the lock
+    screen rather than first-run setup."""
+    add_staff(db, "Noa", Role.MANAGER)
+
+
+@pytest.mark.usefixtures("setup_done")
 def test_a_page_without_a_session_redirects_to_the_lock_screen(
     client: TestClient,
 ) -> None:
@@ -112,6 +120,7 @@ def test_a_page_without_a_session_redirects_to_the_lock_screen(
     assert response.headers["location"] == "/login"
 
 
+@pytest.mark.usefixtures("setup_done")
 def test_an_htmx_request_without_a_session_redirects_the_whole_page(
     client: TestClient,
 ) -> None:
@@ -121,6 +130,7 @@ def test_an_htmx_request_without_a_session_redirects_the_whole_page(
     assert response.headers["HX-Redirect"] == "/login"
 
 
+@pytest.mark.usefixtures("setup_done")
 def test_an_unknown_token_is_refused_and_its_cookie_dropped(
     client: TestClient,
 ) -> None:
@@ -140,6 +150,25 @@ def test_a_permission_check_without_a_session_redirects_too(
     response = client.get("/prices")
 
     assert response.status_code == 303
+
+
+def test_before_first_run_setup_every_page_goes_to_setup(
+    client: TestClient,
+) -> None:
+    assert client.get("/who").headers["location"] == "/setup"
+    htmx = client.get("/who", headers={"HX-Request": "true"})
+    assert htmx.headers["HX-Redirect"] == "/setup"
+
+
+@pytest.mark.usefixtures("clock")
+def test_a_deactivated_staff_member_still_means_setup_is_done(
+    db: Session, client: TestClient
+) -> None:
+    noa = add_staff(db, "Noa", Role.MANAGER)
+    noa.active = False
+    db.commit()
+
+    assert client.get("/who").headers["location"] == "/login"
 
 
 # ── Logged in ───────────────────────────────────────────────────────────

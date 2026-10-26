@@ -436,3 +436,18 @@ def test_a_pin_from_before_a_rules_change_still_works(
 
     assert check_pin(db, instructor, "111111") is PinCheck.OK
     assert pin_matches(instructor.pin_hash, "111111")
+
+
+# ── First-run setup ─────────────────────────────────────────────────────
+
+
+def test_no_staff_means_setup_is_not_done(db: Session) -> None:
+    assert not staff.any_staff_exists(db)
+
+
+def test_any_staff_member_means_setup_is_done(
+    db: Session, manager: StaffUser, instructor: StaffUser
+) -> None:
+    deactivate(db, instructor)
+
+    assert staff.any_staff_exists(db)
