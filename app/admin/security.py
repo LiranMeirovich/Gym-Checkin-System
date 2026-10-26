@@ -22,6 +22,7 @@ Logged in without the permission: 403.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -39,7 +40,7 @@ from app.core.db import DbSession, get_engine
 from app.core.models import StaffSession, StaffUser
 from app.core.permissions import Permission, has_permission
 from app.core.staff import any_staff_exists
-from app.core.staff_sessions import find_session, touch
+from app.core.staff_sessions import find_session, idle_timeout, lock_settings, touch
 
 # The browser's session token. HttpOnly, SameSite=Strict, no expiry (gone
 # when the browser closes); set by the login route.
@@ -58,6 +59,8 @@ class StaffLogin:
     # The cookie's plain token. Only for deriving this session's CSRF token;
     # never shown or stored.
     token: str
+    # This staff member's idle time, for the page's own auto-lock timer.
+    lock_after: timedelta
 
     @property
     def csrf_token(self) -> str:
@@ -93,7 +96,10 @@ def _current_staff(
     request: Request, db: DbSession, submitted_csrf_token: SubmittedCsrfToken
 ) -> StaffLogin:
     token = request.cookies.get(SESSION_COOKIE)
-    session = find_session(db, token) if token else None
+    if not token:
+        raise NotLoggedInError
+    settings = lock_settings(db)
+    session = find_session(db, token, settings)
     if session is None:
         raise NotLoggedInError
     if request.method in UNSAFE_METHODS and not csrf_token_matches(
@@ -101,7 +107,12 @@ def _current_staff(
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "CSRF token missing or wrong")
     touch(db, session)
-    return StaffLogin(staff=session.staff, session=session, token=token)
+    return StaffLogin(
+        staff=session.staff,
+        session=session,
+        token=token,
+        lock_after=idle_timeout(settings, session.staff.role),
+    )
 
 
 CurrentStaff = Annotated[StaffLogin, Depends(_current_staff)]

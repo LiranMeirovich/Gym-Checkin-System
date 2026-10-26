@@ -20,10 +20,10 @@ import secrets
 from datetime import timedelta
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
 from app.core.clock import utc_now
-from app.core.gym_settings import load_gym_settings
+from app.core.gym_settings import GymSettings, load_gym_settings_for_editing
 from app.core.models import StaffSession, StaffUser
 from app.core.permissions import Role
 
@@ -54,10 +54,15 @@ def start_session(db: Session, staff: StaffUser) -> str:
     return token
 
 
-def find_session(db: Session, token: str) -> StaffSession | None:
+def find_session(
+    db: Session, token: str, settings: GymSettings | None = None
+) -> StaffSession | None:
     """The live session for a cookie's ``token``, or ``None`` if there is
     none: unknown token, ended, idle too long, too old, or its staff
     member was deactivated.
+
+    ``settings`` are the lock-time settings to use (``lock_settings``); a
+    caller that needs them too passes them in, so they're read once.
 
     Doesn't count as activity; the caller decides whether the request does
     (``touch``). A background refresh, such as a live dashboard polling,
@@ -66,6 +71,8 @@ def find_session(db: Session, token: str) -> StaffSession | None:
     session = db.scalar(
         select(StaffSession)
         .join(StaffSession.staff)
+        # The staff row comes from the same query, not a second SELECT.
+        .options(contains_eager(StaffSession.staff))
         .where(
             StaffSession.token_hash == hash_token(token),
             StaffSession.ended_at.is_(None),
@@ -74,19 +81,31 @@ def find_session(db: Session, token: str) -> StaffSession | None:
     )
     if session is None:
         return None
+    settings = settings or lock_settings(db)
     now = utc_now()
-    if now - session.last_seen_at > idle_timeout(db, session.staff.role):
+    if now - session.last_seen_at > idle_timeout(settings, session.staff.role):
         return None
     if now - session.created_at > MAX_SESSION_AGE:
         return None
     return session
 
 
-def idle_timeout(db: Session, role: Role) -> timedelta:
+def lock_settings(db: Session) -> GymSettings:
+    """The gym settings, for the lock times.
+
+    Read with the forgiving loader: a broken settings row (any setting)
+    falls back to its default instead of raising. Otherwise one bad row
+    would fail every logged-in request, including the settings screen the
+    manager needs to repair it (decision 0016).
+    """
+    settings, _problems = load_gym_settings_for_editing(db)
+    return settings
+
+
+def idle_timeout(settings: GymSettings, role: Role) -> timedelta:
     """How long a session of ``role`` may go without activity. Managers
     lock sooner: they're the ones who can change prices, plans and staff,
     while instructors mostly watch the desk screen."""
-    settings = load_gym_settings(db)
     minutes = (
         settings.lock_screen_minutes
         if Role(role) is Role.MANAGER

@@ -15,7 +15,7 @@ from app.admin.main import app
 from app.admin.security import SESSION_COOKIE
 from app.core import pins
 from app.core.db import get_engine
-from app.core.models import StaffSession, StaffUser
+from app.core.models import Setting, StaffSession, StaffUser
 from app.core.permissions import Role
 from app.core.staff import MAX_FAILED_ATTEMPTS, create_staff_user, deactivate
 
@@ -270,6 +270,40 @@ def test_lock_ends_the_session(client: TestClient, db: Session, noa: StaffUser) 
     # The old token is useless now, even if the browser kept it.
     client.cookies.set(SESSION_COOKIE, token)
     assert client.get("/").status_code == 303
+
+
+def test_showing_the_lock_screen_ends_the_session(
+    client: TestClient, db: Session, noa: StaffUser
+) -> None:
+    token = log_in(client, noa).cookies[SESSION_COOKIE]
+
+    # Back, a typed address, or another tab's auto-lock timer.
+    response = client.get("/login")
+
+    assert response.status_code == 200
+    assert "max-age=0" in response.headers["set-cookie"].lower()
+    assert db.scalars(select(StaffSession)).one().ended_at is not None
+    client.cookies.set(SESSION_COOKIE, token)
+    assert client.get("/").status_code == 303
+
+
+def test_the_lock_screen_without_a_session_sets_no_cookie(
+    client: TestClient, noa: StaffUser
+) -> None:
+    response = client.get("/login")
+
+    assert "set-cookie" not in response.headers
+
+
+def test_a_broken_settings_row_doesnt_lock_staff_out(
+    client: TestClient, db: Session, noa: StaffUser
+) -> None:
+    db.add(Setting(key="gym_nmae", value='"typo"', updated_at=noa.created_at))
+    db.commit()
+
+    log_in(client, noa)
+
+    assert client.get("/").status_code == 200
 
 
 def test_lock_without_the_csrf_token_is_refused(

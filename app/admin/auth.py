@@ -7,7 +7,11 @@ also locks itself after the role's idle time without a request
 (``staff_sessions.idle_timeout``).
 
 - ``GET /login``: the active staff names; ``?staff=<id>`` shows the PIN
-  form for one of them. No JavaScript needed.
+  form for one of them. No JavaScript needed. Showing it ends this
+  browser's session, however the browser got here (Back, a typed address,
+  the auto-lock timer of another tab): a lock screen that looks locked
+  must be locked. The cookie is SameSite=Strict, so another website
+  can't send a browser here to log it out.
 - ``POST /login``: ``staff_id`` and ``pin``. A right PIN replaces any
   session this browser had and goes to ``/``. A refused one shows the
   lock screen again, and the request **commits**, so the lockout counters
@@ -49,9 +53,13 @@ NO_SUCH_STAFF_ERROR = "המשתמש לא נמצא. בחרו שם מהרשימה.
 def lock_screen(request: Request, db: DbSession, staff: str | None = None) -> Response:
     if not any_staff_exists(db):
         return RedirectResponse(SETUP_PATH, status.HTTP_303_SEE_OTHER)
+    _end_this_browsers_session(request, db)
     chosen = _active_staff(db, staff)
     error = None if chosen or staff is None else NO_SUCH_STAFF_ERROR
-    return _render(request, db, chosen, error)
+    response = _render(request, db, chosen, error)
+    if SESSION_COOKIE in request.cookies:
+        clear_session_cookie(response)
+    return response
 
 
 @router.post(LOGIN_PATH, response_class=HTMLResponse)
@@ -97,9 +105,9 @@ def lock(login: CurrentStaff, db: DbSession) -> Response:
 
 
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request, login: CurrentStaff, db: DbSession) -> Response:
+def home(request: Request, login: CurrentStaff) -> Response:
     """Placeholder until the dashboard (milestone 4)."""
-    return staff_page(request, db, login, "home.html")
+    return staff_page(request, login, "home.html")
 
 
 def _active_staff(db: DbSession, staff_id: str | None) -> StaffUser | None:
@@ -112,8 +120,9 @@ def _active_staff(db: DbSession, staff_id: str | None) -> StaffUser | None:
 
 
 def _end_this_browsers_session(request: Request, db: DbSession) -> None:
-    # Someone logging in on a browser where another staff member is still
-    # logged in: that session ends rather than lingering until it times out.
+    # The lock screen, or someone logging in on a browser where another
+    # staff member is still logged in: that session ends rather than
+    # lingering until it times out.
     token = request.cookies.get(SESSION_COOKIE)
     if token and (session := find_session(db, token)) is not None:
         end_session(db, session)

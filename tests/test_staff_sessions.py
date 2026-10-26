@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.core import staff_sessions
 from app.core.db import get_engine
 from app.core.gym_settings import update_gym_settings
-from app.core.models import StaffSession, StaffUser
+from app.core.models import Setting, StaffSession, StaffUser
 from app.core.permissions import Role
 from app.core.staff_sessions import (
     MAX_SESSION_AGE,
@@ -21,6 +21,7 @@ from app.core.staff_sessions import (
     find_session,
     hash_token,
     idle_timeout,
+    lock_settings,
     start_session,
     touch,
 )
@@ -196,10 +197,28 @@ def test_each_roles_lock_time_comes_from_its_own_setting(db: Session) -> None:
         db, {"lock_screen_minutes": 3, "instructor_lock_screen_minutes": 90}
     )
 
-    assert idle_timeout(db, Role.MANAGER) == timedelta(minutes=3)
-    assert idle_timeout(db, Role.INSTRUCTOR) == timedelta(minutes=90)
+    settings = lock_settings(db)
+
+    assert idle_timeout(settings, Role.MANAGER) == timedelta(minutes=3)
+    assert idle_timeout(settings, Role.INSTRUCTOR) == timedelta(minutes=90)
     # The stored text works too.
-    assert idle_timeout(db, "instructor") == timedelta(minutes=90)
+    assert idle_timeout(settings, "instructor") == timedelta(minutes=90)
+
+
+def test_a_broken_settings_row_falls_back_to_the_default_lock_time(
+    db: Session, dana: StaffUser, clock: Clock
+) -> None:
+    # A row no setting accepts: the manager must still be able to log in
+    # and repair it from the settings screen.
+    db.add(Setting(key="lock_screen_minutes", value='"five"', updated_at=START))
+    db.add(Setting(key="report_recipients", value="not json", updated_at=START))
+    db.flush()
+    token = start_session(db, dana)
+
+    clock.now += timedelta(minutes=5)
+    assert find_session(db, token) is not None
+    clock.now += timedelta(minutes=1)
+    assert find_session(db, token) is None
 
 
 def test_a_role_change_switches_the_lock_time(

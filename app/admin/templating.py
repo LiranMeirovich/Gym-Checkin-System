@@ -15,11 +15,9 @@ from typing import Any
 from fastapi import Request, status
 from fastapi.responses import Response
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
 
 from app.admin.security import StaffLogin
 from app.core.permissions import Role
-from app.core.staff_sessions import idle_timeout
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -31,7 +29,6 @@ templates.env.globals["role_names"] = ROLE_NAMES
 
 def staff_page(
     request: Request,
-    db: Session,
     login: StaffLogin,
     name: str,
     context: dict[str, Any] | None = None,
@@ -48,9 +45,7 @@ def staff_page(
             # The page goes to the lock screen on its own once the server's
             # idle timeout has passed, so customer data doesn't stay on
             # screen. The server enforces the timeout either way.
-            "lock_after_seconds": int(
-                idle_timeout(db, login.staff.role).total_seconds()
-            ),
+            "lock_after_seconds": int(login.lock_after.total_seconds()),
         },
         status_code=status_code,
     )

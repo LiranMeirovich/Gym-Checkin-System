@@ -212,7 +212,7 @@ Every customer needs a valid signed health declaration before they can train. Wi
 
 ## Data model
 
-One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch cards are added). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
+One SQLite file (`gym.db`, WAL mode) with thirteen tables (fourteen once punch cards are added). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
@@ -226,6 +226,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
 | staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
+| staff\_sessions | id, staff\_user\_id, token\_hash (unique), created\_at, last\_seen\_at, ended\_at | One row per staff login; the `gym_staff` cookie holds the token, only its SHA-256 hash is stored. Ends on Lock, a new login, the role's idle time or 12 hours; ended, never deleted |
 | activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change; read-only in the app |
 | `health_forms` | id, customer\_id, source (phone / paper), form\_version, answers\_json (nullable for paper), signer\_name, signed\_by\_guardian, signed\_on, expires\_on, document (blob: PDF snapshot or uploaded scan), uploaded\_by (nullable), created\_at | Never overwritten; the newest valid row counts. The document is stored inside the database, not as a loose file, so it gets the same encryption and backups |
 
