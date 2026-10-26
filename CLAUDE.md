@@ -90,7 +90,8 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - Tokens, link codes and PINs are stored only as hashes (SHA-256 for tokens and codes, Argon2id for PINs, decision 0018).
 - Money is always integer agorot, never floats. Timestamps are stored in UTC and shown in Israel time.
 - History is never overwritten. Plan corrections add a new row, prices have `valid_from_month`, and past reports must regenerate identically.
-- Every staff change writes to `activity_log` (who, what, before, after).
+- Every staff change writes to `activity_log` (who, what, before, after) through `app/core/activity_log.record()`, in the same transaction. The core function making the change takes the acting staff member as `by=` and records it; logins aren't logged. The log is append-only (triggers refuse UPDATE/DELETE) and never holds PINs, hashes or tokens (decision 0021).
+- Customers are archived, never deleted; their data and log history stay (decision 0021).
 - Secrets (SMTP password, encryption keys) are read from environment variables or a secret store, never written in code, the DB or the repo. They're read through `app/core/config.py` from env vars / the host's `.env` (see Tech stack); only the production secret store depends on the hosting decision.
 - **The repo is public.** Real customer data lives only in the database: never in tests, fixtures, examples, logs or screenshots. Use made-up data.
 - **Nothing gym-specific in code** (one installation per gym, see decision 0006): the gym's name, domain, emails and prices come from settings.

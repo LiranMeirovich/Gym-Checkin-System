@@ -59,7 +59,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | Edit a customer's date of birth (sets the under-18 price) | No | Yes |
 | Change or clear a plan already chosen | No | Yes |
 | Freeze a plan | No | Yes |
-| Archive or delete a customer | No | Yes |
+| Archive a customer (customers are never deleted) | No | Yes |
 | Edit prices | No | Yes |
 | View, regenerate, approve and send reports | No | Yes |
 | Settings, backups and restore | No | Yes |
@@ -70,7 +70,7 @@ Permissions are defined in code as named permissions (e.g. `prices.edit`, `plans
 
 **Staff login and lock screen.** The admin app opens on a lock screen: tap your name, enter your PIN (at least 6 digits). The app locks again when someone presses "Lock", and on its own after a stretch without activity: 5 minutes for a manager, 60 for an instructor (instructors mostly watch the desk screen and check people in). Both times are settings the manager can change. Any session ends after 12 hours. Staff should still lock or log in as themselves, since the activity log records whoever is logged in. The header always shows who is logged in and their role. Menus and buttons a role can't use are hidden.
 
-**Activity log.** Every change made by staff (who, what, when, before and after) is recorded, so the manager can see what instructors did.
+**Activity log.** Every change made by staff (who, what, when, before and after) is recorded, so the manager can see what instructors did. It records changes only, not logins (`staff_sessions` is the login history), and it is append-only: entries are never changed or deleted, also because it may be needed as evidence, for example by the insurer (decision 0021).
 
 **First run.** The app asks for the first manager account; the manager then creates instructor accounts. There can be more than one manager.
 
@@ -227,7 +227,7 @@ One SQLite file (`gym.db`, WAL mode) with thirteen tables (fourteen once punch c
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
 | staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
 | staff\_sessions | id, staff\_user\_id, token\_hash (unique), created\_at, last\_seen\_at, ended\_at | One row per staff login; the `gym_staff` cookie holds the token, only its SHA-256 hash is stored. Ends on Lock, a new login, the role's idle time or 12 hours; ended, never deleted |
-| activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change; read-only in the app |
+| activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change, in the same transaction; append-only (database triggers refuse UPDATE and DELETE). Never holds PINs, hashes or tokens |
 | `health_forms` | id, customer\_id, source (phone / paper), form\_version, answers\_json (nullable for paper), signer\_name, signed\_by\_guardian, signed\_on, expires\_on, document (blob: PDF snapshot or uploaded scan), uploaded\_by (nullable), created\_at | Never overwritten; the newest valid row counts. The document is stored inside the database, not as a loose file, so it gets the same encryption and backups |
 
 **Rules the code and database enforce**
@@ -308,7 +308,7 @@ The only thing reachable from outside is the public app's check-in pages; everyt
 
 **Restore** is a menu action: choose a backup file, enter the backup password, and the app replaces the current database after saving a copy of it. Test a full restore once before going live.
 
-**Privacy**: store only name, phone, notes, an optional photo and the health form. Health information belongs only in the health form, never in the free-text notes; the notes field says so in the interface. Archived customers can be fully deleted on request, which removes their photo, personal fields and linked phones while keeping anonymous visit counts.
+**Privacy**: store only name, phone, notes, an optional photo and the health form. Health information belongs only in the health form, never in the free-text notes; the notes field says so in the interface. Customers are archived, never deleted: their data, visits and activity-log history are kept, since the gym may need them later (for example for its insurer). This was decided on the advice that Israeli law allows keeping such records; confirm it with the manager before launch (decision 0021).
 
 ## UI demos
 

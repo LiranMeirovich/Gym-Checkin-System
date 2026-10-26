@@ -32,9 +32,9 @@ class Permission(StrEnum):
     CUSTOMERS_EDIT = "customers.edit"
     # Sets the under-18 price.
     CUSTOMERS_EDIT_BIRTH_DATE = "customers.edit_birth_date"
+    # The only way to remove a customer: nothing is deleted, the data and
+    # the activity log stay (decision 0021).
     CUSTOMERS_ARCHIVE = "customers.archive"
-    # The full delete on request, which removes personal data.
-    CUSTOMERS_DELETE = "customers.delete"
 
     CHECKINS_MANUAL = "checkins.manual"
     # Link or unlink a customer's phone.
