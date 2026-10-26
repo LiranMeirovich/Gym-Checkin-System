@@ -9,14 +9,14 @@ The design doc says every staff change is recorded (who, what, when, before and 
 The developer was advised that Israeli law allows keeping this kind of record, and the gym may need the history later, for example for its insurer.
 
 ## Options
-- **What is logged:** data changes only / also logins and lockouts / every PIN attempt. `staff_sessions` already keeps every login.
+- **What is logged:** data changes (plus the sensitive reads the design doc names, such as opening a health form) / also logins and lockouts / every PIN attempt. `staff_sessions` already keeps every login.
 - **Read-only:** only the core module writes, and it can only add rows / also SQLite triggers that refuse UPDATE and DELETE. Triggers rule out scrubbing a deleted customer's data from the log.
 - **Actor at first-run setup:** the new manager is their own actor (`staff_user_id` NOT NULL) / a nullable actor meaning "system".
 - **Customer removal:** archive and a separate full delete / archive only.
 
 ## Decision
 - **One table, `activity_log`** (id, staff_user_id, action, target_type, target_id, before_json, after_json, at), written only through `app/core/activity_log.record()`, in the same transaction as the change. Actions (`staff.change_role`, `settings.update`, …) are a StrEnum in code with no CHECK in the database, so new ones need no migration. Their names are never renamed.
-- **Only changes are logged**, not logins or lockouts.
+- **Changes are logged, plus sensitive reads** the design doc names (opening a health form's contents, milestone 3), but not logins or lockouts.
 - **The core function that makes a change records it**, taking the acting staff member as `by=`, so no route can make a change without its entry. A change that changes nothing writes no entry. Before/after hold only the fields that changed; a settings save is one entry with each changed setting's value in effect before (the default, if no row was stored) and after. PINs, hashes and tokens are never written (a PIN reset logs only that it happened).
 - **Append-only, enforced twice:** the module offers no way to change or delete an entry, and two triggers make the database refuse UPDATE and DELETE.
 - **The first manager is their own actor** at first-run setup; every entry has a real staff member.

@@ -70,7 +70,7 @@ Permissions are defined in code as named permissions (e.g. `prices.edit`, `plans
 
 **Staff login and lock screen.** The admin app opens on a lock screen: tap your name, enter your PIN (at least 6 digits). The app locks again when someone presses "Lock", and on its own after a stretch without activity: 5 minutes for a manager, 60 for an instructor (instructors mostly watch the desk screen and check people in). Both times are settings the manager can change. Any session ends after 12 hours. Staff should still lock or log in as themselves, since the activity log records whoever is logged in. The header always shows who is logged in and their role. Menus and buttons a role can't use are hidden.
 
-**Activity log.** Every change made by staff (who, what, when, before and after) is recorded, so the manager can see what instructors did. It records changes only, not logins (`staff_sessions` is the login history), and it is append-only: entries are never changed or deleted, also because it may be needed as evidence, for example by the insurer (decision 0021).
+**Activity log.** Every change made by staff (who, what, when, before and after) is recorded, so the manager can see what instructors did. It records changes and the few sensitive reads the doc calls out (opening a health form's contents), not logins (`staff_sessions` is the login history), and it is append-only: entries are never changed or deleted, also because it may be needed as evidence, for example by the insurer (decision 0021).
 
 **First run.** The app asks for the first manager account; the manager then creates instructor accounts. There can be more than one manager.
 

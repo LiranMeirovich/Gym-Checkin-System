@@ -79,7 +79,7 @@ def log_in(
     # transaction, and with it the failed-attempt count and the lockout.
     result = check_pin(db, chosen, pin)
     if result is PinCheck.OK:
-        # Not written to the activity log, which records changes only:
+        # Not written to the activity log, which doesn't record logins:
         # staff_sessions is the login history.
         _end_this_browsers_session(request, db)
         token = start_session(db, chosen)

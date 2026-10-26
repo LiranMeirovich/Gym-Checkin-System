@@ -573,3 +573,40 @@ def test_the_change_and_its_entry_are_rolled_back_together(
 
     assert stored_rows(db) == {}
     assert log(db) == []
+
+
+def test_a_second_save_in_the_same_transaction_is_logged(
+    db: Session, actor: StaffUser
+) -> None:
+    store(db, lock_screen_minutes="5")
+    # Something earlier in the request holds the row, so the session keeps
+    # it between the two saves (unreferenced objects are dropped).
+    held = db.get_one(Setting, "lock_screen_minutes")  # noqa: F841
+
+    update_gym_settings(db, {"lock_screen_minutes": 10}, by=actor)
+    update_gym_settings(db, {"lock_screen_minutes": 5}, by=actor)
+
+    assert [entry[3:] for entry in log(db)] == [
+        ({"lock_screen_minutes": 5}, {"lock_screen_minutes": 10}),
+        ({"lock_screen_minutes": 10}, {"lock_screen_minutes": 5}),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("stored", "before", "saved"),
+    [("true", True, 1), ("5.0", 5.0, 5)],
+    ids=["true-as-1", "float-as-int"],
+)
+def test_repairing_a_row_that_only_looks_equal_is_logged(
+    db: Session, actor: StaffUser, stored: str, before: object, saved: int
+) -> None:
+    # In Python True == 1 and 5.0 == 5, but the stored text changes.
+    store(db, lock_screen_minutes=stored)
+
+    update_gym_settings(db, {"lock_screen_minutes": saved}, by=actor)
+
+    assert stored_rows(db) == {"lock_screen_minutes": str(saved)}
+    assert log(db)[-1][3:] == (
+        {"lock_screen_minutes": before},
+        {"lock_screen_minutes": saved},
+    )

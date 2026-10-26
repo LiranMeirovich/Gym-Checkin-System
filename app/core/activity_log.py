@@ -2,8 +2,9 @@
 (design doc: "Activity log").
 
 Every staff change calls ``record()`` in the same transaction as the change
-itself, so either both are saved or neither is. Logins and locking aren't
-changes and aren't recorded; ``staff_sessions`` is the login history.
+itself, so either both are saved or neither is. A few sensitive reads are
+recorded too (opening a health form's contents, milestone 3). Logins and
+locking aren't; ``staff_sessions`` is the login history.
 
 This module only adds rows. Nothing in the app changes or deletes one, and
 the database refuses to (triggers on ``activity_log``).
