@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% endblock %}</title>
 </head>
-<body>
+{# Logged-in pages pass csrf_token: HTMX then sends it on every request,
+   and each plain form adds <input type="hidden" name="csrf_token">. #}
+<body{% if csrf_token %} hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'{% endif %}>
   <main>
     {% block content %}{% endblock %}
   </main>

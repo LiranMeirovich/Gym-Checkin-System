@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.admin import security
+from app.admin.csrf import csrf_token
 from app.admin.main import app as admin_app
 from app.admin.security import (
     SESSION_COOKIE,
@@ -158,9 +159,11 @@ def test_a_logged_in_request_knows_who_it_is(db: Session, client: TestClient) ->
 def test_the_route_shares_the_dependencys_transaction(
     db: Session, client: TestClient
 ) -> None:
-    log_in(db, client, add_staff(db, "Dana", Role.INSTRUCTOR))
+    token = log_in(db, client, add_staff(db, "Dana", Role.INSTRUCTOR))
 
-    assert client.post("/rename").status_code == 200
+    response = client.post("/rename", headers={"X-CSRF-Token": csrf_token(token)})
+
+    assert response.status_code == 200
 
 
 def test_each_request_counts_as_activity(
