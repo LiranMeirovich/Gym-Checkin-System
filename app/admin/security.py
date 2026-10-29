@@ -14,7 +14,9 @@ activity, restarting the idle timeout. On a POST, PUT, PATCH or DELETE
 both also check the session's CSRF token (``app.admin.csrf``), and refuse
 the request with 403 without it.
 
-Not logged in: a page load is redirected to the lock screen (or to
+Not logged in: an ``/api`` request gets 401 with ``NotLoggedIn``, saying
+whether first-run setup is still needed, and the React app goes to the
+lock screen or setup. A page load is redirected to the lock screen (or to
 first-run setup, while there are no staff accounts yet); an HTMX request
 gets ``HX-Redirect`` so the whole page goes there, not just the fragment.
 Logged in without the permission: 403.
@@ -26,9 +28,11 @@ from datetime import timedelta
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from app.admin.api import API_PREFIX
+from app.admin.api.schemas import NotLoggedIn
 from app.admin.csrf import (
     CSRF_FIELD,
     CSRF_HEADER,
@@ -161,9 +165,16 @@ def _send_to_login(request: Request, _error: Exception) -> Response:
     # Runs after the request's own transaction has ended, so it reads in a
     # short one of its own.
     with Session(get_engine()) as db:
-        target = LOGIN_PATH if any_staff_exists(db) else SETUP_PATH
-    if request.headers.get("HX-Request") == "true":
-        response: Response = Response(
+        setup_done = any_staff_exists(db)
+    target = LOGIN_PATH if setup_done else SETUP_PATH
+    if request.url.path.startswith(API_PREFIX + "/"):
+        # The React app decides where to go.
+        response: Response = JSONResponse(
+            NotLoggedIn(setup_needed=not setup_done).model_dump(),
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    elif request.headers.get("HX-Request") == "true":
+        response = Response(
             status_code=status.HTTP_401_UNAUTHORIZED,
             headers={"HX-Redirect": target},
         )

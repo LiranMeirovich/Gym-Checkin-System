@@ -27,6 +27,7 @@ from fastapi import APIRouter, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import select
 
+from app.admin.api.auth import active_staff, end_this_browsers_session
 from app.admin.security import (
     LOGIN_PATH,
     SESSION_COOKIE,
@@ -40,7 +41,7 @@ from app.core.clock import to_local
 from app.core.db import DbSession
 from app.core.models import StaffUser
 from app.core.staff import PinCheck, any_staff_exists, check_pin
-from app.core.staff_sessions import end_session, find_session, start_session
+from app.core.staff_sessions import end_session, start_session
 
 router = APIRouter()
 
@@ -53,7 +54,7 @@ NO_SUCH_STAFF_ERROR = "המשתמש לא נמצא. בחרו שם מהרשימה.
 def lock_screen(request: Request, db: DbSession, staff: str | None = None) -> Response:
     if not any_staff_exists(db):
         return RedirectResponse(SETUP_PATH, status.HTTP_303_SEE_OTHER)
-    _end_this_browsers_session(request, db)
+    end_this_browsers_session(request, db)
     chosen = _active_staff(db, staff)
     error = None if chosen or staff is None else NO_SUCH_STAFF_ERROR
     response = _render(request, db, chosen, error)
@@ -81,7 +82,7 @@ def log_in(
     if result is PinCheck.OK:
         # Not written to the activity log, which doesn't record logins:
         # staff_sessions is the login history.
-        _end_this_browsers_session(request, db)
+        end_this_browsers_session(request, db)
         token = start_session(db, chosen)
         response = RedirectResponse("/", status.HTTP_303_SEE_OTHER)
         set_session_cookie(response, token)
@@ -116,17 +117,7 @@ def _active_staff(db: DbSession, staff_id: str | None) -> StaffUser | None:
     malformed, unknown or deactivated one."""
     if not staff_id or not staff_id.isascii() or not staff_id.isdigit():
         return None
-    staff = db.get(StaffUser, int(staff_id))
-    return staff if staff is not None and staff.active else None
-
-
-def _end_this_browsers_session(request: Request, db: DbSession) -> None:
-    # The lock screen, or someone logging in on a browser where another
-    # staff member is still logged in: that session ends rather than
-    # lingering until it times out.
-    token = request.cookies.get(SESSION_COOKIE)
-    if token and (session := find_session(db, token)) is not None:
-        end_session(db, session)
+    return active_staff(db, int(staff_id))
 
 
 def _render(

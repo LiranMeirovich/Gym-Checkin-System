@@ -17,22 +17,11 @@ from typing import Annotated
 from fastapi import APIRouter, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from app.admin.api.setup import SetupInvalidError, create_manager
 from app.admin.security import SETUP_PATH, set_session_cookie
 from app.admin.templating import templates
 from app.core.db import DbSession
-from app.core.gym_settings import (
-    InvalidSettingsChangeError,
-    check_gym_settings,
-    update_gym_settings,
-)
-from app.core.models import StaffUser
-from app.core.pins import InvalidPinError, validate_pin
-from app.core.staff import (
-    DuplicateDisplayNameError,
-    InvalidDisplayNameError,
-    any_staff_exists,
-    create_first_manager,
-)
+from app.core.staff import any_staff_exists
 from app.core.staff_sessions import start_session
 
 router = APIRouter()
@@ -42,11 +31,12 @@ GYM_NAME_ERROR = "שם המכון: 1 עד 100 תווים"
 NAME_ERROR = "שם: 1 עד 50 תווים, בלי תווים נסתרים"
 PIN_ERROR = "קוד: 6 עד 12 ספרות, לא ספרה אחת חוזרת ולא רצף (כמו 123456)"
 PIN_MISMATCH_ERROR = "הקודים אינם זהים"
-
-
-class _SetupFailed(Exception):
-    def __init__(self, errors: dict[str, str]) -> None:
-        self.errors = errors
+_ERRORS = {
+    "gym_name": GYM_NAME_ERROR,
+    "display_name": NAME_ERROR,
+    "pin": PIN_ERROR,
+    "pin_again": PIN_MISMATCH_ERROR,
+}
 
 
 @router.get(SETUP_PATH, response_class=HTMLResponse)
@@ -72,11 +62,11 @@ def finish_setup(
         # A savepoint: if the second write fails, the first is undone too,
         # and the request can still commit an empty change and show the form.
         with db.begin_nested():
-            manager = _create_manager(db, gym_name, display_name, pin, pin_again)
-    except _SetupFailed as failure:
+            manager = create_manager(db, gym_name, display_name, pin, pin_again)
+    except SetupInvalidError as failure:
         return _render(
             request,
-            errors=failure.errors,
+            errors={field: _ERRORS[field] for field in failure.errors},
             values={"gym_name": gym_name, "display_name": display_name},
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
@@ -84,37 +74,6 @@ def finish_setup(
     response = RedirectResponse("/", status.HTTP_303_SEE_OTHER)
     set_session_cookie(response, token)
     return response
-
-
-def _create_manager(
-    db: DbSession, gym_name: str, display_name: str, pin: str, pin_again: str
-) -> StaffUser:
-    # Every field is checked, so all the problems show at once.
-    errors: dict[str, str] = {}
-    try:
-        validate_pin(pin)
-    except InvalidPinError:
-        errors["pin"] = PIN_ERROR
-    else:
-        if pin != pin_again:
-            errors["pin_again"] = PIN_MISMATCH_ERROR
-    try:
-        check_gym_settings({"gym_name": gym_name})
-    except InvalidSettingsChangeError:
-        errors["gym_name"] = GYM_NAME_ERROR
-    try:
-        manager = create_first_manager(db, display_name, pin)
-    except (InvalidDisplayNameError, DuplicateDisplayNameError):
-        # A duplicate can't happen on an empty table; kept so a wrong guess
-        # about that shows as a field error, not a crash.
-        errors["display_name"] = NAME_ERROR
-    except InvalidPinError:
-        pass  # already reported above
-    if errors:
-        raise _SetupFailed(errors)
-    # Saved once the manager exists, who is logged as setting it.
-    update_gym_settings(db, {"gym_name": gym_name}, by=manager)
-    return manager
 
 
 def _ensure_not_done(db: DbSession) -> None:

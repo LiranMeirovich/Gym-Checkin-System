@@ -7,6 +7,9 @@ from fastapi import FastAPI
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.admin import auth, security, setup
+from app.admin.api import API_PREFIX, NoStoreMiddleware
+from app.admin.api import auth as api_auth
+from app.admin.api import setup as api_setup
 from app.admin.csrf import SameOriginMiddleware
 from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
@@ -22,9 +25,12 @@ ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 app = FastAPI(title="Gym admin", lifespan=lifespan)
 # The last one added runs first: the Host is checked before the Origin is
 # compared with it.
+app.add_middleware(NoStoreMiddleware)
 app.add_middleware(SameOriginMiddleware)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 security.install(app)
+app.include_router(api_setup.router, prefix=API_PREFIX)
+app.include_router(api_auth.router, prefix=API_PREFIX)
 app.include_router(setup.router)
 app.include_router(auth.router)
 

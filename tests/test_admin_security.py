@@ -56,6 +56,10 @@ def build_app() -> FastAPI:
     def who(login: CurrentStaff) -> dict[str, str]:
         return {"name": login.staff.display_name}
 
+    @app.get("/api/who")
+    def api_who(login: CurrentStaff) -> dict[str, str]:
+        return {"name": login.staff.display_name}
+
     @app.get("/prices")
     def prices(
         login: Annotated[
@@ -128,6 +132,25 @@ def test_an_htmx_request_without_a_session_redirects_the_whole_page(
 
     assert response.status_code == 401
     assert response.headers["HX-Redirect"] == "/login"
+
+
+@pytest.mark.usefixtures("setup_done")
+def test_an_api_request_without_a_session_gets_a_json_401(
+    client: TestClient,
+) -> None:
+    client.cookies.set(SESSION_COOKIE, "made-up-token")
+
+    response = client.get("/api/who")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "not_logged_in", "setup_needed": False}
+    assert "Max-Age=0" in response.headers["set-cookie"]
+
+
+def test_before_first_run_setup_the_api_401_says_so(client: TestClient) -> None:
+    response = client.get("/api/who")
+
+    assert response.json() == {"detail": "not_logged_in", "setup_needed": True}
 
 
 @pytest.mark.usefixtures("setup_done")
