@@ -27,7 +27,7 @@ Requires [uv](https://docs.astral.sh/uv/) (it installs Python 3.12 itself) and [
 uv sync                    # install dependencies into .venv
 npm ci --prefix frontend   # install the frontend's exact locked packages
 uv tool install pre-commit
-pre-commit install         # run gitleaks and ruff on every commit
+pre-commit install         # run gitleaks, ruff, ESLint and Prettier on every commit
 ```
 
 Create your local config from the template (on Windows PowerShell: `Copy-Item .env.example .env`):
@@ -113,7 +113,7 @@ The frontend's API types are generated from the backend's Pydantic schemas. Afte
 npm run api:types --prefix frontend
 ```
 
-CI runs lint, format check, tests and a gitleaks scan of the full history on every pull request.
+CI runs the Python lint, format check and tests, the frontend type-check, lint, format check, builds and API types check, and a gitleaks scan of the full history on every pull request.
 
 ### Database and migrations
 

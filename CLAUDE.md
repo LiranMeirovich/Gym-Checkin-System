@@ -39,7 +39,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 - Frontend (decision 0020): React + TypeScript, built with Vite, TanStack Query for data; types generated from FastAPI's OpenAPI spec (`openapi-typescript`). One project in `frontend/`, two builds (admin and public). FastAPI serves the built files from the same domain, so production needs no Node at runtime. Customer pages are mobile-first. Routing: React Router. The typed client is `openapi-fetch`; `openapi-typescript` runs on TypeScript 6 through an npm `overrides` entry (it still declares TypeScript 5). npm (`frontend/.npmrc`: exact versions, no package under 7 days old, no install scripts).
 - API: JSON under `/api/...` with Pydantic request/response schemas. Not a separate API server: each FastAPI app serves its own React build and its own API.
 - **UI language: Hebrew, right-to-left** (`<html lang="he" dir="rtl">` in both React builds' `index.html`); the code, comments and commits stay in English
-- Tooling: uv (packages), ruff (lint + format), pytest (tests), GitHub Actions (CI), pre-commit (gitleaks + ruff). Rules, hooks and SHA pinning: decision 0011
+- Tooling: uv (packages), ruff (lint + format), pytest (tests), GitHub Actions (CI), pre-commit (gitleaks + ruff, plus ESLint and Prettier for `frontend/`). Rules, hooks and SHA pinning: decision 0011. CI's "Frontend checks" job runs `npm ci`, type-check, lint, format check, both builds and the API types drift check.
 - Reports: openpyxl (Excel) + fpdf2 with an embedded Hebrew font (PDF, RTL). Not WeasyPrint.
 - Config: `pydantic-settings` reads deployment config from env vars / `.env` into `app/core/config.py` (decision 0013); manager-editable values go in the `settings` table
 - **Secrets have a home now:** whatever host runs the apps (gym PC or a server) always has an env / secrets file. A feature that needs a secret (a signing key, a password) adds it to `config.py` as a `SecretStr` read from `GYM_*` env vars / `.env`, required in prod, with a placeholder and a generator command in `.env.example`. Never treat "where secrets live" as a blocker or a reason to avoid a design that needs a key. Only the production *store* (plain env file vs the OS secret store via `keyring`) waits on the hosting decision, and moving between them only changes how `config.py` gets the value.
@@ -105,7 +105,11 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - Testing priorities: report calculation, subscription status logic, and the linking/cookie flow get the most tests
 
 ## Commands
-- Install: `uv sync`, then once per clone `pre-commit install` (pre-commit itself: `uv tool install pre-commit`)
+- Install: `uv sync` and `npm ci --prefix frontend` (the pre-commit hooks need both), then once per clone `pre-commit install` (pre-commit itself: `uv tool install pre-commit`)
+- Build the frontend (both apps serve it; a missing build is a 503 page): `npm run build --prefix frontend`
+- Frontend dev server with the `/api` proxy: `npm run dev:admin --prefix frontend` (127.0.0.1:5173 → 8000) / `dev:public` (5174 → 8001)
+- Frontend checks: `npm run typecheck`, `lint`, `format:check` (each with `--prefix frontend`)
+- Regenerate the API types after changing an `/api` route or schema: `npm run api:types --prefix frontend`
 - Create / upgrade the database (before starting the apps; in prod, stop both apps and back up first): `uv run alembic upgrade head`
 - New migration (follow the `/migration` skill): `uv run alembic revision --autogenerate -m "<what changes>"`
 - Admin: `uv run uvicorn app.admin.main:app --host 127.0.0.1 --port 8000`
