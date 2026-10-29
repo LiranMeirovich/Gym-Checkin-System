@@ -2,10 +2,11 @@
 types are generated from these (through the OpenAPI spec), so a change
 here that breaks the frontend fails its build."""
 
-from datetime import datetime
-from typing import Literal
+import re
+from datetime import date, datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from app.core.permissions import Role
 
@@ -109,3 +110,94 @@ class SetupRefused(Answer):
     differing from ``pin``. Nothing was saved."""
 
     errors: dict[SetupField, SetupProblem]
+
+
+# ── Customers ───────────────────────────────────────────────────────────
+# The caps on text only keep a huge value out; the real rules (names 1-50
+# characters, notes up to 256, an Israeli phone) are app.core.customers',
+# which answers a broken one with a field code, not a 422.
+
+CustomerField = Literal["first_name", "last_name", "phone", "date_of_birth", "notes"]
+_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def _iso_date_text(value: object) -> object:
+    # Pydantic would also take a number (a Unix time) or a date-time with
+    # a zero time; a date of birth is only ever "YYYY-MM-DD".
+    if not (isinstance(value, str) and _ISO_DATE.fullmatch(value)):
+        raise ValueError("a date is YYYY-MM-DD")
+    return value
+
+
+DateOfBirth = Annotated[date, BeforeValidator(_iso_date_text)]
+
+
+class CustomerSummary(Answer):
+    """A row of the customer list. ``phone`` is the stored E.164 form
+    (``+972501234567``); React formats it for display."""
+
+    id: int
+    first_name: str
+    last_name: str
+    phone: str
+    active: bool
+
+
+class CustomerList(Answer):
+    customers: list[CustomerSummary]
+
+
+class CustomerDetails(CustomerSummary):
+    """One customer's page. ``created_at`` is the gym's local time, with
+    its offset."""
+
+    date_of_birth: date
+    notes: str
+    created_at: datetime
+
+
+class NewCustomer(BaseModel):
+    first_name: str = Field(max_length=200)
+    last_name: str = Field(max_length=200)
+    phone: str = Field(max_length=50)
+    date_of_birth: DateOfBirth
+    notes: str = Field(default="", max_length=2000)
+
+
+class CustomerAdded(Answer):
+    """201 from ``POST /api/customers``. ``reactivated``: the phone was an
+    inactive customer's, who is active again with their own details (the
+    form's others weren't applied)."""
+
+    customer: CustomerDetails
+    reactivated: bool
+
+
+class CustomerEdit(BaseModel):
+    """Only the fields sent are changed; the date of birth has its own
+    route (manager only)."""
+
+    first_name: str | None = Field(default=None, max_length=200)
+    last_name: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, max_length=50)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class DateOfBirthChange(BaseModel):
+    date_of_birth: DateOfBirth
+
+
+class CustomerRefused(Answer):
+    """400: every field that breaks its rule, at once. Nothing was
+    saved."""
+
+    errors: dict[CustomerField, Literal["invalid"]]
+
+
+class CustomerConflict(Answer):
+    """409. ``phone_taken``: another customer has the phone, and
+    ``customer_id`` says who, so staff can open their page.
+    ``customer_inactive``: reactivate the customer before editing."""
+
+    error: Literal["phone_taken", "customer_inactive"]
+    customer_id: int | None = None
