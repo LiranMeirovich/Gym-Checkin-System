@@ -1,4 +1,5 @@
 // Placeholder until the dashboard (milestone 4).
+import { Link } from "react-router";
 import { useSession } from "../session";
 
 export function Home() {
@@ -7,6 +8,9 @@ export function Home() {
     <>
       <h1>שלום, {staff.display_name}</h1>
       <p>לוח הבקרה יגיע בהמשך.</p>
+      <p>
+        <Link to="/customers">לקוחות</Link>
+      </p>
     </>
   );
 }

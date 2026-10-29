@@ -2,8 +2,11 @@
 // FastAPI; React Router picks the screen here. Logged-in screens go inside
 // <RequireSession>.
 import { Navigate, Route, Routes } from "react-router";
+import { CustomerPage } from "./pages/CustomerPage";
+import { Customers } from "./pages/Customers";
 import { Home } from "./pages/Home";
 import { LockScreen } from "./pages/LockScreen";
+import { NewCustomer } from "./pages/NewCustomer";
 import { Setup } from "./pages/Setup";
 import { RequireSession } from "./session";
 
@@ -14,6 +17,9 @@ export function App() {
       <Route path="/login" element={<LockScreen />} />
       <Route element={<RequireSession />}>
         <Route index element={<Home />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/customers/new" element={<NewCustomer />} />
+        <Route path="/customers/:id" element={<CustomerPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
