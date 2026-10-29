@@ -7,6 +7,7 @@ Run with: uvicorn app.public.main:app --host 127.0.0.1 --port 8001
 
 from fastapi import FastAPI
 
+from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
 
 # FastAPI adds /docs, /redoc and /openapi.json by default. On the public app
@@ -24,3 +25,8 @@ app = FastAPI(
 def health() -> dict[str, str]:
     """Liveness check (decision 0009). Must never return more than "ok"."""
     return {"status": "ok"}
+
+
+# Last: its catch-all answers every GET no route above claimed. The public
+# build only: vite.config.ts keeps admin code out of it.
+serve_frontend(app, FRONTEND_DIST / "public")

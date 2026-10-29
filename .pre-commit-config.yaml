@@ -28,3 +28,19 @@ repos:
         # Markdown too: ruff also formats Python code blocks in .md files,
         # and CI checks them, so the hook must as well.
         types_or: [python, pyi, markdown]
+
+      # The frontend's own tools, from frontend/node_modules (npm ci), so
+      # the hook and CI run the same locked versions. Only when a file in
+      # frontend/ is committed. Type-checking and the build run in CI.
+      - id: eslint
+        name: eslint (frontend)
+        entry: npm --prefix frontend run lint
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+      - id: prettier
+        name: prettier (frontend, check only)
+        entry: npm --prefix frontend run format:check
+        language: system
+        files: ^frontend/
+        pass_filenames: false

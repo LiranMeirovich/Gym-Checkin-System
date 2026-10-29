@@ -32,8 +32,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # ── WHAT it runs ─────────────────────────────────────────────────────
-# Two jobs. They run in parallel, each on its own fresh machine, and a
-# failure in one doesn't hide the result of the other.
+# Three jobs. They run in parallel, each on its own fresh machine, and a
+# failure in one doesn't hide the result of the others.
 jobs:
   checks:
     name: Lint and test
@@ -61,6 +61,57 @@ jobs:
 
       - name: Run tests
         run: uv run pytest
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The Node version comes from frontend/.nvmrc, the same file local
+      # tools read. npm's download cache is keyed on package-lock.json.
+      - name: Install Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci installs exactly what package-lock.json says, and fails if it
+      # doesn't match package.json. frontend/.npmrc applies here too: no
+      # install scripts run.
+      - name: Install the frontend
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      # Also fails if the public build would include any admin code
+      # (vite.config.ts).
+      - name: Build both apps
+        run: npm run build
+
+      # The API types are generated from the backend's Pydantic schemas,
+      # which needs Python. Fails if the committed schema.d.ts is out of
+      # date: a backend change that the frontend hasn't caught up with.
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Install the backend
+        run: uv sync --locked
+
+      - name: Check the API types are up to date
+        run: npm run api:check
 
   secrets:
     name: Scan for secrets

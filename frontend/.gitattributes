@@ -1,0 +1,3 @@
+# Prettier writes LF line endings; keep them on Windows checkouts too, or
+# `npm run format:check` fails on every file after a fresh clone.
+* text=auto eol=lf

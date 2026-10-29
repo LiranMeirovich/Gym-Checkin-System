@@ -15,18 +15,19 @@ A check-in and subscription system for a single gym. Customers check in by scann
 
 ## Tech stack
 
-Python 3.12 · FastAPI · SQLite (SQLAlchemy 2 + Alembic) · Jinja2 + HTMX · uv · ruff · pytest · GitHub Actions
+Python 3.12 · FastAPI · SQLite (SQLAlchemy 2 + Alembic) · React + TypeScript (Vite, React Router, TanStack Query) · uv · npm · ruff · ESLint · Prettier · pytest · GitHub Actions
 
-One codebase runs as two apps: an **admin** app for staff (`127.0.0.1:8000`) and a **public** app with only the customer pages (`127.0.0.1:8001`). Admin routes are never registered on the public app.
+One codebase runs as two apps: an **admin** app for staff (`127.0.0.1:8000`) and a **public** app with only the customer pages (`127.0.0.1:8001`). Admin routes are never registered on the public app. Each app serves its own React build and a JSON API under `/api`; the public build never contains admin code ([decision 0020](docs/decisions/0020-react-typescript-frontend-with-a-json-api.md)).
 
 ## Getting started
 
-Requires [uv](https://docs.astral.sh/uv/). uv installs Python 3.12 itself.
+Requires [uv](https://docs.astral.sh/uv/) (it installs Python 3.12 itself) and [Node.js](https://nodejs.org/) 26 LTS.
 
 ```bash
 uv sync                    # install dependencies into .venv
+npm ci --prefix frontend   # install the frontend's exact locked packages
 uv tool install pre-commit
-pre-commit install         # run gitleaks and ruff on every commit
+pre-commit install         # run gitleaks, ruff, ESLint and Prettier on every commit
 ```
 
 Create your local config from the template (on Windows PowerShell: `Copy-Item .env.example .env`):
@@ -39,6 +40,12 @@ Create the database (and re-run after pulling changes that add migrations). The 
 
 ```bash
 uv run alembic upgrade head
+```
+
+Build the frontend (both apps serve these files; re-run after frontend changes):
+
+```bash
+npm run build --prefix frontend
 ```
 
 Run the apps:
@@ -80,7 +87,7 @@ The SMTP password and other secrets are never stored here.
 
 ### Staff logins
 
-Staff log in on the lock screen with a 6–12 digit PIN ([decision 0018](docs/decisions/0018-staff-pins-and-the-permission-map.md)). A session lives in the `gym_staff` cookie and the `staff_sessions` table (token hash only); it ends on Lock, after the role's idle time, after 12 hours, or when the staff member is deactivated. Every admin form is protected against CSRF by an origin check and a signed per-session token, and the admin app answers only to `127.0.0.1` and `localhost` ([decision 0019](docs/decisions/0019-staff-sessions-csrf-and-lock-times.md)).
+Staff log in on the lock screen with a 6–12 digit PIN ([decision 0018](docs/decisions/0018-staff-pins-and-the-permission-map.md)). A session lives in the `gym_staff` cookie and the `staff_sessions` table (token hash only); it ends on Lock, after the role's idle time, after 12 hours, or when the staff member is deactivated. Every admin request that changes something is protected against CSRF by an origin check and a signed per-session token (the React app keeps it in memory and sends it as the `X-CSRF-Token` header), and the admin app answers only to `127.0.0.1` and `localhost` ([decision 0019](docs/decisions/0019-staff-sessions-csrf-and-lock-times.md)).
 
 ## Development
 
@@ -90,7 +97,23 @@ uv run ruff check .        # lint
 uv run ruff format .       # format
 ```
 
-CI runs lint, format check, tests and a gitleaks scan of the full history on every pull request.
+For frontend work, run the backend as above, then a Vite dev server with live reload; it proxies `/api` to the backend:
+
+```bash
+npm run dev:admin --prefix frontend    # http://127.0.0.1:5173 → admin app on 8000
+npm run dev:public --prefix frontend   # http://127.0.0.1:5174 → public app on 8001
+npm run typecheck --prefix frontend    # TypeScript
+npm run lint --prefix frontend         # ESLint
+npm run format --prefix frontend       # Prettier
+```
+
+The frontend's API types are generated from the backend's Pydantic schemas. After changing an `/api` route or schema, regenerate and commit them:
+
+```bash
+npm run api:types --prefix frontend
+```
+
+CI runs the Python lint, format check and tests, the frontend type-check, lint, format check, builds and API types check, and a gitleaks scan of the full history on every pull request.
 
 ### Database and migrations
 
@@ -109,6 +132,7 @@ Generated migrations are drafts: review each one by hand (the [`/migration`](.cl
 app/core     shared logic: database, models, plan and price rules, reports, email
 app/admin    the staff app
 app/public   the customer app (phone pages)
+frontend/    React + TypeScript: src/admin and src/public build separately
 migrations/  Alembic database migrations
 tests/
 docs/decisions/   decision records: why each technical choice was made

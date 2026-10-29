@@ -1,8 +1,8 @@
 """Who is making an admin request, and whether they may (design doc: "Staff
 login and lock screen"; decision 0018).
 
-Every admin route except the lock screen, first-run setup and ``/health``
-declares one of these:
+Every admin API route except the lock screen, login, first-run setup and
+``/health`` declares one of these:
 
 - ``CurrentStaff``: any logged-in staff member.
 - ``require_permission(Permission.X)``: a logged-in staff member whose
@@ -11,13 +11,12 @@ declares one of these:
 Both load the staff row fresh on every request, so a role change or a
 deactivation applies from the next click. Both count the request as
 activity, restarting the idle timeout. On a POST, PUT, PATCH or DELETE
-both also check the session's CSRF token (``app.admin.csrf``), and refuse
-the request with 403 without it.
+both also check the session's CSRF token in the ``X-CSRF-Token`` header
+(``app.admin.csrf``), and refuse the request with 403 without it.
 
-Not logged in: a page load is redirected to the lock screen (or to
-first-run setup, while there are no staff accounts yet); an HTMX request
-gets ``HX-Redirect`` so the whole page goes there, not just the fragment.
-Logged in without the permission: 403.
+Not logged in: 401 with ``NotLoggedIn``, saying whether first-run setup is
+still needed; the React app goes to the lock screen or setup. Logged in
+without the permission: 403.
 """
 
 from collections.abc import Callable
@@ -26,16 +25,11 @@ from datetime import timedelta
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from app.admin.csrf import (
-    CSRF_FIELD,
-    CSRF_HEADER,
-    UNSAFE_METHODS,
-    csrf_token,
-    csrf_token_matches,
-)
+from app.admin.api.schemas import NotLoggedIn
+from app.admin.csrf import CSRF_HEADER, UNSAFE_METHODS, csrf_token_matches
 from app.core.db import DbSession, get_engine
 from app.core.models import StaffSession, StaffUser
 from app.core.permissions import Permission, has_permission
@@ -45,9 +39,6 @@ from app.core.staff_sessions import find_session, idle_timeout, lock_settings, t
 # The browser's session token. HttpOnly, SameSite=Strict, no expiry (gone
 # when the browser closes); set by the login route.
 SESSION_COOKIE = "gym_staff"
-
-LOGIN_PATH = "/login"
-SETUP_PATH = "/setup"
 
 
 @dataclass(frozen=True)
@@ -62,39 +53,13 @@ class StaffLogin:
     # This staff member's idle time, for the page's own auto-lock timer.
     lock_after: timedelta
 
-    @property
-    def csrf_token(self) -> str:
-        """This session's CSRF token, for forms and HTMX headers."""
-        return csrf_token(self.token)
-
 
 class NotLoggedInError(Exception):
     """No live session: no cookie, or its session ended, timed out or
     belongs to a deactivated staff member."""
 
 
-async def _submitted_csrf_token(request: Request) -> str | None:
-    # Async only because reading a form body is. Starlette keeps the parsed
-    # form on the request, so the route's own Form() fields still work.
-    if request.method not in UNSAFE_METHODS:
-        return None
-    if header := request.headers.get(CSRF_HEADER):
-        return header
-    content_type = request.headers.get("content-type", "")
-    if content_type.startswith(
-        ("application/x-www-form-urlencoded", "multipart/form-data")
-    ):
-        value = (await request.form()).get(CSRF_FIELD)
-        return value if isinstance(value, str) else None
-    return None
-
-
-SubmittedCsrfToken = Annotated[str | None, Depends(_submitted_csrf_token)]
-
-
-def _current_staff(
-    request: Request, db: DbSession, submitted_csrf_token: SubmittedCsrfToken
-) -> StaffLogin:
+def _current_staff(request: Request, db: DbSession) -> StaffLogin:
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
         raise NotLoggedInError
@@ -103,7 +68,7 @@ def _current_staff(
     if session is None:
         raise NotLoggedInError
     if request.method in UNSAFE_METHODS and not csrf_token_matches(
-        token, submitted_csrf_token
+        token, request.headers.get(CSRF_HEADER)
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "CSRF token missing or wrong")
     touch(db, session)
@@ -154,21 +119,19 @@ def clear_session_cookie(response: Response) -> None:
 
 def install(app: FastAPI) -> None:
     """Register the not-logged-in handling on ``app``."""
-    app.add_exception_handler(NotLoggedInError, _send_to_login)
+    app.add_exception_handler(NotLoggedInError, _not_logged_in)
 
 
-def _send_to_login(request: Request, _error: Exception) -> Response:
+def _not_logged_in(request: Request, _error: Exception) -> Response:
     # Runs after the request's own transaction has ended, so it reads in a
     # short one of its own.
     with Session(get_engine()) as db:
-        target = LOGIN_PATH if any_staff_exists(db) else SETUP_PATH
-    if request.headers.get("HX-Request") == "true":
-        response: Response = Response(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            headers={"HX-Redirect": target},
-        )
-    else:
-        response = RedirectResponse(target, status.HTTP_303_SEE_OTHER)
+        setup_done = any_staff_exists(db)
+    # The React app decides where to go.
+    response = JSONResponse(
+        NotLoggedIn(setup_needed=not setup_done).model_dump(),
+        status_code=status.HTTP_401_UNAUTHORIZED,
+    )
     # A dead token is no use to the browser; drop it.
     if SESSION_COOKIE in request.cookies:
         clear_session_cookie(response)

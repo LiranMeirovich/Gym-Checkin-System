@@ -111,23 +111,14 @@ def setup_done(db: Session) -> None:
 
 
 @pytest.mark.usefixtures("setup_done")
-def test_a_page_without_a_session_redirects_to_the_lock_screen(
+def test_a_request_without_a_session_gets_a_401_saying_lock_screen(
     client: TestClient,
 ) -> None:
     response = client.get("/who")
 
-    assert response.status_code == 303
-    assert response.headers["location"] == "/login"
-
-
-@pytest.mark.usefixtures("setup_done")
-def test_an_htmx_request_without_a_session_redirects_the_whole_page(
-    client: TestClient,
-) -> None:
-    response = client.get("/who", headers={"HX-Request": "true"})
-
     assert response.status_code == 401
-    assert response.headers["HX-Redirect"] == "/login"
+    assert response.json() == {"detail": "not_logged_in", "setup_needed": False}
+    assert "set-cookie" not in response.headers
 
 
 @pytest.mark.usefixtures("setup_done")
@@ -138,26 +129,26 @@ def test_an_unknown_token_is_refused_and_its_cookie_dropped(
 
     response = client.get("/who")
 
-    assert response.status_code == 303
+    assert response.status_code == 401
     cookie = response.headers["set-cookie"]
     assert cookie.startswith(f"{SESSION_COOKIE}=")
     assert "Max-Age=0" in cookie
 
 
-def test_a_permission_check_without_a_session_redirects_too(
+def test_a_permission_check_without_a_session_is_a_401_too(
     client: TestClient,
 ) -> None:
     response = client.get("/prices")
 
-    assert response.status_code == 303
+    assert response.status_code == 401
 
 
-def test_before_first_run_setup_every_page_goes_to_setup(
+def test_before_first_run_setup_the_401_says_setup_is_needed(
     client: TestClient,
 ) -> None:
-    assert client.get("/who").headers["location"] == "/setup"
-    htmx = client.get("/who", headers={"HX-Request": "true"})
-    assert htmx.headers["HX-Redirect"] == "/setup"
+    response = client.get("/who")
+
+    assert response.json() == {"detail": "not_logged_in", "setup_needed": True}
 
 
 @pytest.mark.usefixtures("clock")
@@ -168,7 +159,7 @@ def test_a_deactivated_staff_member_still_means_setup_is_done(
     noa.active = False
     db.commit()
 
-    assert client.get("/who").headers["location"] == "/login"
+    assert client.get("/who").json()["setup_needed"] is False
 
 
 # ── Logged in ───────────────────────────────────────────────────────────
@@ -217,7 +208,7 @@ def test_an_idle_managers_session_is_sent_to_the_lock_screen(
 
     clock.now += timedelta(minutes=6)
 
-    assert client.get("/who").status_code == 303
+    assert client.get("/who").status_code == 401
 
 
 def test_an_instructor_stays_logged_in_longer(
@@ -228,7 +219,7 @@ def test_an_instructor_stays_logged_in_longer(
     clock.now += timedelta(minutes=59)
     assert client.get("/who").status_code == 200
     clock.now += timedelta(minutes=61)
-    assert client.get("/who").status_code == 303
+    assert client.get("/who").status_code == 401
 
 
 @pytest.mark.usefixtures("clock")
@@ -242,7 +233,7 @@ def test_deactivation_applies_from_the_next_request(
     dana.active = False
     db.commit()
 
-    assert client.get("/who").status_code == 303
+    assert client.get("/who").status_code == 401
 
 
 # ── Permissions ─────────────────────────────────────────────────────────
