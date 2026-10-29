@@ -26,3 +26,4 @@ One line per decision: what it settled, and when to read it. Read the full recor
 | [0020](0020-react-typescript-frontend-with-a-json-api.md) | React + TypeScript frontend, JSON API, two builds | any screen or API route |
 | [0021](0021-append-only-activity-log-and-no-customer-deletion.md) | Append-only activity log; customers never deleted | any feature that changes data |
 | [0022](0022-split-milestone-2-into-features.md) | Milestone 2 split into four features, no freezes | milestone 2 features |
+| [0023](0023-customer-identity-phone-and-active-flag.md) | One customer per phone (E.164, Israeli rules), `active` flag instead of `archived_at`, date of birth required | customers, phone numbers, phone linking |

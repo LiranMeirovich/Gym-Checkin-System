@@ -58,7 +58,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | View the contents of a health form | No | Yes |
 | Edit a customer's date of birth (sets the under-18 price) | No | Yes |
 | Change or clear a plan already chosen | No | Yes |
-| Archive a customer (customers are never deleted) | No | Yes |
+| Deactivate a customer (customers are never deleted; adding their phone again brings them back) | No | Yes |
 | Edit prices | No | Yes |
 | View, regenerate, approve and send reports | No | Yes |
 | Settings, backups and restore | No | Yes |
@@ -215,7 +215,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `customers` | id, first\_name, last\_name, phone (unique, normalised), date\_of\_birth, notes, created\_at, archived\_at | Date of birth sets the under-18 price; archive instead of delete. No photo column for now (decision 0022) |
+| `customers` | id, first\_name, last\_name, phone (unique, normalised), date\_of\_birth, notes, created\_at, active | Date of birth sets the under-18 price; deactivate instead of delete (decision 0023). No photo column for now (decision 0022) |
 | `device_sessions` | id, customer\_id, token\_hash (unique), user\_agent, created\_at, last\_seen\_at, revoked\_at | One row per linked phone; at most 3 active per customer |
 | `link_codes` | id, customer\_id, code\_hash, expires\_at, used\_at, failed\_attempts | 6-digit code, 10-minute expiry, single use |
 | `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry), start\_month, end\_month, age\_group, unit\_price\_agorot, chosen\_at, chosen\_by (customer / admin), replaced\_by | Tri-monthly spans 3 months; corrections add a new row and point the old one at it |
@@ -231,6 +231,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 **Rules the code and database enforce**
 
 - At most one active plan choice covers any customer-month.
+- A phone number belongs to one customer, active or not, stored as E.164 (`+972…`) after the Israeli normalising rules (decision 0023).
 - Login tokens and link codes are stored only as hashes; the plain values exist only in the cookie or on the admin screen.
 - Linking a phone fails after 5 wrong codes for the same phone number, locking that number for 15 minutes. The public app also rate-limits by IP.
 - No check-in (phone or manual) is recorded for a customer without a valid health form on that day.
