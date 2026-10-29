@@ -50,6 +50,9 @@ venv/
 build/
 dist/
 
+# ─── Frontend (frontend/dist is covered by dist/ above) ─────────
+node_modules/
+
 # Tool caches
 .pytest_cache/
 .ruff_cache/
