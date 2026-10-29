@@ -17,6 +17,7 @@ const REFUSALS: Record<Schemas["LoginRefused"]["error"], string> = {
   locked: "יותר מדי ניסיונות שגויים.",
   no_such_staff: "המשתמש לא נמצא. בחרו שם מהרשימה.",
 };
+const NO_CONNECTION = "אין חיבור לשרת. נסו שוב.";
 
 async function fetchLockScreen() {
   const { data, response } = await api.GET("/api/lock-screen");
@@ -78,25 +79,31 @@ function PinForm({ staff }: { staff: StaffName }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSending(true);
-    const { data, error } = await api.POST("/api/login", {
-      body: { staff_id: staff.id, pin },
-    });
-    setSending(false);
-    setPin("");
-    if (data) {
-      startSession(data);
-      navigate("/", { replace: true });
-      return;
-    }
-    if (error && "error" in error) {
-      const message = REFUSALS[error.error];
-      setError(
-        error.locked_until
-          ? `${message} אפשר לנסות שוב בשעה ${wallClockTime(error.locked_until)}.`
-          : message,
-      );
-    } else {
-      setError(REFUSALS.wrong_pin);
+    try {
+      const { data, error } = await api.POST("/api/login", {
+        body: { staff_id: staff.id, pin },
+      });
+      if (data) {
+        startSession(data);
+        navigate("/", { replace: true });
+        return;
+      }
+      if (error && "error" in error) {
+        const message = REFUSALS[error.error];
+        setError(
+          error.locked_until
+            ? `${message} אפשר לנסות שוב בשעה ${wallClockTime(error.locked_until)}.`
+            : message,
+        );
+      } else {
+        setError(REFUSALS.wrong_pin);
+      }
+    } catch {
+      // The request never got an answer (server down, network error).
+      setError(NO_CONNECTION);
+    } finally {
+      setSending(false);
+      setPin("");
     }
   }
 

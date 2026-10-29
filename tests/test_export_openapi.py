@@ -5,7 +5,35 @@ from pathlib import Path
 
 import pytest
 
-from app.export_openapi import main
+from app.export_openapi import api_only, main
+
+
+def ref(name: str) -> dict[str, str]:
+    return {"$ref": f"#/components/schemas/{name}"}
+
+
+def test_only_schemas_the_api_paths_use_are_kept() -> None:
+    spec = {
+        "paths": {
+            "/api/session": {"get": {"responses": {"200": ref("SessionInfo")}}},
+            "/form": {"post": {"requestBody": ref("Body_form")}},
+        },
+        "components": {
+            "schemas": {
+                "SessionInfo": {"properties": {"staff": ref("StaffInfo")}},
+                "StaffInfo": {"properties": {}},
+                "Body_form": {"properties": {"x": ref("Shared")}},
+                "Shared": {"properties": {}},
+            }
+        },
+    }
+
+    result = api_only(spec)
+
+    assert list(result["paths"]) == ["/api/session"]
+    # StaffInfo is kept because SessionInfo refers to it; the form route's
+    # schemas go with the route.
+    assert list(result["components"]["schemas"]) == ["SessionInfo", "StaffInfo"]
 
 
 def test_the_admin_export_has_only_the_api_paths(tmp_path: Path) -> None:

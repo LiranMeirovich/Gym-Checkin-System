@@ -59,7 +59,7 @@ NOT_LOGGED_IN = {status.HTTP_401_UNAUTHORIZED: {"model": NotLoggedIn}}
 def lock_screen(request: Request, response: Response, db: DbSession) -> LockScreen:
     if not any_staff_exists(db):
         return LockScreen(setup_needed=True, staff=[])
-    end_this_browsers_session(request, db)
+    _end_this_browsers_session(request, db)
     if SESSION_COOKIE in request.cookies:
         clear_session_cookie(response)
     names = db.scalars(
@@ -79,7 +79,7 @@ def lock_screen(request: Request, response: Response, db: DbSession) -> LockScre
 def log_in(
     body: LoginRequest, request: Request, response: Response, db: DbSession
 ) -> SessionInfo | JSONResponse:
-    staff = active_staff(db, body.staff_id)
+    staff = _active_staff(db, body.staff_id)
     if staff is None:
         return _refused("no_such_staff")
 
@@ -87,7 +87,7 @@ def log_in(
     if result is PinCheck.OK:
         # Not written to the activity log, which doesn't record logins:
         # staff_sessions is the login history.
-        end_this_browsers_session(request, db)
+        _end_this_browsers_session(request, db)
         token = start_session(db, staff)
         set_session_cookie(response, token)
         return session_info(staff, token, idle_timeout(lock_settings(db), staff.role))
@@ -95,7 +95,7 @@ def log_in(
         return _refused("locked", locked_until=staff.locked_until)
     if result is PinCheck.WRONG_PIN:
         return _refused("wrong_pin")
-    # INACTIVE can't happen (active_staff filters), but stays generic.
+    # INACTIVE can't happen (_active_staff filters), but stays generic.
     return _refused("no_such_staff")
 
 
@@ -126,14 +126,14 @@ def session_info(staff: StaffUser, token: str, lock_after: timedelta) -> Session
     )
 
 
-def active_staff(db: DbSession, staff_id: int) -> StaffUser | None:
+def _active_staff(db: DbSession, staff_id: int) -> StaffUser | None:
     """The active staff member with this id, or ``None`` for an unknown or
     deactivated one."""
     staff = db.get(StaffUser, staff_id)
     return staff if staff is not None and staff.active else None
 
 
-def end_this_browsers_session(request: Request, db: DbSession) -> None:
+def _end_this_browsers_session(request: Request, db: DbSession) -> None:
     """End the session this browser's cookie belongs to, if it's live.
 
     The lock screen, or someone logging in on a browser where another

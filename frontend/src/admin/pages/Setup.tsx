@@ -53,32 +53,42 @@ function SetupForm() {
   const startSession = useStartSession();
   const [values, setValues] = useState(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
+  const [formError, setFormError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSending(true);
-    const { data, error, response } = await api.POST("/api/setup", {
-      body: values,
-    });
-    setSending(false);
-    if (data) {
-      startSession(data);
-      navigate("/", { replace: true });
-      return;
-    }
-    if (response.status === 404) {
-      // Someone else finished setup in the meantime.
-      navigate("/login", { replace: true });
-      return;
-    }
-    // Names stay; PINs are cleared.
-    setValues({ ...values, pin: "", pin_again: "" });
-    if (error && "errors" in error) {
-      const fields = Object.keys(error.errors) as Field[];
-      setErrors(Object.fromEntries(fields.map((f) => [f, ERRORS[f]])));
-    } else {
-      setErrors({ gym_name: "השמירה נכשלה. נסו שוב." });
+    setFormError(null);
+    try {
+      const { data, error, response } = await api.POST("/api/setup", {
+        body: values,
+      });
+      if (data) {
+        startSession(data);
+        navigate("/", { replace: true });
+        return;
+      }
+      if (response.status === 404) {
+        // Someone else finished setup in the meantime.
+        navigate("/login", { replace: true });
+        return;
+      }
+      // Names stay; PINs are cleared.
+      setValues({ ...values, pin: "", pin_again: "" });
+      if (error && "errors" in error) {
+        const fields = Object.keys(error.errors) as Field[];
+        setErrors(Object.fromEntries(fields.map((f) => [f, ERRORS[f]])));
+      } else {
+        setErrors({});
+        setFormError("השמירה נכשלה. נסו שוב.");
+      }
+    } catch {
+      // The request never got an answer (server down, network error);
+      // everything typed stays, so it can simply be sent again.
+      setFormError("אין חיבור לשרת. נסו שוב.");
+    } finally {
+      setSending(false);
     }
   }
 
@@ -110,6 +120,7 @@ function SetupForm() {
         המערכת.
       </p>
       <form onSubmit={submit} autoComplete="off">
+        {formError && <p role="alert">{formError}</p>}
         {field("gym_name", "שם המכון")}
         {field("display_name", "השם שלך (יופיע במסך הנעילה)")}
         {field("pin", "קוד אישי (6 עד 12 ספרות)", true)}

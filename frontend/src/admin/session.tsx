@@ -138,9 +138,18 @@ function LoggedIn({
   }, [session.lock_after_seconds, navigate]);
 
   async function lock() {
-    await api.POST("/api/lock");
-    forgetSession();
-    navigate("/login", { replace: true });
+    // The login is the HttpOnly cookie, which only the server can end, so
+    // Lock asks it to. Whatever happens, the page then goes to the lock
+    // screen, whose own request ends the session too; if the server can't
+    // be reached it shows the connection error, never the staff page.
+    try {
+      await api.POST("/api/lock");
+    } catch {
+      // Network error: the lock screen below retries the ending.
+    } finally {
+      forgetSession();
+      navigate("/login", { replace: true });
+    }
   }
 
   return (
