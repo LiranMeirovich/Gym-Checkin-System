@@ -42,7 +42,9 @@ export default defineConfig(({ mode }) => {
       port: devPort,
       strictPort: true,
       proxy: {
-        "/api": {
+        // Only /api/...: source files are served from the site root too,
+        // so no folder in src/admin or src/public may be named "api".
+        "/api/": {
           target: backend,
           // The backend's host guard answers only 127.0.0.1 / localhost.
           changeOrigin: true,

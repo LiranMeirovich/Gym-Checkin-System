@@ -1,4 +1,4 @@
 dist
 node_modules
 package-lock.json
-src/admin/api/schema.d.ts
+src/admin/backend/schema.d.ts
