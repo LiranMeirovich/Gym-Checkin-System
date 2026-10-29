@@ -5,7 +5,7 @@ here that breaks the frontend fails its build."""
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.permissions import Role
 
@@ -14,7 +14,17 @@ from app.core.permissions import Role
 MAX_ID = 2**63 - 1
 
 
-class NotLoggedIn(BaseModel):
+class Answer(BaseModel):
+    """Base for response shapes. Fields with a default are always sent, so
+    the generated TypeScript types mark them required, not optional."""
+
+    model_config = ConfigDict(
+        json_schema_mode_override="serialization",
+        json_schema_serialization_defaults_required=True,
+    )
+
+
+class NotLoggedIn(Answer):
     """401 from any route that needs a login: no session, or it ended or
     timed out. ``setup_needed`` says to go to first-run setup instead of
     the lock screen."""
@@ -26,12 +36,12 @@ class NotLoggedIn(BaseModel):
 # ── The lock screen ─────────────────────────────────────────────────────
 
 
-class StaffName(BaseModel):
+class StaffName(Answer):
     id: int
     display_name: str
 
 
-class LockScreen(BaseModel):
+class LockScreen(Answer):
     """The names to tap; empty with ``setup_needed`` on a fresh install."""
 
     setup_needed: bool
@@ -48,7 +58,7 @@ class LoginRequest(BaseModel):
 LoginRefusal = Literal["wrong_pin", "locked", "no_such_staff"]
 
 
-class LoginRefused(BaseModel):
+class LoginRefused(Answer):
     """401 from ``POST /api/login``. ``locked_until`` (the gym's local
     time, with its offset) comes with ``locked`` only."""
 
@@ -59,13 +69,13 @@ class LoginRefused(BaseModel):
 # ── A logged-in session ─────────────────────────────────────────────────
 
 
-class StaffInfo(BaseModel):
+class StaffInfo(Answer):
     id: int
     display_name: str
     role: Role
 
 
-class SessionInfo(BaseModel):
+class SessionInfo(Answer):
     """Who is logged in, plus what the page needs to act for them: the
     CSRF token for the ``X-CSRF-Token`` header (kept in memory only) and
     the idle time after which the page goes to the lock screen."""
@@ -78,7 +88,7 @@ class SessionInfo(BaseModel):
 # ── First-run setup ─────────────────────────────────────────────────────
 
 
-class SetupStatus(BaseModel):
+class SetupStatus(Answer):
     needed: Literal[True] = True
 
 
@@ -93,7 +103,7 @@ SetupField = Literal["gym_name", "display_name", "pin", "pin_again"]
 SetupProblem = Literal["invalid", "mismatch"]
 
 
-class SetupRefused(BaseModel):
+class SetupRefused(Answer):
     """400 from ``POST /api/setup``: every field with a problem, at once.
     ``invalid`` breaks that field's rule; ``mismatch`` is ``pin_again``
     differing from ``pin``. Nothing was saved."""
