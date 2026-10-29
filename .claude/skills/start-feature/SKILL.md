@@ -15,8 +15,11 @@ Before anything else, rename this session so it's easy to find in the sidebar. U
 - If the tool isn't available (for example in the terminal CLI), skip this step silently.
 
 ## 1. Understand it
-- Read the relevant sections of the design doc (`Gym Check-In & Subscription System — Design Doc.md`) and of CLAUDE.md. Check `docs/decisions/` for any decision that applies.
-- Look at the existing code this feature touches.
+Read selectively: this session's context has to last the whole feature, so load only what this feature needs.
+- **Design doc** (`Gym Check-In & Subscription System — Design Doc.md`): list its headings first (grep for `^#` with line numbers), then read only the sections this feature needs, using offset and limit. Don't read the whole file.
+- **Decisions:** read the index `docs/decisions/README.md`, then open only the records whose "Read when" matches this feature.
+- **Follow-ups:** read the current milestone's section and "Any feature" in `docs/follow-ups.md`.
+- **Existing code:** look at the code this feature touches. If finding it means a wide search across many files, hand that sweep to an Explore subagent and ask for a short summary (files, functions, patterns to follow), so the raw search results stay out of this session.
 - If the feature is unclear, contradicts the design doc, or depends on an open question in the doc, stop and ask before planning.
 
 ## 2. Plan it
