@@ -2,12 +2,12 @@
 // the manager's date-of-birth change and deactivation. An inactive
 // customer is read-only until reactivated. Linked phones, the health form
 // and plans join this page in later features.
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { api } from "../backend/client";
 import {
-  CUSTOMERS_KEY,
+  CUSTOMER_LIST_KEY,
   FIELD_ERRORS,
   NOTES_MAX_LENGTH,
   customerKey,
@@ -64,7 +64,18 @@ export function CustomerPage() {
 function CustomerDetails({ customer }: { customer: Customer }) {
   const session = useSession();
   const queryClient = useQueryClient();
-  const reactivated = useLocation().state?.reactivated === true;
+  const location = useLocation();
+  const navigate = useNavigate();
+  // The add form's "reactivated" note, shown once: read from the history
+  // entry, then removed from it, so a reload or Back doesn't show it again.
+  const [reactivated, setReactivated] = useState(
+    location.state?.reactivated === true,
+  );
+  useEffect(() => {
+    if (location.state?.reactivated) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate]);
   const [editing, setEditing] = useState(false);
   const manager = isManager(session);
 
@@ -80,7 +91,8 @@ function CustomerDetails({ customer }: { customer: Customer }) {
       const { data, error, response } = await send();
       if (data) {
         queryClient.setQueryData(customerKey(data.id), data);
-        void queryClient.invalidateQueries({ queryKey: CUSTOMERS_KEY });
+        void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
+        setReactivated(false);
         return { saved: true };
       }
       return refusal(response.status, error);

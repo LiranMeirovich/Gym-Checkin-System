@@ -12,7 +12,9 @@ export type Customer = Schemas["CustomerDetails"];
 // any string, so the field names come from the request shape.)
 export type CustomerField = keyof Schemas["NewCustomer"];
 
-export const CUSTOMERS_KEY = ["customers"] as const;
+// The list has its own key under "customers", so refreshing it after a
+// save doesn't also refetch the customer the save just answered with.
+export const CUSTOMER_LIST_KEY = ["customers", "list"] as const;
 
 export function customerKey(id: number) {
   return ["customers", id] as const;

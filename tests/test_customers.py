@@ -226,7 +226,7 @@ def test_every_invalid_field_is_named_at_once(db: Session, staff: StaffUser) -> 
         ("notes", "tab\there"),
         ("date_of_birth", datetime(2001, 5, 17, tzinfo=UTC)),
         ("date_of_birth", "2001-05-17"),
-        ("date_of_birth", date(1905, 12, 31)),  # more than 120 years ago
+        ("date_of_birth", date(1906, 10, 28)),  # 120 years and a day ago
         ("date_of_birth", date(2026, 10, 30)),  # tomorrow
     ],
     ids=str,
@@ -245,7 +245,7 @@ def test_born_today_and_120_years_ago_are_accepted(
     add_customer(db, **{**NOA, "date_of_birth": date(2026, 10, 29)}, by=staff)
     add_customer(
         db,
-        **{**NOA, "phone": "0521234567", "date_of_birth": date(1906, 1, 1)},
+        **{**NOA, "phone": "0521234567", "date_of_birth": date(1906, 10, 29)},
         by=staff,
     )
 
@@ -437,3 +437,19 @@ def test_the_list_shows_active_or_inactive_customers_by_name(
 
     assert list_customers(db) == [dana_c, dana_l, yael]
     assert list_customers(db, active=False) == [gone]
+
+
+def test_the_age_limit_on_29_february(
+    db: Session, staff: StaffUser, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 1900 had no 29 February, so 120 years before 29 Feb 2020 is the 28th.
+    monkeypatch.setattr(
+        customers, "utc_now", lambda: datetime(2020, 2, 29, 12, 0, tzinfo=UTC)
+    )
+    add_customer(db, **{**NOA, "date_of_birth": date(1900, 2, 28)}, by=staff)
+    with pytest.raises(InvalidCustomerError):
+        add_customer(
+            db,
+            **{**NOA, "phone": "0521234567", "date_of_birth": date(1900, 2, 27)},
+            by=staff,
+        )

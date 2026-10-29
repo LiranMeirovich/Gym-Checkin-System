@@ -15,7 +15,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Check-in: an instructor's manual check-in with no plan for the month records single entry; only the manager picks or changes plans (decision 0017). The change-plan route decides whether a single-entry → monthly correction covers the visits already made.
 - Opening a health form's contents is logged in the activity log (decision 0021).
 - The instructor's check-in screen shows only what check-in needs (name, health form valid or not, plan status), never date of birth, notes or activity-log entries (decision 0023).
-- Linking: the phone number the customer types goes through the same `normalise_phone()` as the customer record, so the lockout counts every way of typing one number together (decision 0023).
+- Linking: look the customer up with `find_by_phone()` (`app/core/customers.py`, built for this) and key the wrong-code lockout on the normalised number, so every way of typing one number counts together (decision 0023).
 
 ## Milestone 4: admin screens (from Customers)
 - Customer list: search, and sorting / filtering by recent check-ins (e.g. who came in the past month), as queries.
@@ -24,7 +24,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Settings screen: load with `load_gym_settings_for_editing()`, convert form fields to their types before `update_gym_settings()`, and require a manager-only permission on the server. Email addresses are ASCII-only for now (decision 0016).
 - Activity log screen (`activity_log.view`) must cope with older before/after shapes.
 - Lock screen: style it, add the role-filtered menus in React. A polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
-- The "אין חיבור לשרת" error markup is copied in three screens; make it a shared component.
+- The "אין חיבור לשרת" error markup is copied in six screens (setup, lock screen, the three customer pages); make it a shared component.
 
 ## Milestones 5–6: report, operations and hosting
 - SMTP host/user and the backup folder become settings (after hosting).
@@ -42,7 +42,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 
 ## Code review leftovers (low priority)
 - The append-only triggers live only in the migration, not the model (a `create_all` schema would lack them).
-- Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
+- Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`, now including the customer tests), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
 - Setup validates the gym name twice.
 - Two migration heads give Alembic's raw error at startup instead of `DatabaseNotReadyError`.
 - The naive-datetime checks test `tzinfo is None` rather than `utcoffset() is None`.

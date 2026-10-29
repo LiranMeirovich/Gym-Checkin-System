@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api } from "../backend/client";
-import { CUSTOMERS_KEY, formatPhone } from "../customers";
+import { CUSTOMER_LIST_KEY, formatPhone } from "../customers";
 
 async function fetchCustomers(active: boolean) {
   const { data, response } = await api.GET("/api/customers", {
@@ -17,7 +17,7 @@ async function fetchCustomers(active: boolean) {
 export function Customers() {
   const [showInactive, setShowInactive] = useState(false);
   const { data, isPending, isError } = useQuery({
-    queryKey: [...CUSTOMERS_KEY, { active: !showInactive }],
+    queryKey: [...CUSTOMER_LIST_KEY, { active: !showInactive }],
     queryFn: () => fetchCustomers(!showInactive),
   });
 

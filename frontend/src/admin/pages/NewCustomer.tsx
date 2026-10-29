@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router";
 import { api, type Schemas } from "../backend/client";
 import {
-  CUSTOMERS_KEY,
+  CUSTOMER_LIST_KEY,
   FIELD_ERRORS,
   NOTES_MAX_LENGTH,
   customerKey,
@@ -44,7 +44,7 @@ export function NewCustomer() {
       if (data) {
         const { customer, reactivated } = data;
         queryClient.setQueryData(customerKey(customer.id), customer);
-        void queryClient.invalidateQueries({ queryKey: CUSTOMERS_KEY });
+        void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
         navigate(`/customers/${customer.id}`, { state: { reactivated } });
         return;
       }

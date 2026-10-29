@@ -332,9 +332,17 @@ def _clean_date_of_birth(value: object) -> date:
     if not isinstance(value, date) or hasattr(value, "hour"):
         raise ValueError("a date of birth is a date")
     today = to_local(utc_now()).date()
-    if value > today or today.year - value.year > MAX_AGE_YEARS:
+    if value > today or value < _years_before(today, MAX_AGE_YEARS):
         raise ValueError("not a believable date of birth")
     return value
+
+
+def _years_before(day: date, years: int) -> date:
+    # 29 February has no match in most years; the 28th stands in for it.
+    try:
+        return day.replace(year=day.year - years)
+    except ValueError:
+        return day.replace(year=day.year - years, day=28)
 
 
 def _clean_notes(value: object) -> str:
