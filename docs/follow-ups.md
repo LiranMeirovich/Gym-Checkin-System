@@ -14,6 +14,11 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 ## Milestone 3: phone linking & check-in
 - Check-in: an instructor's manual check-in with no plan for the month records single entry; only the manager picks or changes plans (decision 0017). The change-plan route decides whether a single-entry → monthly correction covers the visits already made.
 - Opening a health form's contents is logged in the activity log (decision 0021).
+- The instructor's check-in screen shows only what check-in needs (name, health form valid or not, plan status), never date of birth, notes or activity-log entries (decision 0023).
+- Linking: the phone number the customer types goes through the same `normalise_phone()` as the customer record, so the lockout counts every way of typing one number together (decision 0023).
+
+## Milestone 4: admin screens (from Customers)
+- Customer list: search, and sorting / filtering by recent check-ins (e.g. who came in the past month), as queries.
 
 ## Milestone 4: admin screens
 - Settings screen: load with `load_gym_settings_for_editing()`, convert form fields to their types before `update_gym_settings()`, and require a manager-only permission on the server. Email addresses are ASCII-only for now (decision 0016).
