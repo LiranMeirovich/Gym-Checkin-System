@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.admin.main import app as admin_app
 from app.admin.templating import templates
+from app.core.spa import FRONTEND_DIST
 from app.public.main import app as public_app
 
 both_apps = pytest.mark.parametrize(
@@ -42,7 +43,27 @@ def test_public_app_registers_only_expected_routes() -> None:
     # fails this test until it's added here on purpose.
     paths = {route.path for route in public_app.routes}
 
-    assert paths == {"/health"}
+    # /assets and the catch-all serve the public React build (app.core.spa).
+    assert paths == {"/health", "/assets", "/{path:path}"}
+
+
+def test_each_app_serves_its_own_frontend_build() -> None:
+    # The public app is reachable from the internet: it must never serve
+    # the admin build.
+    assert admin_app.state.frontend_dir == FRONTEND_DIST / "admin"
+    assert public_app.state.frontend_dir == FRONTEND_DIST / "public"
+
+
+@both_apps
+@pytest.mark.usefixtures("migrated_db")
+def test_frontend_catch_all_comes_after_the_apps_own_routes(app: FastAPI) -> None:
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+        health = client.get("/health")
+        unknown_api = client.get("/api/no-such-route")
+
+    assert health.json() == {"status": "ok"}
+    assert unknown_api.status_code == 404
+    assert unknown_api.headers["content-type"] == "application/json"
 
 
 @pytest.mark.usefixtures("migrated_db")

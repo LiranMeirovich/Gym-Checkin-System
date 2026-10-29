@@ -8,6 +8,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.admin import auth, security, setup
 from app.admin.csrf import SameOriginMiddleware
+from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
 
 # The only names the admin app answers to. Binding to 127.0.0.1 keeps other
@@ -32,3 +33,7 @@ app.include_router(auth.router)
 def health() -> dict[str, str]:
     """Liveness check (decision 0009)."""
     return {"status": "ok"}
+
+
+# Last: its catch-all answers every GET no route above claimed.
+serve_frontend(app, FRONTEND_DIST / "admin")
