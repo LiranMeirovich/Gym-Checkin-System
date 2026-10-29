@@ -106,7 +106,7 @@ def test_unknown_actions_and_targets_are_refused(db: Session, actor: StaffUser) 
     with pytest.raises(ValueError):
         record(db, actor, "staff.fire", Target.STAFF_USER)  # type: ignore[arg-type]
     with pytest.raises(ValueError):
-        record(db, actor, Action.STAFF_CREATE, "customer")  # type: ignore[arg-type]
+        record(db, actor, Action.STAFF_CREATE, "gym_door")  # type: ignore[arg-type]
 
 
 def test_an_actor_without_an_id_is_refused(db: Session) -> None:

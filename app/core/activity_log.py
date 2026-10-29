@@ -35,6 +35,13 @@ class Action(StrEnum):
 
     SETTINGS_UPDATE = "settings.update"
 
+    CUSTOMER_CREATE = "customer.create"
+    # Name, phone and notes.
+    CUSTOMER_EDIT = "customer.edit"
+    CUSTOMER_CHANGE_DATE_OF_BIRTH = "customer.change_date_of_birth"
+    CUSTOMER_DEACTIVATE = "customer.deactivate"
+    CUSTOMER_REACTIVATE = "customer.reactivate"
+
 
 class Target(StrEnum):
     """What kind of thing a change was made to; ``activity_log.target_type``.
@@ -44,6 +51,7 @@ class Target(StrEnum):
     # The gym settings as a whole: no target id, the keys are in
     # before/after.
     SETTINGS = "settings"
+    CUSTOMER = "customer"
 
 
 def record(
