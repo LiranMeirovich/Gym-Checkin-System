@@ -8,8 +8,9 @@ its own).
    runs. This is the only layer for the lock screen and first-run setup,
    which have no session yet.
 2. **A signed token per session** (OWASP's signed, session-bound token):
-   ``HMAC-SHA256(GYM_SECRET_KEY, "csrf:" + session token)``. Pages put it
-   in a hidden ``csrf_token`` field, or HTMX sends it as ``X-CSRF-Token``;
+   ``HMAC-SHA256(GYM_SECRET_KEY, "csrf:" + session token)``. The React app
+   gets it from ``GET /api/session`` (or the login/setup answer), keeps it
+   in memory and sends it as the ``X-CSRF-Token`` header;
    ``security.CurrentStaff`` checks it on every logged-in unsafe request.
    Nothing is stored: it's recomputed from the cookie each time, so it
    ends with the session. Another site can't compute it without both the
@@ -28,7 +29,6 @@ from app.core.config import get_settings
 # Methods that change something. GET and HEAD must never change anything.
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
-CSRF_FIELD = "csrf_token"
 CSRF_HEADER = "X-CSRF-Token"
 
 # Keeps this use of the key apart from any later one (e.g. "link-code:").

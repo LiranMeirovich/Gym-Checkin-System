@@ -5,18 +5,17 @@ made up."""
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
 
 import pytest
-from fastapi import FastAPI, Form
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.admin import security
 from app.admin.csrf import SameOriginMiddleware, csrf_token, csrf_token_matches
 from app.admin.main import app as admin_app
 from app.admin.security import SESSION_COOKIE, CurrentStaff
-from app.admin.templating import templates
 from app.core import staff_sessions
 from app.core.config import get_settings
 from app.core.db import get_engine
@@ -35,6 +34,10 @@ def fixed_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(staff_sessions, "utc_now", lambda: now)
 
 
+class Note(BaseModel):
+    text: str
+
+
 def build_app() -> FastAPI:
     app = FastAPI()
     app.add_middleware(SameOriginMiddleware)
@@ -50,8 +53,8 @@ def build_app() -> FastAPI:
         return {}
 
     @app.post("/note")
-    def note(login: CurrentStaff, text: Annotated[str, Form()]) -> dict[str, str]:
-        return {"text": text}
+    def note(login: CurrentStaff, body: Note) -> dict[str, str]:
+        return {"text": body.text}
 
     @app.delete("/note")
     def delete_note(login: CurrentStaff) -> dict[str, str]:
@@ -70,6 +73,10 @@ def db(migrated_db: Path) -> Iterator[Session]:
 def client(db: Session) -> Iterator[TestClient]:
     with TestClient(build_app(), base_url=ORIGIN, follow_redirects=False) as client:
         yield client
+
+
+def with_token(token: str) -> dict[str, str]:
+    return {**SAME_ORIGIN, "X-CSRF-Token": token}
 
 
 def log_in(db: Session, client: TestClient, name: str = "Dana") -> str:
@@ -138,8 +145,8 @@ def test_the_origin_check_runs_before_the_session_check(
 
     response = client.post(
         "/note",
-        data={"text": "hi", "csrf_token": csrf_token(token)},
-        headers={"Origin": "https://evil.example"},
+        json={"text": "hi"},
+        headers={"Origin": "https://evil.example", "X-CSRF-Token": csrf_token(token)},
     )
 
     assert response.status_code == 403
@@ -154,46 +161,25 @@ def test_a_get_needs_no_origin(db: Session, client: TestClient) -> None:
 # ── Layer 2: the session's token ────────────────────────────────────────
 
 
-def test_a_form_with_the_sessions_token_is_accepted(
+def test_a_request_with_the_sessions_token_is_accepted(
     db: Session, client: TestClient
 ) -> None:
     token = log_in(db, client)
 
     response = client.post(
-        "/note",
-        data={"text": "שלום", "csrf_token": csrf_token(token)},
-        headers=SAME_ORIGIN,
+        "/note", json={"text": "שלום"}, headers=with_token(csrf_token(token))
     )
 
     assert response.status_code == 200
-    # The route still gets its own form fields after the token was read.
     assert response.json() == {"text": "שלום"}
 
 
-def test_a_multipart_form_with_the_token_is_accepted(
+def test_a_delete_with_the_sessions_token_is_accepted(
     db: Session, client: TestClient
 ) -> None:
     token = log_in(db, client)
 
-    response = client.post(
-        "/note",
-        data={"text": "hi", "csrf_token": csrf_token(token)},
-        files={"scan": ("form.pdf", b"%PDF-1.4", "application/pdf")},
-        headers=SAME_ORIGIN,
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {"text": "hi"}
-
-
-def test_an_htmx_header_with_the_token_is_accepted(
-    db: Session, client: TestClient
-) -> None:
-    token = log_in(db, client)
-
-    response = client.delete(
-        "/note", headers={**SAME_ORIGIN, "X-CSRF-Token": csrf_token(token)}
-    )
+    response = client.delete("/note", headers=with_token(csrf_token(token)))
 
     assert response.status_code == 200
 
@@ -203,11 +189,22 @@ def test_a_logged_in_post_without_the_right_token_is_refused(
     db: Session, client: TestClient, submitted: str | None
 ) -> None:
     log_in(db, client)
-    data = {"text": "hi"}
-    if submitted is not None:
-        data["csrf_token"] = submitted
+    headers = SAME_ORIGIN if submitted is None else with_token(submitted)
 
-    response = client.post("/note", data=data, headers=SAME_ORIGIN)
+    response = client.post("/note", json={"text": "hi"}, headers=headers)
+
+    assert response.status_code == 403
+
+
+def test_a_token_in_a_form_field_is_not_accepted(
+    db: Session, client: TestClient
+) -> None:
+    # Only the header counts since the HTML forms are gone: one way in.
+    token = log_in(db, client)
+
+    response = client.post(
+        "/note", data={"csrf_token": csrf_token(token)}, headers=SAME_ORIGIN
+    )
 
     assert response.status_code == 403
 
@@ -217,9 +214,7 @@ def test_another_sessions_token_is_refused(db: Session, client: TestClient) -> N
     log_in(db, client, "Dana")
 
     response = client.post(
-        "/note",
-        data={"text": "hi", "csrf_token": csrf_token(other)},
-        headers=SAME_ORIGIN,
+        "/note", json={"text": "hi"}, headers=with_token(csrf_token(other))
     )
 
     assert response.status_code == 403
@@ -230,19 +225,15 @@ def test_the_session_token_itself_is_not_the_csrf_token(
 ) -> None:
     token = log_in(db, client)
 
-    response = client.post(
-        "/note", data={"text": "hi", "csrf_token": token}, headers=SAME_ORIGIN
-    )
+    response = client.post("/note", json={"text": "hi"}, headers=with_token(token))
 
     assert response.status_code == 403
 
 
-def test_a_post_without_a_session_still_goes_to_the_lock_screen(
-    client: TestClient,
-) -> None:
-    response = client.post("/note", data={"text": "hi"}, headers=SAME_ORIGIN)
+def test_a_post_without_a_session_is_a_401(client: TestClient) -> None:
+    response = client.post("/note", json={"text": "hi"}, headers=SAME_ORIGIN)
 
-    assert response.status_code == 303
+    assert response.status_code == 401
 
 
 # ── The token itself ────────────────────────────────────────────────────
@@ -282,15 +273,3 @@ def test_the_admin_app_refuses_cross_site_posts() -> None:
 
     # Refused before routing: not 405 (no POST /health), but 403.
     assert response.status_code == 403
-
-
-def test_logged_in_pages_hand_htmx_the_token() -> None:
-    html = templates.get_template("base.html").render({"csrf_token": "abc123"})
-
-    assert """hx-headers='{"X-CSRF-Token": "abc123"}'""" in html
-
-
-def test_pages_without_a_session_have_no_token_header() -> None:
-    html = templates.get_template("base.html").render()
-
-    assert "hx-headers" not in html

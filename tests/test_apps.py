@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.admin.main import app as admin_app
-from app.admin.templating import templates
 from app.core.spa import FRONTEND_DIST
 from app.public.main import app as public_app
 
@@ -87,11 +86,8 @@ def test_admin_app_refuses_other_host_names(host: str) -> None:
     assert response.status_code == 400
 
 
-def test_admin_pages_are_hebrew_right_to_left() -> None:
-    html = templates.get_template("base.html").render()
+@pytest.mark.parametrize("build", ["admin", "public"])
+def test_both_react_apps_are_hebrew_right_to_left(build: str) -> None:
+    index_html = FRONTEND_DIST.parent / "src" / build / "index.html"
 
-    assert '<html lang="he" dir="rtl">' in html
-
-
-def test_admin_templates_autoescape_html() -> None:
-    assert templates.env.autoescape("page.html") is True
+    assert '<html lang="he" dir="rtl">' in index_html.read_text(encoding="utf-8")

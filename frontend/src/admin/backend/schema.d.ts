@@ -94,42 +94,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** Body_finish_setup_setup_post */
-        Body_finish_setup_setup_post: {
-            /**
-             * Gym Name
-             * @default
-             */
-            gym_name: string;
-            /**
-             * Display Name
-             * @default
-             */
-            display_name: string;
-            /**
-             * Pin
-             * @default
-             */
-            pin: string;
-            /**
-             * Pin Again
-             * @default
-             */
-            pin_again: string;
-        };
-        /** Body_log_in_login_post */
-        Body_log_in_login_post: {
-            /**
-             * Staff Id
-             * @default
-             */
-            staff_id: string;
-            /**
-             * Pin
-             * @default
-             */
-            pin: string;
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
