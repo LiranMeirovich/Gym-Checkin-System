@@ -22,7 +22,7 @@ The phone opens the gym's check-in page, which is served from the gym PC through
 - Record every arrival (date and time) with one scan, in a few seconds.
 - Keep customers logged in on their phone, so after the first visit a check-in is just a scan.
 - Let customers pick and confirm their plan themselves each month, so the instructor doesn't have to.
-- Let instructors handle desk work (new customers, linking phones, manual check-ins) while plan corrections, freezes, prices, reports and settings stay with the manager.
+- Let instructors handle desk work (new customers, linking phones, manual check-ins) while plan corrections, prices, reports and settings stay with the manager.
 - Make sure no one trains without a valid health form, because the gym isn't insured otherwise.
 - Produce and deliver the month-end report without anyone having to remember it.
 - Keep data safe with automatic, encrypted, off-site backups.
@@ -58,7 +58,6 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | View the contents of a health form | No | Yes |
 | Edit a customer's date of birth (sets the under-18 price) | No | Yes |
 | Change or clear a plan already chosen | No | Yes |
-| Freeze a plan | No | Yes |
 | Archive a customer (customers are never deleted) | No | Yes |
 | Edit prices | No | Yes |
 | View, regenerate, approve and send reports | No | Yes |
@@ -100,7 +99,7 @@ The tunnel is an outbound connection from the PC, so no router ports are opened.
 
 **Availability**: phone check-ins work only while the PC is on and the gym has internet. If either is down, the instructor checks people in manually on the PC.
 
-**Webcam (optional)**: browsers allow camera access on `127.0.0.1`, so the admin can take a customer photo from the registration screen without extra software.
+**Webcam (optional, not planned for now: photos are left out, decision 0022)**: browsers allow camera access on `127.0.0.1`, so the admin can take a customer photo from the registration screen without extra software.
 
 ## Check-in flow
 
@@ -169,9 +168,9 @@ Customers choose their own plan on their phone at their first check-in of each m
 - Under 18 is worked out from the customer's date of birth on the 1st of the month (*assumption*): someone who turns 18 mid-month pays the under-18 price until the next month.
 - The actual amounts aren't known yet; the system ships with placeholder prices that the manager replaces before launch.
 
-**Freezes**
+**Freezes** (*dropped for now*, decision 0022)
 
-A monthly customer who doesn't come in simply isn't charged, so freezes only matter for tri-monthly plans. The manager enters a freeze in whole months; it pushes the end of the tri-monthly period back by the same number of months (*assumption*), and frozen months show ₪0.
+The manager probably doesn't want freezes, so none are built. A monthly customer who doesn't come in simply isn't charged anyway; only a tri-monthly plan could need one. If they come back, they're a feature of their own (a `freezes` table that pushes a tri-monthly period's end back), and the plan-coverage logic must allow a period to be extended.
 
 **History**
 
@@ -212,16 +211,15 @@ Every customer needs a valid signed health declaration before they can train. Wi
 
 ## Data model
 
-One SQLite file (`gym.db`, WAL mode) with thirteen tables (fourteen once punch cards are added). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
+One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch cards are added). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `customers` | id, first\_name, last\_name, phone (unique, normalised), date\_of\_birth, notes, photo (nullable blob), created\_at, archived\_at | Date of birth sets the under-18 price; archive instead of delete |
+| `customers` | id, first\_name, last\_name, phone (unique, normalised), date\_of\_birth, notes, created\_at, archived\_at | Date of birth sets the under-18 price; archive instead of delete. No photo column for now (decision 0022) |
 | `device_sessions` | id, customer\_id, token\_hash (unique), user\_agent, created\_at, last\_seen\_at, revoked\_at | One row per linked phone; at most 3 active per customer |
 | `link_codes` | id, customer\_id, code\_hash, expires\_at, used\_at, failed\_attempts | 6-digit code, 10-minute expiry, single use |
 | `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry), start\_month, end\_month, age\_group, unit\_price\_agorot, chosen\_at, chosen\_by (customer / admin), replaced\_by | Tri-monthly spans 3 months; corrections add a new row and point the old one at it |
 | `prices` | id, plan, age\_group (adult / under\_18), amount\_agorot, valid\_from\_month | The manager's price table; the newest row valid for a month wins |
-| `freezes` | id, customer\_id, start\_month, end\_month, reason | Whole calendar months; extends a tri-monthly period |
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable), entered\_by | Single-entry payments count these |
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
@@ -330,7 +328,7 @@ The home screen, as the manager sees it. Instructors don't get the Reports, Pric
 
 &#91;embedded content: admin customer page · sample data\]
 
-Everything about one customer in one place. Buttons that change data (check in, link a phone, unlink, change or clear a plan, freeze, edit profile) appear according to the logged-in staff member's role (see Users and roles). "Link a phone" shows the 6-digit code for the customer to enter on their phone; "Linked phones" lists each device with an Unlink button.
+Everything about one customer in one place. Buttons that change data (check in, link a phone, unlink, change or clear a plan, edit profile) appear according to the logged-in staff member's role (see Users and roles). "Link a phone" shows the 6-digit code for the customer to enter on their phone; "Linked phones" lists each device with an Unlink button.
 
 ### Admin: prices
 
@@ -360,10 +358,10 @@ Each answer replaces an *assumption* above; none of them changes the architectur
 - [ ] Under 18: is age checked on the 1st of the month, or on the day the plan is chosen?
 - [ ] A customer who doesn't come in at all during a month: really not charged?
 - [ ] Tri-monthly: once chosen, can the customer switch plans before the 3 months are up?
-- [ ] Freezes: do they push a tri-monthly period forward? Any minimum or maximum length?
+- [x] Freezes: the manager probably doesn't want them; dropped for now (decision 0022).
 - [ ] Report: the manager's email, and the recipients who get it after approval.
 - [ ] Should the report show the plan type as an extra column, to make checking it easier?
-- [ ] Photos: do we want them at all?
+- [ ] Photos: do we want them at all? (Left out for now, decision 0022; a nullable column can be added later.)
 - [ ] Health form: which official form to copy, how long it stays valid, and whether minors need a parent's signature.
 - [ ] Health form: confirm that instructors see only valid / expired, and only the manager opens the contents.
 - [ ] Punch cards: number of entries, price (and under-18 price), expiry, who records the purchase, whether unused entries carry over, and whether single entry is still needed.
@@ -384,9 +382,9 @@ Each answer replaces an *assumption* above; none of them changes the architectur
 Build in six milestones, each usable and testable on its own; hand them to Claude Code one at a time.
 
 1. **Foundation**: project layout, settings, SQLite schema and migrations, first manager account on first run, staff accounts with roles and server-side permission checks, the activity log, and the two app entry points (admin and public) sharing one core package. It ends with the frontend foundation: the React + TypeScript project with its admin and public builds, served by the two apps, with the first screens (setup, login) moved to React (decision 0020).
-2. **Customers, prices and plans**: customer create/edit/archive with date of birth, the price table with valid-from months, plan choices and corrections, freezes, and the monthly plan logic, with unit tests for every rule in Plans, prices and billing.
+2. **Customers, prices and plans**: customer create/edit/archive with date of birth, the price table with valid-from months, plan choices and corrections, and the monthly plan logic, with unit tests for every rule in Plans, prices and billing. Split into four features (decision 0022): Customers, Prices, Plan choices and monthly status, Plan corrections. Each ships its core logic, admin JSON routes and a plain, unstyled React page; freezes are dropped for now.
 3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, rate limiting, and manual check-in with plan selection and paper-form upload.
-4. **Admin screens**: dashboard with live check-ins and expiring health forms, customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role. Style every screen, admin and customer (including the milestone 3 phone pages), using the `frontend-design` skill. Test every manager-only action as an instructor and confirm it's refused.
+4. **Admin screens**: dashboard with live check-ins and expiring health forms, customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role, building on the plain pages from milestones 2 and 3. Style every screen, admin and customer (including the milestone 3 phone pages), using the `frontend-design` skill. Test every manager-only action as an instructor and confirm it's refused.
 5. **Report**: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan, age group and edge case.
 6. **Operations**: encrypted backups and restore, Windows services for both apps and `cloudflared`, the named Cloudflare tunnel on the gym domain, SMTP setup, a printable wall-QR page, and a setup guide for the gym PC.
 

@@ -38,5 +38,6 @@ What this makes easier, what it makes harder, and anything we now have to do bec
 Keep it short: under a page. Write it in English, in plain language the developer could explain in an interview.
 
 ## 3. Follow up
+- Add a line for the new record to the index `docs/decisions/README.md` (number, what it settled, when to read it). If it supersedes one, note that on the old record's line.
 - If the decision changes the stack, a hard rule or a convention, update CLAUDE.md to match and say what you changed.
 - If it contradicts the design doc, point that out and suggest the edit to the doc. Don't edit the design doc without asking.

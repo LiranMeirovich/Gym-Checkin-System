@@ -30,11 +30,13 @@ Run each check and report the results plainly. Never hide a failure.
 
 ## 4. Update the project status
 Update the **Project status** section of CLAUDE.md so the next session (which won't remember this one) knows where things stand:
-- What this feature finished, in one line.
-- The current milestone and the next feature to build.
-- Follow-ups found during this feature that weren't done.
+- Add this feature to the **Done** line: its name and decision number only, no details (git history and the decision record hold those).
+- Add any new core module the next features will use to **Key modules**.
+- Update the current milestone and the next feature to build.
 
-Keep it short and replace outdated lines instead of adding new ones each time. Also update the **Commands** section if this feature added any.
+CLAUDE.md is loaded into every session, so keep it short: replace outdated lines instead of adding new ones. Also update the **Commands** section if this feature added any.
+
+Update `docs/follow-ups.md`: add follow-ups found during this feature that weren't done, under the milestone they're due in, and remove the ones this feature finished.
 
 Suggest `/decision` for any significant technical choice made during the feature that has no record yet.
 
