@@ -53,6 +53,8 @@ class Permission(StrEnum):
     HEALTH_FORMS_VIEW_CONTENTS = "health_forms.view_contents"
     HEALTH_FORMS_UPLOAD_PAPER = "health_forms.upload_paper"
 
+    # The price table, upcoming changes and the history.
+    PRICES_VIEW = "prices.view"
     PRICES_EDIT = "prices.edit"
     # View, regenerate, approve and send.
     REPORTS_MANAGE = "reports.manage"
@@ -73,6 +75,7 @@ _INSTRUCTOR = frozenset(
         Permission.PHONES_LINK,
         Permission.HEALTH_FORMS_VIEW_STATUS,
         Permission.HEALTH_FORMS_UPLOAD_PAPER,
+        Permission.PRICES_VIEW,
     }
 )
 

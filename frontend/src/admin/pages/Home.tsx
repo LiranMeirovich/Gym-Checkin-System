@@ -9,7 +9,7 @@ export function Home() {
       <h1>שלום, {staff.display_name}</h1>
       <p>לוח הבקרה יגיע בהמשך.</p>
       <p>
-        <Link to="/customers">לקוחות</Link>
+        <Link to="/customers">לקוחות</Link> · <Link to="/prices">מחירון</Link>
       </p>
     </>
   );

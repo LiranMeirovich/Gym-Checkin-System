@@ -177,10 +177,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Price Screen */
+        get: operations["price_screen_api_prices_get"];
+        put?: never;
+        /** Change Prices */
+        post: operations["change_prices_api_prices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AgeGroup
+         * @description Which of a plan's two prices applies. The values are what the database
+         *     stores.
+         * @enum {string}
+         */
+        AgeGroup: "adult" | "under_18";
         /**
          * CustomerAdded
          * @description 201 from ``POST /api/customers``. ``reactivated``: the phone was an
@@ -362,6 +387,88 @@ export interface components {
             detail: "not_logged_in";
             /** Setup Needed */
             setup_needed: boolean;
+        };
+        /**
+         * Plan
+         * @description What a customer can choose for a month. The values are what the
+         *     database stores.
+         * @enum {string}
+         */
+        Plan: "monthly" | "tri_monthly" | "single_entry";
+        /** PriceChange */
+        PriceChange: {
+            plan: components["schemas"]["Plan"];
+            age_group: components["schemas"]["AgeGroup"];
+            /** Amount Agorot */
+            amount_agorot: number;
+        };
+        /**
+         * PriceChanges
+         * @description All of them apply from one month, together or not at all.
+         */
+        PriceChanges: {
+            /** Valid From Month */
+            valid_from_month: string;
+            /** Prices */
+            prices: components["schemas"]["PriceChange"][];
+        };
+        /**
+         * PriceInEffect
+         * @description One cell of the price table. Both are ``None`` if it's not set yet.
+         */
+        PriceInEffect: {
+            plan: components["schemas"]["Plan"];
+            age_group: components["schemas"]["AgeGroup"];
+            /** Amount Agorot */
+            amount_agorot: number | null;
+            /** Valid From Month */
+            valid_from_month: string | null;
+        };
+        /**
+         * PriceOverview
+         * @description ``upcoming`` is the change waiting for each later month, soonest
+         *     first. ``history`` is every row ever entered, latest month first.
+         */
+        PriceOverview: {
+            /** Current Month */
+            current_month: string;
+            /** Current */
+            current: components["schemas"]["PriceInEffect"][];
+            /** Upcoming */
+            upcoming: components["schemas"]["PriceRow"][];
+            /** History */
+            history: components["schemas"]["PriceRow"][];
+        };
+        /**
+         * PriceRow
+         * @description A row as it was entered. ``created_at`` is the gym's local time, with
+         *     its offset.
+         */
+        PriceRow: {
+            /** Id */
+            id: number;
+            plan: components["schemas"]["Plan"];
+            age_group: components["schemas"]["AgeGroup"];
+            /** Amount Agorot */
+            amount_agorot: number;
+            /** Valid From Month */
+            valid_from_month: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * PricesRefused
+         * @description 400: every part that breaks its rule, at once: ``valid_from_month``,
+         *     or a price as ``<plan>.<age_group>``. Nothing was saved.
+         */
+        PricesRefused: {
+            /** Errors */
+            errors: {
+                [key: string]: "invalid";
+            };
         };
         /**
          * Role
@@ -1058,6 +1165,100 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    price_screen_api_prices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceOverview"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    change_prices_api_prices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceChanges"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceOverview"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PricesRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
