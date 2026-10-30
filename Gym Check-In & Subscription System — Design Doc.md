@@ -59,6 +59,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | Edit a customer's date of birth (sets the under-18 price) | No | Yes |
 | Change or clear a plan already chosen | No | Yes |
 | Deactivate a customer (customers are never deleted; adding their phone again brings them back) | No | Yes |
+| See prices, upcoming changes and the price history | Yes | Yes |
 | Edit prices | No | Yes |
 | View, regenerate, approve and send reports | No | Yes |
 | Settings, backups and restore | No | Yes |
@@ -162,11 +163,12 @@ Customers choose their own plan on their phone at their first check-in of each m
 
 **Prices**
 
-- The manager keeps one price table: each plan has an adult price and an under-18 price. Only the manager can edit it, on the Prices screen.
-- Each price change has a "valid from" month. New prices apply from that month on; earlier months keep their old prices, so past reports never change.
+- The manager keeps one price table: each plan has an adult price and an under-18 price. All staff can see it on the Prices screen; only the manager can edit it.
+- Each price change has a "valid from" month: the current month or up to 24 months ahead, never a past one. New prices apply from that month on; earlier months keep their old prices, so past reports never change.
+- Changes are only ever added. Correcting a price or cancelling an upcoming change is another row for the same month, and the newest row for a month wins.
 - The price is copied onto the customer's choice when it's made, so later price changes don't affect it.
 - Under 18 is worked out from the customer's date of birth on the 1st of the month (*assumption*): someone who turns 18 mid-month pays the under-18 price until the next month.
-- The actual amounts aren't known yet; the system ships with placeholder prices that the manager replaces before launch.
+- The system ships with no prices: a placeholder could be copied onto a real customer's choice and charged. The manager enters the real ones before launch, and a price that isn't set shows as "not set".
 
 **Freezes** (*dropped for now*, decision 0022)
 
@@ -219,7 +221,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | `device_sessions` | id, customer\_id, token\_hash (unique), user\_agent, created\_at, last\_seen\_at, revoked\_at | One row per linked phone; at most 3 active per customer |
 | `link_codes` | id, customer\_id, code\_hash, expires\_at, used\_at, failed\_attempts | 6-digit code, 10-minute expiry, single use |
 | `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry), start\_month, end\_month, age\_group, unit\_price\_agorot, chosen\_at, chosen\_by (customer / admin), replaced\_by | Tri-monthly spans 3 months; corrections add a new row and point the old one at it |
-| `prices` | id, plan, age\_group (adult / under\_18), amount\_agorot, valid\_from\_month | The manager's price table; the newest row valid for a month wins |
+| `prices` | id, plan, age\_group (adult / under\_18), amount\_agorot, valid\_from\_month, created\_at | The manager's price table and its history; rows are only added. The row with the latest valid\_from\_month up to a month applies, and the newest row among those for the same month wins |
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable), entered\_by | Single-entry payments count these |
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
@@ -323,7 +325,7 @@ The link page appears only on a phone that isn't linked yet; the plan page only 
 
 &#91;embedded content: admin dashboard · sample data\]
 
-The home screen, as the manager sees it. Instructors don't get the Reports, Prices, Staff or Settings menus, or the report card. The report card shows where the latest month's report stands (generated, emailed to the manager, approved, sent); the backup card turns red if no backup succeeded in 2 days. "Locked · Unlock" opens the PIN prompt for edit mode.
+The home screen, as the manager sees it. Instructors don't get the Reports, Staff or Settings menus or the report card, and can only view Prices. The report card shows where the latest month's report stands (generated, emailed to the manager, approved, sent); the backup card turns red if no backup succeeded in 2 days. "Locked · Unlock" opens the PIN prompt for edit mode.
 
 ### Admin: customer page
 
@@ -333,7 +335,7 @@ Everything about one customer in one place. Buttons that change data (check in, 
 
 ### Admin: prices
 
-The manager's price table, one row per plan with an adult and an under-18 price (sample prices; the real ones come from the manager):
+The price table, one row per plan with an adult and an under-18 price (sample prices; the real ones come from the manager). All staff see it; only the manager gets the edit form:
 
 | Plan | Adult (₪) | Under 18 (₪) | Valid from |
 | --- | --- | --- | --- |
@@ -355,7 +357,7 @@ Each answer replaces an *assumption* above; none of them changes the architectur
 
 **For the manager**
 
-- [ ] Prices: the adult and under-18 price for each plan (placeholders until then).
+- [ ] Prices: the adult and under-18 price for each plan (entered on the Prices screen before launch; none are set until then).
 - [ ] Under 18: is age checked on the 1st of the month, or on the day the plan is chosen?
 - [ ] A customer who doesn't come in at all during a month: really not charged?
 - [ ] Tri-monthly: once chosen, can the customer switch plans before the 3 months are up?
