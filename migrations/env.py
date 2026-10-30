@@ -25,7 +25,7 @@ from sqlalchemy import Connection
 
 from app.core.config import get_settings
 from app.core.db import create_db_engine
-from app.core.models import Base, UTCDateTime
+from app.core.models import Base, MonthColumn, UTCDateTime
 
 config = context.config
 
@@ -36,14 +36,17 @@ if config.config_file_name is not None:
 
 
 def render_item(type_: str, obj: Any, autogen_context: AutogenContext) -> str | bool:
-    """Write UTCDateTime columns as plain ``sa.DateTime()`` in migrations.
+    """Write UTCDateTime and MonthColumn columns as plain ``sa.DateTime()``
+    and ``sa.Text()`` in migrations.
 
-    The column type in the database is the same either way; UTC handling
-    happens in Python. This keeps migration files independent of app code
-    that may be renamed or moved later.
+    The column type in the database is the same either way; UTC and month
+    handling happen in Python. This keeps migration files independent of app
+    code that may be renamed or moved later.
     """
     if type_ == "type" and isinstance(obj, UTCDateTime):
         return "sa.DateTime()"
+    if type_ == "type" and isinstance(obj, MonthColumn):
+        return "sa.Text()"
     return False  # Alembic's default rendering for everything else.
 
 
