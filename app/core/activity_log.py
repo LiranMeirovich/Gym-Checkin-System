@@ -42,6 +42,8 @@ class Action(StrEnum):
     CUSTOMER_DEACTIVATE = "customer.deactivate"
     CUSTOMER_REACTIVATE = "customer.reactivate"
 
+    PRICE_ADD = "price.add"
+
 
 class Target(StrEnum):
     """What kind of thing a change was made to; ``activity_log.target_type``.
@@ -52,6 +54,7 @@ class Target(StrEnum):
     # before/after.
     SETTINGS = "settings"
     CUSTOMER = "customer"
+    PRICE = "price"
 
 
 def record(
