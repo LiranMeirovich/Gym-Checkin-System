@@ -17,6 +17,7 @@ INSTRUCTOR_CAN = {
     "phones.link",
     "health_forms.view_status",
     "health_forms.upload_paper",
+    "prices.view",
 }
 
 

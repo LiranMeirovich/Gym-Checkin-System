@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
+from app.core.models import AgeGroup, Plan
 from app.core.permissions import Role
 
 # SQLite's integer range. A bigger id can't exist, and SQLite would refuse
@@ -201,3 +202,64 @@ class CustomerConflict(Answer):
 
     error: Literal["phone_taken", "customer_inactive"]
     customer_id: int | None = None
+
+
+# ── Prices ──────────────────────────────────────────────────────────────
+# Amounts are whole agorot; React shows and reads shekels. The real limits
+# and which months can be chosen are app.core.prices', which answers a broken
+# one with a field code, not a 422.
+
+# Four digits from 1000 on, then 01-12: exactly what ``Month.parse`` accepts.
+MonthText = Annotated[str, Field(pattern=r"^[1-9][0-9]{3}-(0[1-9]|1[0-2])$")]
+
+
+class PriceInEffect(Answer):
+    """One cell of the price table. Both are ``None`` if it's not set yet."""
+
+    plan: Plan
+    age_group: AgeGroup
+    amount_agorot: int | None
+    valid_from_month: MonthText | None
+
+
+class PriceRow(Answer):
+    """A row as it was entered. ``created_at`` is the gym's local time, with
+    its offset."""
+
+    id: int
+    plan: Plan
+    age_group: AgeGroup
+    amount_agorot: int
+    valid_from_month: MonthText
+    created_at: datetime
+
+
+class PriceOverview(Answer):
+    """``upcoming`` is the change waiting for each later month, soonest
+    first. ``history`` is every row ever entered, latest month first."""
+
+    current_month: MonthText
+    current: list[PriceInEffect]
+    upcoming: list[PriceRow]
+    history: list[PriceRow]
+
+
+class PriceChange(BaseModel):
+    plan: Plan
+    age_group: AgeGroup
+    # Strict, so "100" and 100.0 are malformed rather than quietly converted.
+    amount_agorot: int = Field(strict=True)
+
+
+class PriceChanges(BaseModel):
+    """All of them apply from one month, together or not at all."""
+
+    valid_from_month: MonthText
+    prices: list[PriceChange] = Field(max_length=50)
+
+
+class PricesRefused(Answer):
+    """400: every part that breaks its rule, at once: ``valid_from_month``,
+    or a price as ``<plan>.<age_group>``. Nothing was saved."""
+
+    errors: dict[str, Literal["invalid"]]
