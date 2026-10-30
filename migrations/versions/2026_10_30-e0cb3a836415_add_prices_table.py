@@ -53,7 +53,9 @@ def upgrade() -> None:
         sa.Column("valid_from_month", sa.Text(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint(
-            "length(valid_from_month) = 7 AND date(valid_from_month || '-01') IS valid_from_month || '-01'",
+            "length(valid_from_month) = 7"
+            " AND valid_from_month >= '1000-01'"
+            " AND date(valid_from_month || '-01') IS valid_from_month || '-01'",
             name=op.f("ck_prices_valid_from_month_is_a_month"),
         ),
         sa.CheckConstraint(

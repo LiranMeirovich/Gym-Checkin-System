@@ -154,13 +154,13 @@ function ChangeForm({ overview }: { overview: Overview }) {
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Set<string>>(new Set());
   const [formError, setFormError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [outcome, setOutcome] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setFormError(null);
-    setSaved(false);
+    setOutcome(null);
 
     const prices: Schemas["PriceChange"][] = [];
     const notAmounts = new Set<string>();
@@ -189,7 +189,12 @@ function ChangeForm({ overview }: { overview: Overview }) {
       if (data) {
         queryClient.setQueryData(PRICES_KEY, data);
         setAmounts({});
-        setSaved(true);
+        // An amount already in effect for that month adds no row.
+        setOutcome(
+          data.history.length > overview.history.length
+            ? "נשמר."
+            : "לא נוסף דבר: המחירים האלה כבר בתוקף באותו חודש.",
+        );
       } else if (response.status === 400 && error && "errors" in error) {
         setErrors(new Set(Object.keys(error.errors)));
       } else {
@@ -212,7 +217,7 @@ function ChangeForm({ overview }: { overview: Overview }) {
       </p>
       <form onSubmit={submit} autoComplete="off">
         {formError && <p role="alert">{formError}</p>}
-        {saved && <p role="status">נשמר.</p>}
+        {outcome && <p role="status">{outcome}</p>}
         <p>
           <label htmlFor="valid_from_month">בתוקף מחודש</label>{" "}
           <input

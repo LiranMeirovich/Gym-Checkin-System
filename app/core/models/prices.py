@@ -46,10 +46,12 @@ class Price(Base):
             "typeof(amount_agorot) = 'integer' AND amount_agorot >= 0",
             name="amount_is_whole_agorot",
         ),
-        # A real month in YYYY-MM. "IS", not "=": date() of anything else is
-        # NULL, and a NULL CHECK would pass.
+        # A real month in YYYY-MM, from the year 1000 on as ``Month`` requires.
+        # "IS", not "=": date() of anything else is NULL, and a NULL CHECK
+        # would pass.
         CheckConstraint(
             "length(valid_from_month) = 7"
+            " AND valid_from_month >= '1000-01'"
             " AND date(valid_from_month || '-01') IS valid_from_month || '-01'",
             name="valid_from_month_is_a_month",
         ),

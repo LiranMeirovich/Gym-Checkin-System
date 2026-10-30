@@ -77,6 +77,7 @@ def test_the_same_price_and_month_can_have_several_rows(db: Session) -> None:
         {"amount_agorot": 100.5},
         {"amount_agorot": "a lot"},
         {"valid_from_month": "2026-13"},
+        {"valid_from_month": "0999-01"},
         {"valid_from_month": "2026-00"},
         {"valid_from_month": "2026-3"},
         {"valid_from_month": "2026-11-01"},

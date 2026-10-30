@@ -121,15 +121,11 @@ def price_overview(db: Session) -> PriceOverview:
             for age_group in AgeGroup
         ],
         upcoming=[
-            upcoming[key]
-            for key in sorted(
-                upcoming,
-                key=lambda k: (
-                    k[2],
-                    list(Plan).index(k[0]),
-                    list(AgeGroup).index(k[1]),
-                ),
-            )
+            upcoming[plan, age_group, month]
+            for month in sorted({month for _, _, month in upcoming})
+            for plan in Plan
+            for age_group in AgeGroup
+            if (plan, age_group, month) in upcoming
         ],
         history=history,
     )

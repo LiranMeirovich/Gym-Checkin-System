@@ -3,7 +3,7 @@ role may do, the answers and error codes, and that refused requests save
 nothing. Amounts are made up."""
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -167,8 +167,10 @@ def test_a_save_answers_with_the_updated_overview(as_manager: Staff) -> None:
         (r["plan"], r["amount_agorot"], r["valid_from_month"]) for r in body["upcoming"]
     ] == [("monthly", 25000, "2026-11"), ("single_entry", 3050, "2026-11")]
     assert len(body["history"]) == 2
-    # The gym's local time, with its offset.
-    assert body["history"][0]["created_at"].endswith("+02:00")
+    # The gym's local time, with its offset: winter or summer time in Israel,
+    # since the row is stamped by the real clock.
+    created_at = datetime.fromisoformat(body["history"][0]["created_at"])
+    assert created_at.utcoffset() in {timedelta(hours=2), timedelta(hours=3)}
 
 
 def test_this_months_price_shows_as_current(as_manager: Staff) -> None:
