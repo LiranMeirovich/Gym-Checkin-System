@@ -4,7 +4,6 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 
 ## Any feature
 - Activity log (decision 0021): every feature adds its actions to `Action` and calls `record()` from its core functions. A migration that rebuilds `activity_log` must re-create its two triggers.
-- If "database is locked" shows up in practice, switch write requests to `BEGIN IMMEDIATE` in `app/core/db.py` (decision 0015).
 - Starlette warns that `httpx` for `TestClient` is deprecated in favour of `httpx2`. Look into it; swapping needs the developer's OK.
 - `openapi-typescript` has had no release since Feb 2026 and declares TypeScript 5; it runs on TypeScript 6 through an npm `overrides` entry. If it stays unmaintained or breaks on a TypeScript update, consider `@hey-api/openapi-ts` (needs the developer's OK).
 - Dev servers: a committable `.claude/launch.json` (admin/public uvicorn + Vite) reading the developer's own `.env`, for one-click previews.
@@ -15,7 +14,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Plan page: customers see their own prices. Decide whether they also see the whole price table (a new public route; the developer sees no reason to hide it).
 - Check-in: a price that isn't set must not stop a customer training; decide what an instructor's single-entry fallback records then (`choose_plan()` refuses with `PriceNotSetError`, decision 0025).
 - Plan page: the customer's own choice needs its own path in `app/core/plans.py` (`chosen_by = customer`, no staff member); `choose_plan()` is staff-only. `plan_options()` gives the page its prices.
-- Two plan saves at the same moment give a 500 ("database is locked": the second read a stale snapshot) instead of `month_covered`. The phone's double tap makes this likelier; `BEGIN IMMEDIATE` for writes (the "Any feature" item) would make the second wait and get the normal 409.
+- Health-form upload: requests hold the database's write lock for their whole transaction (decision 0027), so receive and check the file before the transaction does its database work.
 - Check-in: an instructor's manual check-in with no plan for the month records single entry; only the manager picks or changes plans (decision 0017). The change-plan route decides whether a single-entry → monthly correction covers the visits already made.
 - Opening a health form's contents is logged in the activity log (decision 0021).
 - The instructor's check-in screen shows only what check-in needs (name, health form valid or not, plan status), never date of birth, notes or activity-log entries (decision 0023).
@@ -33,6 +32,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 
 ## Milestone 5: report (from Plan corrections)
 - The report reads plan choices with the same rule as `_first_active()` in `app/core/plans.py`: active means no row replaces it, and a "no plan" row (`plan IS NULL`) covers nothing (decision 0026).
+- Generate the report outside a request's transaction (a scheduled job or its own short transactions): requests hold the write lock for their whole transaction (decision 0027), so a slow report inside one would hold up every other request.
 - Staff choose and correct only choices starting in the current month (decisions 0025, 0026). If the manager needs to fix last month before approving its report, or to stop a tri-monthly period that started earlier, widen that rule once report approval exists.
 
 ## Milestones 5–6: report, operations and hosting

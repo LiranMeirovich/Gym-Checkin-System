@@ -551,13 +551,16 @@ export interface components {
         };
         /**
          * PlanStatus
-         * @description ``covering`` is the choice covering ``current_month``, or ``None``.
-         *     ``history`` is every choice, latest month first.
+         * @description ``covering`` is the choice covering ``current_month``, or ``None``;
+         *     ``correctable`` says whether it may be changed or cleared (it started
+         *     this month). ``history`` is every choice, latest month first.
          */
         PlanStatus: {
             /** Current Month */
             current_month: string;
             covering: components["schemas"]["PlanChoiceRow"] | null;
+            /** Correctable */
+            correctable: boolean;
             /** Options */
             options: components["schemas"]["PlanOption"][];
             /** History */

@@ -1,6 +1,9 @@
-"""Database engine and request sessions: pragmas, and one transaction per
-request."""
+"""Database engine and request sessions: pragmas, one transaction per
+request, and requests starting with BEGIN IMMEDIATE."""
 
+import contextlib
+import sqlite3
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -11,7 +14,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from starlette.types import Receive, Scope, Send
 
-from app.core.db import BUSY_TIMEOUT_MS, DbSession, create_db_engine, get_engine
+from app.core.db import (
+    BUSY_TIMEOUT_MS,
+    DbSession,
+    create_db_engine,
+    get_db,
+    get_engine,
+)
 
 
 def test_pragmas_are_set_on_every_connection(tmp_path: Path) -> None:
@@ -133,3 +142,75 @@ def test_request_changes_are_rolled_back_on_error(
     assert client.post(f"/notes/lost?fail={fail}").status_code == status
 
     assert saved_notes() == []
+
+
+# ── BEGIN IMMEDIATE for requests ────────────────────────────────────────
+
+
+@pytest.fixture
+def notes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    with get_engine().begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE note (body TEXT NOT NULL)")
+
+
+def other_writer() -> sqlite3.Connection:
+    """A connection of its own that gives up at once if it can't write."""
+    connection = sqlite3.connect(get_engine().url.database, timeout=0)
+    connection.isolation_level = None
+    return connection
+
+
+def test_a_request_holds_the_write_lock_from_its_first_read(notes: None) -> None:
+    session = get_db()
+    db = next(session)
+    db.execute(text("SELECT count(*) FROM note"))
+
+    writer = other_writer()
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            writer.execute("BEGIN IMMEDIATE")
+    finally:
+        writer.close()
+        session.close()
+
+
+def test_other_transactions_keep_a_plain_begin(notes: None) -> None:
+    with get_engine().begin() as connection:
+        connection.exec_driver_sql("SELECT count(*) FROM note")
+        writer = other_writer()
+        try:
+            # A read takes no write lock, so another writer gets in.
+            writer.execute("BEGIN IMMEDIATE")
+            writer.execute("ROLLBACK")
+        finally:
+            writer.close()
+
+
+def test_a_second_request_waits_and_sees_what_the_first_saved(notes: None) -> None:
+    # Without IMMEDIATE the second would read 0 at once, and its write
+    # after the first commit would fail with "database is locked".
+    seen: list[int] = []
+    first = get_db()
+    db = next(first)
+    db.execute(text("INSERT INTO note (body) VALUES ('first')"))
+
+    def second_request() -> None:
+        session = get_db()
+        second = next(session)
+        seen.append(second.scalar(text("SELECT count(*) FROM note")))
+        second.execute(text("INSERT INTO note (body) VALUES ('second')"))
+        with contextlib.suppress(StopIteration):
+            next(session)
+
+    waiting = threading.Thread(target=second_request)
+    waiting.start()
+    # Give it time to reach its BEGIN and wait there.
+    waiting.join(timeout=0.3)
+    assert waiting.is_alive()
+    with contextlib.suppress(StopIteration):
+        next(first)
+    waiting.join(timeout=5)
+
+    assert seen == [1]
+    assert saved_notes() == ["first", "second"]

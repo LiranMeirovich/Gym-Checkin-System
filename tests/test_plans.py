@@ -458,9 +458,28 @@ def test_the_overview_with_nothing_chosen(db: Session, adult: Customer) -> None:
     overview = plan_overview(db, adult)
 
     assert overview.covering is None
+    assert overview.correctable is False
     assert all(o.price is None for o in overview.options)
     assert overview.history == []
     assert overview.replaced_by == {}
+
+
+@pytest.mark.parametrize(
+    ("plan", "start", "correctable"),
+    [
+        (Plan.MONTHLY, THIS_MONTH, True),
+        (Plan.TRI_MONTHLY, THIS_MONTH, True),
+        # Covers this month, but started in an earlier one.
+        (Plan.TRI_MONTHLY, Month(2026, 10), False),
+        (Plan.TRI_MONTHLY, Month(2026, 9), False),
+    ],
+)
+def test_the_overview_says_whether_the_covering_choice_is_correctable(
+    db: Session, adult: Customer, plan: Plan, start: Month, correctable: bool
+) -> None:
+    add_choice(db, adult, plan, start)
+
+    assert plan_overview(db, adult).correctable is correctable
 
 
 def test_the_overview_marks_replaced_choices(

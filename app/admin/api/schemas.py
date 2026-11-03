@@ -303,11 +303,13 @@ class PlanOption(Answer):
 
 
 class PlanStatus(Answer):
-    """``covering`` is the choice covering ``current_month``, or ``None``.
-    ``history`` is every choice, latest month first."""
+    """``covering`` is the choice covering ``current_month``, or ``None``;
+    ``correctable`` says whether it may be changed or cleared (it started
+    this month). ``history`` is every choice, latest month first."""
 
     current_month: MonthText
     covering: PlanChoiceRow | None
+    correctable: bool
     options: list[PlanOption]
     history: list[PlanChoiceRow]
 

@@ -4,6 +4,16 @@
 Both apps open the same SQLite file. WAL mode lets the other app keep
 reading while one writes; ``busy_timeout`` makes a second writer wait for
 the first instead of failing straight away.
+
+A request's transaction starts with ``BEGIN IMMEDIATE``, taking the write
+lock before its first read (decision 0027). Nearly every request writes
+(a logged-in one updates its staff session), and with a plain ``BEGIN`` a
+request that read before another committed can't write afterwards: SQLite
+fails it with "database is locked" straight away, ``busy_timeout`` or not.
+With ``IMMEDIATE`` the second request waits, then reads what the first
+saved, so two saves of the same thing get the normal refusal instead of a
+500. Other transactions (startup checks, short reads outside a request)
+keep a plain ``BEGIN``.
 """
 
 from collections.abc import Iterator
@@ -21,6 +31,9 @@ from app.core.config import get_settings
 # How long a write waits for another app's write to finish before giving
 # up with "database is locked". Requests should hold a write for far less.
 BUSY_TIMEOUT_MS = 5000
+
+# Execution option: when true, a transaction starts with BEGIN IMMEDIATE.
+IMMEDIATE = "gym_begin_immediate"
 
 
 def create_db_engine(path: Path) -> Engine:
@@ -55,7 +68,10 @@ def _on_connect(dbapi_connection: SQLiteConnection, _record: Any) -> None:
 
 
 def _on_begin(connection: Any) -> None:
-    connection.exec_driver_sql("BEGIN")
+    if connection.get_execution_options().get(IMMEDIATE):
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+    else:
+        connection.exec_driver_sql("BEGIN")
 
 
 @lru_cache
@@ -73,8 +89,10 @@ def get_db() -> Iterator[Session]:
 
     Commits when the route returns, rolls back if it raises (including an
     ``HTTPException``), so a request's changes are saved all or nothing.
+    Starts with ``BEGIN IMMEDIATE`` (see the module docstring).
     """
-    with Session(get_engine()) as session, session.begin():
+    engine = get_engine().execution_options(**{IMMEDIATE: True})
+    with Session(engine) as session, session.begin():
         yield session
 
 

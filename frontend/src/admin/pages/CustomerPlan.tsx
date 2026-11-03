@@ -89,7 +89,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
       )}
       {canManage &&
         covering &&
-        (covering.start_month === data.current_month ? (
+        (data.correctable ? (
           <CorrectForm
             // A new covering choice starts a fresh form.
             key={covering.id}

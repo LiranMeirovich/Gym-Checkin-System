@@ -106,6 +106,8 @@ class PlanOverview:
     current_month: Month
     # The active choice covering this month, or ``None``.
     covering: PlanChoice | None
+    # Whether ``covering`` may be corrected or cleared (``is_correctable``).
+    correctable: bool
     # Every plan with this customer's price for this month, in a fixed order.
     options: list[PlanOption]
     # Every choice ever made for the customer, latest month first, newest
@@ -144,6 +146,13 @@ def covering_choice(db: Session, customer: Customer, month: Month) -> PlanChoice
     return _first_active(db, customer, month, month)
 
 
+def is_correctable(choice: PlanChoice) -> bool:
+    """Whether ``choice``'s months allow a correction: it has a plan and
+    starts in the current month. One that started earlier is in a past
+    month's report. (Being replaced already is ``correct_plan``'s check.)"""
+    return choice.plan is not None and choice.start_month == Month.current()
+
+
 def choice_of(db: Session, customer: Customer, choice_id: int) -> PlanChoice | None:
     """``customer``'s choice ``choice_id``, or ``None`` if it isn't theirs."""
     return db.scalar(
@@ -163,9 +172,11 @@ def plan_overview(db: Session, customer: Customer) -> PlanOverview:
             .order_by(PlanChoice.start_month.desc(), PlanChoice.id.desc())
         )
     )
+    covering = covering_choice(db, customer, today)
     return PlanOverview(
         current_month=today,
-        covering=covering_choice(db, customer, today),
+        covering=covering,
+        correctable=covering is not None and is_correctable(covering),
         options=plan_options(db, customer, today),
         history=history,
         # A correction is always the same customer's (a trigger checks), so
@@ -240,11 +251,11 @@ def correct_plan(
     )
     if replacement is not None:
         raise ChoiceReplacedError(replacement)
-    if choice.plan is None:
-        raise NotCorrectableError("a cleared choice has no plan to correct")
+    if not is_correctable(choice):
+        raise NotCorrectableError(
+            "only a choice with a plan, starting this month, can be corrected"
+        )
     month = choice.start_month
-    if month != Month.current():
-        raise NotCorrectableError(f"{month} is not the current month")
 
     if plan is None:
         action = Action.PLAN_CLEAR

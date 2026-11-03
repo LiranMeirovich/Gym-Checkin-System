@@ -204,6 +204,7 @@ def test_nothing_chosen_yet(as_manager: Staff, customer: Customer) -> None:
     assert answer.json() == {
         "current_month": "2026-11",
         "covering": None,
+        "correctable": False,
         "options": [
             {"plan": plan, "age_group": "adult", "amount_agorot": None}
             for plan in ("monthly", "tri_monthly", "single_entry")
@@ -235,6 +236,7 @@ def test_a_choice_answers_with_the_updated_status(
     chosen_at = datetime.fromisoformat(covering["chosen_at"])
     assert chosen_at.utcoffset() in {timedelta(hours=2), timedelta(hours=3)}
     assert body["history"] == [covering]
+    assert body["correctable"] is True
     assert [o["amount_agorot"] for o in body["options"]] == [25000, 65000, 4000]
 
 
@@ -526,6 +528,10 @@ def test_a_choice_from_an_earlier_month_is_refused(
         assert answer.status_code == 400
         assert answer.json() == {"error": "not_correctable"}
     assert choices_in_db(db) == 1
+    # The status says so, so the page doesn't offer the change.
+    status = as_manager.get(customer.id).json()
+    assert status["covering"]["id"] == october.id
+    assert status["correctable"] is False
 
 
 def test_a_no_plan_row_is_not_correctable(
