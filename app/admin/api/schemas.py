@@ -6,24 +6,15 @@ import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, Field
 
+from app.core.http import Answer
 from app.core.models import AgeGroup, ChosenBy, Plan
 from app.core.permissions import Role
 
 # SQLite's integer range. A bigger id can't exist, and SQLite would refuse
 # to look it up (a 500), so it's refused as a malformed request instead.
 MAX_ID = 2**63 - 1
-
-
-class Answer(BaseModel):
-    """Base for response shapes. Fields with a default are always sent, so
-    the generated TypeScript types mark them required, not optional."""
-
-    model_config = ConfigDict(
-        json_schema_mode_override="serialization",
-        json_schema_serialization_defaults_required=True,
-    )
 
 
 class NotLoggedIn(Answer):

@@ -62,7 +62,8 @@ def test_the_public_export_works_with_its_docs_switched_off(tmp_path: Path) -> N
 
     main(["public", str(target)])
 
-    assert json.loads(target.read_text(encoding="utf-8"))["paths"] == {}
+    spec = json.loads(target.read_text(encoding="utf-8"))
+    assert set(spec["paths"]) == {"/api/link", "/api/me"}
 
 
 @pytest.mark.parametrize("argv", [[], ["admin"], ["nope", "x.json"]])

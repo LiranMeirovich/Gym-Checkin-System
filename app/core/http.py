@@ -1,10 +1,12 @@
-"""HTTP plumbing both apps share: the ``/api`` prefix, ``no-store`` on every
-API answer, and the same-origin check on every unsafe request.
+"""HTTP plumbing both apps share: the ``/api`` prefix, the base of every API
+answer, ``no-store`` on every API answer, and the same-origin check on
+every unsafe request.
 
 Here rather than in ``app.admin`` so the public app, the one reachable
 from the internet, never imports admin code.
 """
 
+from pydantic import BaseModel, ConfigDict
 from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
@@ -14,6 +16,16 @@ API_PREFIX = "/api"
 
 # Methods that change something. GET and HEAD must never change anything.
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+class Answer(BaseModel):
+    """Base for response shapes. Fields with a default are always sent, so
+    the generated TypeScript types mark them required, not optional."""
+
+    model_config = ConfigDict(
+        json_schema_mode_override="serialization",
+        json_schema_serialization_defaults_required=True,
+    )
 
 
 class NoStoreMiddleware:

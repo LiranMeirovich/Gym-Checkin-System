@@ -40,10 +40,21 @@ def test_app_refuses_to_start_on_invalid_config(
 def test_public_app_registers_only_expected_routes() -> None:
     # An allowlist: any new public route (or FastAPI's auto-generated docs)
     # fails this test until it's added here on purpose.
-    paths = {route.path for route in public_app.routes}
+    # FastAPI keeps each included router as one entry without a path, so
+    # the API routes are read from the OpenAPI spec; none of them may be
+    # left out of it, or it could hide from this list.
+    included = [route for route in public_app.routes if not hasattr(route, "path")]
+    assert all(
+        route.include_in_schema
+        for router in included
+        for route in router.original_router.routes
+    )
+    paths = set(public_app.openapi()["paths"]) | {
+        route.path for route in public_app.routes if hasattr(route, "path")
+    }
 
     # /assets and the catch-all serve the public React build (app.core.spa).
-    assert paths == {"/health", "/assets", "/{path:path}"}
+    assert paths == {"/health", "/api/link", "/api/me", "/assets", "/{path:path}"}
 
 
 def test_each_app_serves_its_own_frontend_build() -> None:

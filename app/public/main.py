@@ -7,9 +7,10 @@ Run with: uvicorn app.public.main:app --host 127.0.0.1 --port 8001
 
 from fastapi import FastAPI
 
-from app.core.http import NoStoreMiddleware, SameOriginMiddleware
+from app.core.http import API_PREFIX, NoStoreMiddleware, SameOriginMiddleware
 from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
+from app.public.api import link as api_link
 
 # FastAPI adds /docs, /redoc and /openapi.json by default. On the public app
 # they would publish a map of every route to anyone, so they're turned off.
@@ -24,6 +25,7 @@ app.add_middleware(NoStoreMiddleware)
 # Without it, another website could post a link form from the customer's
 # own phone. The tunnel hostname check waits on hosting (decision 0028).
 app.add_middleware(SameOriginMiddleware)
+app.include_router(api_link.router, prefix=API_PREFIX)
 
 
 @app.get("/health")
