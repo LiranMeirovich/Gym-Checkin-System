@@ -11,11 +11,6 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Add branch protection on `main` requiring the "Lint and test", "Frontend checks" and "Scan for secrets" checks (each can be selected once it has run on a PR). Remove this line once it's set up.
 - Refactor (planned, protected area: staff auth): move first-run setup's rules (`create_manager()` in `app/admin/api/setup.py`: PIN check, PIN match, gym-name check, save order) into `app/core` (e.g. a `first_run_setup()` returning field errors), so the route stays thin as CLAUDE.md requires. Carried over from the old Jinja route; behaviour must not change (the `test_admin_api_setup.py` tests pin it).
 
-## Milestone 2: plan corrections (from Plan choices)
-- Clearing a plan: `plan_choices` refuses UPDATE and DELETE, so "no plan for this month" has to be a replacing row of some kind; decide its shape (likely a schema change) (decision 0025).
-- The history lists replaced choices too; mark which ones are no longer active (`replaces_id` says what each row replaced).
-- Staff choose for the current month only. If the manager needs to fix last month before approving its report, widen that rule here.
-
 ## Milestone 3: phone linking & check-in
 - Plan page: customers see their own prices. Decide whether they also see the whole price table (a new public route; the developer sees no reason to hide it).
 - Check-in: a price that isn't set must not stop a customer training; decide what an instructor's single-entry fallback records then (`choose_plan()` refuses with `PriceNotSetError`, decision 0025).
@@ -36,6 +31,10 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Lock screen: style it, add the role-filtered menus in React. A polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
 - The "אין חיבור לשרת" error markup is copied in six screens (setup, lock screen, the three customer pages); make it a shared component.
 
+## Milestone 5: report (from Plan corrections)
+- The report reads plan choices with the same rule as `_first_active()` in `app/core/plans.py`: active means no row replaces it, and a "no plan" row (`plan IS NULL`) covers nothing (decision 0026).
+- Staff choose and correct only choices starting in the current month (decisions 0025, 0026). If the manager needs to fix last month before approving its report, or to stop a tri-monthly period that started earlier, widen that rule once report approval exists.
+
 ## Milestones 5–6: report, operations and hosting
 - SMTP host/user and the backup folder become settings (after hosting).
 - Relative `GYM_DATABASE_PATH` and the `.env` lookup depend on the process's working directory. A missing DB file stops startup, but the two apps could still open different files if started from different folders. Pin a base folder or require absolute paths in prod.
@@ -52,7 +51,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Enter the real prices on the Prices screen; none ship with the system.
 
 ## Code review leftovers (low priority)
-- The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two and `plan_choices`' four (append-only, overlap, same customer).
+- The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two and `plan_choices`' five (append-only, overlap, same customer, same months).
 - Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`, now including the customer and price tests), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
 - Setup validates the gym name twice.
 - Two migration heads give Alembic's raw error at startup instead of `DatabaseNotReadyError`.
