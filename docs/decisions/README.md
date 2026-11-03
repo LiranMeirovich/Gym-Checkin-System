@@ -28,3 +28,4 @@ One line per decision: what it settled, and when to read it. Read the full recor
 | [0022](0022-split-milestone-2-into-features.md) | Milestone 2 split into four features, no freezes | milestone 2 features |
 | [0023](0023-customer-identity-phone-and-active-flag.md) | One customer per phone (E.164, Israeli rules), `active` flag instead of `archived_at`, date of birth required | customers, phone numbers, phone linking |
 | [0024](0024-prices-start-empty-and-are-only-added.md) | No shipped prices, `YYYY-MM` months, add-only price rows from the current month on, all staff can view prices | prices, plan choices, anything using a month |
+| [0025](0025-plan-choices-are-append-only-rows.md) | Plan choices are append-only rows; corrections link with `replaces_id`; one active choice per customer-month (core + trigger); staff choose for the current month only; an unset price refuses the choice | plan choices, corrections, check-in plan fallback, reports |

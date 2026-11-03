@@ -20,6 +20,13 @@ export function customerKey(id: number) {
   return ["customers", id] as const;
 }
 
+// The customer's plan status. Under the customer's key, but a save that
+// only writes the customer with setQueryData doesn't refresh it, so saves
+// that can change the age group or the prices invalidate it themselves.
+export function planKey(id: number) {
+  return ["customers", id, "plan"] as const;
+}
+
 // Shown next to the field. Each field has one rule, so one message each.
 export const FIELD_ERRORS: Record<CustomerField, string> = {
   first_name: "שם פרטי: 1 עד 50 תווים",

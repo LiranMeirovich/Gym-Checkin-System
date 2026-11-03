@@ -5,6 +5,7 @@ tables."""
 from app.core.models.activity_log import ActivityLogEntry
 from app.core.models.base import Base, MonthColumn, UTCDateTime
 from app.core.models.customers import Customer
+from app.core.models.plan_choices import ChosenBy, PlanChoice
 from app.core.models.prices import AgeGroup, Plan, Price
 from app.core.models.settings import Setting
 from app.core.models.staff import StaffUser
@@ -14,9 +15,11 @@ __all__ = [
     "ActivityLogEntry",
     "AgeGroup",
     "Base",
+    "ChosenBy",
     "Customer",
     "MonthColumn",
     "Plan",
+    "PlanChoice",
     "Price",
     "Setting",
     "StaffSession",

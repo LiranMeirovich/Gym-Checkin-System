@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-from app.core.models import AgeGroup, Plan
+from app.core.models import AgeGroup, ChosenBy, Plan
 from app.core.permissions import Role
 
 # SQLite's integer range. A bigger id can't exist, and SQLite would refuse
@@ -263,3 +263,68 @@ class PricesRefused(Answer):
     or a price as ``<plan>.<age_group>``. Nothing was saved."""
 
     errors: dict[str, Literal["invalid"]]
+
+
+# ── Plans ───────────────────────────────────────────────────────────────
+# What covers a customer's month and the manager's choice. The price and age
+# group are worked out on the server and copied onto the choice; a request
+# never carries them.
+
+
+class PlanChoiceRow(Answer):
+    """A choice as it was made. ``chosen_at`` is the gym's local time, with
+    its offset. ``staff_name`` is who chose it when staff did. ``replaces_id``
+    is the choice it corrected, if any."""
+
+    id: int
+    plan: Plan
+    start_month: MonthText
+    end_month: MonthText
+    age_group: AgeGroup
+    unit_price_agorot: int
+    chosen_at: datetime
+    chosen_by: ChosenBy
+    staff_name: str | None
+    replaces_id: int | None
+
+
+class PlanOption(Answer):
+    """A plan with this customer's price this month; ``None`` if it's not
+    set, and then it can't be chosen."""
+
+    plan: Plan
+    age_group: AgeGroup
+    amount_agorot: int | None
+
+
+class PlanStatus(Answer):
+    """``covering`` is the choice covering ``current_month``, or ``None``.
+    ``history`` is every choice, latest month first."""
+
+    current_month: MonthText
+    covering: PlanChoiceRow | None
+    options: list[PlanOption]
+    history: list[PlanChoiceRow]
+
+
+class PlanChoiceRequest(BaseModel):
+    plan: Plan
+    # The current month; sent so a page left open over the 1st can't choose
+    # for a month it didn't show.
+    month: MonthText
+
+
+class PlanRefused(Answer):
+    """400. ``month_not_choosable``: not the current month.
+    ``price_not_set``: the manager hasn't entered this plan's price for the
+    customer's age group. Nothing was saved."""
+
+    error: Literal["month_not_choosable", "price_not_set"]
+
+
+class PlanConflict(Answer):
+    """409. ``month_covered``: a month the plan would cover already has a
+    choice, ``choice_id``. ``customer_inactive``: reactivate them first."""
+
+    error: Literal["month_covered", "customer_inactive"]
+    choice_id: int | None = None

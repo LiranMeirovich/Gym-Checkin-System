@@ -11,12 +11,16 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Add branch protection on `main` requiring the "Lint and test", "Frontend checks" and "Scan for secrets" checks (each can be selected once it has run on a PR). Remove this line once it's set up.
 - Refactor (planned, protected area: staff auth): move first-run setup's rules (`create_manager()` in `app/admin/api/setup.py`: PIN check, PIN match, gym-name check, save order) into `app/core` (e.g. a `first_run_setup()` returning field errors), so the route stays thin as CLAUDE.md requires. Carried over from the old Jinja route; behaviour must not change (the `test_admin_api_setup.py` tests pin it).
 
-## Milestone 2: plan choices (from Prices)
-- No prices ship with the system, so `price_for()` can return `None`. Choosing a plan must handle a price that isn't set instead of guessing an amount.
+## Milestone 2: plan corrections (from Plan choices)
+- Clearing a plan: `plan_choices` refuses UPDATE and DELETE, so "no plan for this month" has to be a replacing row of some kind; decide its shape (likely a schema change) (decision 0025).
+- The history lists replaced choices too; mark which ones are no longer active (`replaces_id` says what each row replaced).
+- Staff choose for the current month only. If the manager needs to fix last month before approving its report, widen that rule here.
 
 ## Milestone 3: phone linking & check-in
 - Plan page: customers see their own prices. Decide whether they also see the whole price table (a new public route; the developer sees no reason to hide it).
-- Check-in: a price that isn't set must not stop a customer training; decide what an instructor's single-entry fallback records then.
+- Check-in: a price that isn't set must not stop a customer training; decide what an instructor's single-entry fallback records then (`choose_plan()` refuses with `PriceNotSetError`, decision 0025).
+- Plan page: the customer's own choice needs its own path in `app/core/plans.py` (`chosen_by = customer`, no staff member); `choose_plan()` is staff-only. `plan_options()` gives the page its prices.
+- Two plan saves at the same moment give a 500 ("database is locked": the second read a stale snapshot) instead of `month_covered`. The phone's double tap makes this likelier; `BEGIN IMMEDIATE` for writes (the "Any feature" item) would make the second wait and get the normal 409.
 - Check-in: an instructor's manual check-in with no plan for the month records single entry; only the manager picks or changes plans (decision 0017). The change-plan route decides whether a single-entry → monthly correction covers the visits already made.
 - Opening a health form's contents is logged in the activity log (decision 0021).
 - The instructor's check-in screen shows only what check-in needs (name, health form valid or not, plan status), never date of birth, notes or activity-log entries (decision 0023).
@@ -48,7 +52,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Enter the real prices on the Prices screen; none ship with the system.
 
 ## Code review leftovers (low priority)
-- The append-only triggers live only in the migration, not the model (a `create_all` schema would lack them).
+- The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two and `plan_choices`' four (append-only, overlap, same customer).
 - Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`, now including the customer and price tests), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
 - Setup validates the gym name twice.
 - Two migration heads give Alembic's raw error at startup instead of `DatabaseNotReadyError`.
@@ -56,4 +60,6 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - `app/core/spa.py` answers paths whose last segment has a dot with 404, so a future React route with a dot in a parameter would break on reload.
 - Lock's network-failure path (always goes to the lock screen) wasn't reproduced by hand.
 - The Prices page's Hebrew errors repeat the 24-month and ₪10,000 limits from `app/core/prices.py`; update them together.
+- The Plan section's history loads each staff name lazily (`PlanChoice.staff`); `selectinload` would make it one query.
+- `age_group_for()` (`app/core/plans.py`) and `_years_before()` (`app/core/customers.py`) both do birthday date maths; share one helper.
 - `frontend/` has no test runner, so `shekelsToAgorot()` was only checked by hand. Test it if one is added.

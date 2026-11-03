@@ -100,7 +100,7 @@ def customer_list(db: DbSession, _login: CanView, active: bool = True) -> Custom
 def customer_page(
     customer_id: CustomerId, db: DbSession, _login: CanView
 ) -> CustomerDetails:
-    return details(_get(db, customer_id))
+    return details(customer_or_404(db, customer_id))
 
 
 @router.post(
@@ -131,7 +131,7 @@ def add(
 def edit(
     customer_id: CustomerId, body: CustomerEdit, db: DbSession, login: CanEdit
 ) -> CustomerDetails | JSONResponse:
-    customer = _get(db, customer_id)
+    customer = customer_or_404(db, customer_id)
     try:
         edit_customer(db, customer, **body.model_dump(), by=login.staff)
     except InvalidCustomerError as refused:
@@ -154,7 +154,7 @@ def set_date_of_birth(
     db: DbSession,
     login: CanEditBirthDate,
 ) -> CustomerDetails | JSONResponse:
-    customer = _get(db, customer_id)
+    customer = customer_or_404(db, customer_id)
     try:
         change_date_of_birth(db, customer, body.date_of_birth, by=login.staff)
     except InvalidCustomerError as refused:
@@ -168,7 +168,7 @@ def set_date_of_birth(
 def deactivate(
     customer_id: CustomerId, db: DbSession, login: CanArchive
 ) -> CustomerDetails:
-    customer = _get(db, customer_id)
+    customer = customer_or_404(db, customer_id)
     deactivate_customer(db, customer, by=login.staff)
     return details(customer)
 
@@ -177,7 +177,7 @@ def deactivate(
 def reactivate(
     customer_id: CustomerId, db: DbSession, login: CanAdd
 ) -> CustomerDetails:
-    customer = _get(db, customer_id)
+    customer = customer_or_404(db, customer_id)
     reactivate_customer(db, customer, by=login.staff)
     return details(customer)
 
@@ -195,7 +195,7 @@ def details(customer: Customer) -> CustomerDetails:
     )
 
 
-def _get(db: DbSession, customer_id: int) -> Customer:
+def customer_or_404(db: DbSession, customer_id: int) -> Customer:
     customer = db.get(Customer, customer_id)
     if customer is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND)

@@ -195,6 +195,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/{customer_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Plan Status */
+        get: operations["plan_status_api_customers__customer_id__plan_get"];
+        put?: never;
+        /** Choose */
+        post: operations["choose_api_customers__customer_id__plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -206,6 +224,12 @@ export interface components {
          * @enum {string}
          */
         AgeGroup: "adult" | "under_18";
+        /**
+         * ChosenBy
+         * @description Who made a choice. The values are what the database stores.
+         * @enum {string}
+         */
+        ChosenBy: "customer" | "staff";
         /**
          * CustomerAdded
          * @description 201 from ``POST /api/customers``. ``reactivated``: the phone was an
@@ -395,6 +419,92 @@ export interface components {
          * @enum {string}
          */
         Plan: "monthly" | "tri_monthly" | "single_entry";
+        /** PlanChoiceRequest */
+        PlanChoiceRequest: {
+            plan: components["schemas"]["Plan"];
+            /** Month */
+            month: string;
+        };
+        /**
+         * PlanChoiceRow
+         * @description A choice as it was made. ``chosen_at`` is the gym's local time, with
+         *     its offset. ``staff_name`` is who chose it when staff did. ``replaces_id``
+         *     is the choice it corrected, if any.
+         */
+        PlanChoiceRow: {
+            /** Id */
+            id: number;
+            plan: components["schemas"]["Plan"];
+            /** Start Month */
+            start_month: string;
+            /** End Month */
+            end_month: string;
+            age_group: components["schemas"]["AgeGroup"];
+            /** Unit Price Agorot */
+            unit_price_agorot: number;
+            /**
+             * Chosen At
+             * Format: date-time
+             */
+            chosen_at: string;
+            chosen_by: components["schemas"]["ChosenBy"];
+            /** Staff Name */
+            staff_name: string | null;
+            /** Replaces Id */
+            replaces_id: number | null;
+        };
+        /**
+         * PlanConflict
+         * @description 409. ``month_covered``: a month the plan would cover already has a
+         *     choice, ``choice_id``. ``customer_inactive``: reactivate them first.
+         */
+        PlanConflict: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "month_covered" | "customer_inactive";
+            /** Choice Id */
+            choice_id: number | null;
+        };
+        /**
+         * PlanOption
+         * @description A plan with this customer's price this month; ``None`` if it's not
+         *     set, and then it can't be chosen.
+         */
+        PlanOption: {
+            plan: components["schemas"]["Plan"];
+            age_group: components["schemas"]["AgeGroup"];
+            /** Amount Agorot */
+            amount_agorot: number | null;
+        };
+        /**
+         * PlanRefused
+         * @description 400. ``month_not_choosable``: not the current month.
+         *     ``price_not_set``: the manager hasn't entered this plan's price for the
+         *     customer's age group. Nothing was saved.
+         */
+        PlanRefused: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "month_not_choosable" | "price_not_set";
+        };
+        /**
+         * PlanStatus
+         * @description ``covering`` is the choice covering ``current_month``, or ``None``.
+         *     ``history`` is every choice, latest month first.
+         */
+        PlanStatus: {
+            /** Current Month */
+            current_month: string;
+            covering: components["schemas"]["PlanChoiceRow"] | null;
+            /** Options */
+            options: components["schemas"]["PlanOption"][];
+            /** History */
+            history: components["schemas"]["PlanChoiceRow"][];
+        };
         /** PriceChange */
         PriceChange: {
             plan: components["schemas"]["Plan"];
@@ -1263,6 +1373,136 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_status_api_customers__customer_id__plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanStatus"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    choose_api_customers__customer_id__plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanChoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanStatus"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanConflict"];
+                };
             };
             /** @description Validation Error */
             422: {

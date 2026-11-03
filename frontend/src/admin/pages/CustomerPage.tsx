@@ -1,7 +1,8 @@
 // One customer's page: their details, editing name, phone and notes, and
 // the manager's date-of-birth change and deactivation. An inactive
-// customer is read-only until reactivated. Linked phones, the health form
-// and plans join this page in later features.
+// customer is read-only until reactivated. The Plan section is its own
+// component; linked phones and the health form join this page in later
+// features.
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
@@ -14,10 +15,12 @@ import {
   formatDate,
   formatPhone,
   isManager,
+  planKey,
   type Customer,
   type CustomerField,
 } from "../customers";
 import { useSession } from "../session";
+import { CustomerPlan } from "./CustomerPlan";
 
 type Errors = Partial<Record<CustomerField, string>>;
 
@@ -91,6 +94,9 @@ function CustomerDetails({ customer }: { customer: Customer }) {
       const { data, error, response } = await send();
       if (data) {
         queryClient.setQueryData(customerKey(data.id), data);
+        // A new date of birth can change the age group, and so the prices
+        // the Plan section offers.
+        void queryClient.invalidateQueries({ queryKey: planKey(data.id) });
         void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
         setReactivated(false);
         return { saved: true };
@@ -176,6 +182,8 @@ function CustomerDetails({ customer }: { customer: Customer }) {
           }
         />
       )}
+
+      {!editing && <CustomerPlan customer={customer} />}
     </>
   );
 }
