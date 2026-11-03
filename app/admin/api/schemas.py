@@ -351,3 +351,30 @@ class CorrectionConflict(Answer):
 
     error: Literal["choice_replaced", "month_covered", "customer_inactive"]
     choice_id: int | None = None
+
+
+# ── Linked phones ───────────────────────────────────────────────────────
+# Times are the gym's local time, with their offset.
+
+
+class LinkCodeIssued(Answer):
+    """The code to read out to the customer. Shown once: only its hash is
+    kept, and a new code cancels this one."""
+
+    code: str
+    expires_at: datetime
+
+
+class LinkedPhone(Answer):
+    id: int
+    # The phone's browser, as it described itself: only for telling the
+    # customer's phones apart.
+    user_agent: str
+    linked_at: datetime
+    last_used_at: datetime
+
+
+class LinkedPhones(Answer):
+    """The customer's live phones, most recently used first."""
+
+    phones: list[LinkedPhone]
