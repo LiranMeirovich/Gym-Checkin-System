@@ -7,6 +7,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from sqlalchemy.exc import IntegrityError
 
 from app.core.db import get_engine
 from app.core.models import Base
@@ -151,3 +152,73 @@ def test_offline_sql_scripts_are_refused(alembic_config: Config) -> None:
     # A printed SQL script would run without the foreign-key handling.
     with pytest.raises(RuntimeError, match="offline migrations"):
         command.upgrade(alembic_config, "head", sql=True)
+
+
+# ── 818f444bb393: "no plan" rows in plan_choices ────────────────────────
+# The table is rebuilt, so rows made before it must come through unchanged,
+# and the downgrade must not drop history it can't hold.
+
+BEFORE_NO_PLAN_ROWS = "391fa9399bd0"
+
+SEED_PLAN_CHOICES = (
+    "INSERT INTO customers (id, first_name, last_name, phone, date_of_birth,"
+    " notes, created_at, active) VALUES (1, 'Dana', 'Levi', '+972501234567',"
+    " '1990-05-01', '', '2026-10-30 09:00:00.000000', 1)",
+    "INSERT INTO staff_users (id, display_name, role, pin_hash,"
+    " failed_attempts, active, created_at) VALUES (1, 'Noa', 'manager',"
+    " '$argon2id$v=19$m=65536,t=3,p=4$fake', 0, 1,"
+    " '2026-10-30 09:00:00.000000')",
+    "INSERT INTO plan_choices (id, customer_id, plan, start_month, end_month,"
+    " age_group, unit_price_agorot, chosen_at, chosen_by, staff_user_id,"
+    " replaces_id) VALUES"
+    " (1, 1, 'single_entry', '2026-11', '2026-11', 'adult', 4000,"
+    " '2026-11-03 09:00:00.000000', 'staff', 1, NULL),"
+    " (2, 1, 'tri_monthly', '2026-11', '2027-01', 'adult', 60000,"
+    " '2026-11-03 10:00:00.000000', 'customer', NULL, 1)",
+)
+
+
+def plan_choice_rows() -> list[tuple[object, ...]]:
+    with get_engine().connect() as connection:
+        return connection.exec_driver_sql(
+            "SELECT * FROM plan_choices ORDER BY id"
+        ).fetchall()
+
+
+def test_plan_choices_come_through_the_no_plan_rebuild(
+    alembic_config: Config,
+) -> None:
+    command.upgrade(alembic_config, BEFORE_NO_PLAN_ROWS)
+    with get_engine().begin() as connection:
+        for statement in SEED_PLAN_CHOICES:
+            connection.exec_driver_sql(statement)
+    before = plan_choice_rows()
+
+    command.upgrade(alembic_config, "head")
+
+    assert plan_choice_rows() == before
+    # The rebuilt table is still append-only.
+    with get_engine().begin() as connection, pytest.raises(IntegrityError):
+        connection.exec_driver_sql("DELETE FROM plan_choices")
+
+
+def test_the_downgrade_keeps_no_plan_rows(alembic_config: Config) -> None:
+    command.upgrade(alembic_config, BEFORE_NO_PLAN_ROWS)
+    with get_engine().begin() as connection:
+        for statement in SEED_PLAN_CHOICES:
+            connection.exec_driver_sql(statement)
+    command.upgrade(alembic_config, "head")
+    with get_engine().begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO plan_choices (customer_id, start_month, end_month,"
+            " chosen_at, chosen_by, staff_user_id, replaces_id) VALUES"
+            " (1, '2026-11', '2027-01', '2026-11-03 11:00:00.000000', 'staff',"
+            " 1, 2)"
+        )
+    head = current_revision()
+
+    with pytest.raises(RuntimeError, match="no plan"):
+        command.downgrade(alembic_config, "-1")
+
+    assert current_revision() == head
+    assert len(plan_choice_rows()) == 3

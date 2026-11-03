@@ -1,6 +1,7 @@
 """The plan_choices table model: defaults, the checks the database itself
-enforces, that rows can't be changed or deleted, and that a customer-month
-never has two active choices. Names and amounts are made up."""
+enforces, that rows can't be changed or deleted, that a customer-month
+never has two active choices, and "no plan" rows that clear a choice.
+Names and amounts are made up."""
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -74,6 +75,17 @@ def insert(db: Session, **values: object) -> int:
 
 def tri_monthly(start: str, end: str, **values: object) -> dict[str, object]:
     return {"plan": "tri_monthly", "start_month": start, "end_month": end, **values}
+
+
+def no_plan(replaces_id: int, **values: object) -> dict[str, object]:
+    """A row clearing choice ``replaces_id`` (a November one by default)."""
+    return {
+        "plan": None,
+        "age_group": None,
+        "unit_price_agorot": None,
+        "replaces_id": replaces_id,
+        **values,
+    }
 
 
 def test_a_row_reads_back_with_its_types_and_timestamp(db: Session) -> None:
@@ -245,14 +257,93 @@ def test_a_correction_still_cannot_overlap_another_choice(db: Session) -> None:
 def test_a_choice_is_replaced_at_most_once(db: Session) -> None:
     single = insert(db, plan="single_entry")
     insert(db, replaces_id=single)
-    with pytest.raises(IntegrityError):
-        insert(db, start_month="2026-12", end_month="2026-12", replaces_id=single)
+    # A "no plan" row, so the overlap trigger doesn't refuse it first.
+    with pytest.raises(IntegrityError, match="UNIQUE"):
+        insert(db, **no_plan(single))
 
 
 def test_a_correction_is_for_the_same_customer(db: Session) -> None:
     other = insert(db, customer_id=2)
     with pytest.raises(IntegrityError, match="same customer"):
         insert(db, replaces_id=other)
+
+
+def test_a_correction_keeps_the_start_month(db: Session) -> None:
+    november = insert(db)
+    with pytest.raises(IntegrityError, match="keeps the months"):
+        insert(db, start_month="2026-12", end_month="2026-12", replaces_id=november)
+    with pytest.raises(IntegrityError, match="keeps the months"):
+        insert(db, **tri_monthly("2026-10", "2026-12"), replaces_id=november)
+
+
+# ── "No plan" rows ──────────────────────────────────────────────────────
+
+
+def test_a_no_plan_row_clears_a_choice(db: Session) -> None:
+    choice = insert(db)
+    cleared = insert(db, **no_plan(choice))
+    row = db.get(PlanChoice, cleared)
+    assert row is not None
+    assert row.plan is None
+    assert row.age_group is None
+    assert row.unit_price_agorot is None
+
+
+def test_a_no_plan_row_clears_a_whole_tri_monthly_period(db: Session) -> None:
+    period = insert(db, **tri_monthly("2026-11", "2027-01"))
+    insert(db, **no_plan(period, end_month="2027-01"))
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        # Partly empty: a row has all of plan, age group and price, or none.
+        {"plan": None},
+        {"age_group": None},
+        {"unit_price_agorot": None},
+        {"plan": None, "age_group": None},
+        {"plan": None, "unit_price_agorot": None},
+        {"age_group": None, "unit_price_agorot": None},
+        # "No plan" only ever clears an earlier choice.
+        no_plan(None),  # type: ignore[arg-type]
+    ],
+)
+def test_the_database_refuses_partial_or_unattached_no_plan_rows(
+    db: Session, bad: dict[str, object]
+) -> None:
+    with pytest.raises(IntegrityError):
+        insert(db, **bad)
+
+
+def test_a_no_plan_row_takes_the_months_it_clears(db: Session) -> None:
+    period = insert(db, **tri_monthly("2026-11", "2027-01"))
+    # It ends where the period ended, not at its first month.
+    with pytest.raises(IntegrityError, match="keeps the months"):
+        insert(db, **no_plan(period))
+    november = insert(db, customer_id=2)
+    with pytest.raises(IntegrityError, match="keeps the months"):
+        insert(db, **no_plan(november, customer_id=2, end_month="2026-12"))
+
+
+def test_a_cleared_month_can_be_chosen_again(db: Session) -> None:
+    period = insert(db, **tri_monthly("2026-11", "2027-01"))
+    insert(db, **no_plan(period, end_month="2027-01"))
+    # Neither the cleared period nor the "no plan" row covers November.
+    insert(db)
+    insert(db, start_month="2027-01", end_month="2027-01")
+
+
+def test_a_cleared_choice_cannot_be_cleared_twice(db: Session) -> None:
+    choice = insert(db)
+    insert(db, **no_plan(choice))
+    with pytest.raises(IntegrityError, match="UNIQUE"):
+        insert(db, **no_plan(choice))
+
+
+def test_a_no_plan_row_is_for_the_same_customer(db: Session) -> None:
+    other = insert(db, customer_id=2)
+    with pytest.raises(IntegrityError, match="same customer"):
+        insert(db, **no_plan(other))
 
 
 def test_the_triggers_exist_at_head(db: Session) -> None:
@@ -269,4 +360,5 @@ def test_the_triggers_exist_at_head(db: Session) -> None:
         "plan_choices_no_overlap",
         "plan_choices_no_update",
         "plan_choices_same_customer",
+        "plan_choices_same_months",
     ]
