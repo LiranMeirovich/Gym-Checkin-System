@@ -44,6 +44,8 @@ class Action(StrEnum):
 
     PRICE_ADD = "price.add"
 
+    PLAN_CHOOSE = "plan.choose"
+
 
 class Target(StrEnum):
     """What kind of thing a change was made to; ``activity_log.target_type``.
@@ -55,6 +57,7 @@ class Target(StrEnum):
     SETTINGS = "settings"
     CUSTOMER = "customer"
     PRICE = "price"
+    PLAN_CHOICE = "plan_choice"
 
 
 def record(
