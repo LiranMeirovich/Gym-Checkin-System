@@ -4,23 +4,17 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 
 ## Any feature
 - Activity log (decision 0021): every feature adds its actions to `Action` and calls `record()` from its core functions. A migration that rebuilds `activity_log` must re-create its two triggers.
-- If "database is locked" shows up in practice, switch write requests to `BEGIN IMMEDIATE` in `app/core/db.py` (decision 0015).
 - Starlette warns that `httpx` for `TestClient` is deprecated in favour of `httpx2`. Look into it; swapping needs the developer's OK.
 - `openapi-typescript` has had no release since Feb 2026 and declares TypeScript 5; it runs on TypeScript 6 through an npm `overrides` entry. If it stays unmaintained or breaks on a TypeScript update, consider `@hey-api/openapi-ts` (needs the developer's OK).
 - Dev servers: a committable `.claude/launch.json` (admin/public uvicorn + Vite) reading the developer's own `.env`, for one-click previews.
 - Add branch protection on `main` requiring the "Lint and test", "Frontend checks" and "Scan for secrets" checks (each can be selected once it has run on a PR). Remove this line once it's set up.
 - Refactor (planned, protected area: staff auth): move first-run setup's rules (`create_manager()` in `app/admin/api/setup.py`: PIN check, PIN match, gym-name check, save order) into `app/core` (e.g. a `first_run_setup()` returning field errors), so the route stays thin as CLAUDE.md requires. Carried over from the old Jinja route; behaviour must not change (the `test_admin_api_setup.py` tests pin it).
 
-## Milestone 2: plan corrections (from Plan choices)
-- Clearing a plan: `plan_choices` refuses UPDATE and DELETE, so "no plan for this month" has to be a replacing row of some kind; decide its shape (likely a schema change) (decision 0025).
-- The history lists replaced choices too; mark which ones are no longer active (`replaces_id` says what each row replaced).
-- Staff choose for the current month only. If the manager needs to fix last month before approving its report, widen that rule here.
-
 ## Milestone 3: phone linking & check-in
 - Plan page: customers see their own prices. Decide whether they also see the whole price table (a new public route; the developer sees no reason to hide it).
 - Check-in: a price that isn't set must not stop a customer training; decide what an instructor's single-entry fallback records then (`choose_plan()` refuses with `PriceNotSetError`, decision 0025).
 - Plan page: the customer's own choice needs its own path in `app/core/plans.py` (`chosen_by = customer`, no staff member); `choose_plan()` is staff-only. `plan_options()` gives the page its prices.
-- Two plan saves at the same moment give a 500 ("database is locked": the second read a stale snapshot) instead of `month_covered`. The phone's double tap makes this likelier; `BEGIN IMMEDIATE` for writes (the "Any feature" item) would make the second wait and get the normal 409.
+- Health-form upload: requests hold the database's write lock for their whole transaction (decision 0027), so receive and check the file before the transaction does its database work.
 - Check-in: an instructor's manual check-in with no plan for the month records single entry; only the manager picks or changes plans (decision 0017). The change-plan route decides whether a single-entry → monthly correction covers the visits already made.
 - Opening a health form's contents is logged in the activity log (decision 0021).
 - The instructor's check-in screen shows only what check-in needs (name, health form valid or not, plan status), never date of birth, notes or activity-log entries (decision 0023).
@@ -35,6 +29,11 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Activity log screen (`activity_log.view`) must cope with older before/after shapes.
 - Lock screen: style it, add the role-filtered menus in React. A polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
 - The "אין חיבור לשרת" error markup is copied in six screens (setup, lock screen, the three customer pages); make it a shared component.
+
+## Milestone 5: report (from Plan corrections)
+- The report reads plan choices with the same rule as `_first_active()` in `app/core/plans.py`: active means no row replaces it, and a "no plan" row (`plan IS NULL`) covers nothing (decision 0026).
+- Generate the report outside a request's transaction (a scheduled job or its own short transactions): requests hold the write lock for their whole transaction (decision 0027), so a slow report inside one would hold up every other request.
+- Staff choose and correct only choices starting in the current month (decisions 0025, 0026). If the manager needs to fix last month before approving its report, or to stop a tri-monthly period that started earlier, widen that rule once report approval exists.
 
 ## Milestones 5–6: report, operations and hosting
 - SMTP host/user and the backup folder become settings (after hosting).
@@ -52,7 +51,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Enter the real prices on the Prices screen; none ship with the system.
 
 ## Code review leftovers (low priority)
-- The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two and `plan_choices`' four (append-only, overlap, same customer).
+- The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two and `plan_choices`' five (append-only, overlap, same customer, same months).
 - Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`, now including the customer and price tests), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
 - Setup validates the gym name twice.
 - Two migration heads give Alembic's raw error at startup instead of `DatabaseNotReadyError`.

@@ -183,7 +183,9 @@ function CustomerDetails({ customer }: { customer: Customer }) {
         />
       )}
 
-      {!editing && <CustomerPlan customer={customer} />}
+      {/* Keyed so another customer starts with a fresh section (no old
+          refusal message). */}
+      {!editing && <CustomerPlan key={customer.id} customer={customer} />}
     </>
   );
 }

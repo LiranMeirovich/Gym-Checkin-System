@@ -11,19 +11,28 @@ React shows:
   answering with the updated status. Manager only (``plans.choose``). A
   wrong month or an unset price is a 400; a covered month or an inactive
   customer is a 409. Nothing is saved on either.
+- ``POST /api/customers/{id}/plan/corrections``: replace one of the
+  customer's choices with another plan, or clear it (``plan: null``),
+  answering with the updated status. Manager only (``plans.correct``). A
+  choice that isn't this customer's is a 404; the refusals are a 400 or a
+  409, and save nothing.
 """
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from app.admin.api.customers import NOT_FOUND, CustomerId, customer_or_404
 from app.admin.api.schemas import (
+    Answer,
+    CorrectionConflict,
+    CorrectionRefused,
     NotLoggedIn,
     PlanChoiceRequest,
     PlanChoiceRow,
     PlanConflict,
+    PlanCorrectionRequest,
     PlanOption,
     PlanRefused,
     PlanStatus,
@@ -48,6 +57,9 @@ router = APIRouter(
 
 CanView = Annotated[StaffLogin, Depends(require_permission(Permission.CUSTOMERS_VIEW))]
 CanChoose = Annotated[StaffLogin, Depends(require_permission(Permission.PLANS_CHOOSE))]
+CanCorrect = Annotated[
+    StaffLogin, Depends(require_permission(Permission.PLANS_CORRECT))
+]
 
 
 @router.get("")
@@ -68,25 +80,38 @@ def choose(
     customer_id: CustomerId, body: PlanChoiceRequest, db: DbSession, login: CanChoose
 ) -> PlanStatus | JSONResponse:
     customer = customer_or_404(db, customer_id)
-    # The refusals are answered, not raised: nothing was written, and the
-    # request's transaction commits an empty change.
     try:
         core.choose_plan(
             db, customer, body.plan, Month.parse(body.month), by=login.staff
         )
-    except CustomerInactiveError:
-        return _answer(
-            PlanConflict(error="customer_inactive"), status.HTTP_409_CONFLICT
-        )
-    except core.MonthNotChoosableError:
-        return _answer(
-            PlanRefused(error="month_not_choosable"), status.HTTP_400_BAD_REQUEST
-        )
-    except core.MonthCoveredError as covered:
-        answer = PlanConflict(error="month_covered", choice_id=covered.choice.id)
-        return _answer(answer, status.HTTP_409_CONFLICT)
-    except core.PriceNotSetError:
-        return _answer(PlanRefused(error="price_not_set"), status.HTTP_400_BAD_REQUEST)
+    except REFUSABLE as refused:
+        return _refusal(refused, PlanRefused, PlanConflict)
+    return _status(db, customer)
+
+
+@router.post(
+    "/corrections",
+    status_code=status.HTTP_201_CREATED,
+    response_model=PlanStatus,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"model": CorrectionRefused},
+        status.HTTP_409_CONFLICT: {"model": CorrectionConflict},
+    },
+)
+def correct(
+    customer_id: CustomerId,
+    body: PlanCorrectionRequest,
+    db: DbSession,
+    login: CanCorrect,
+) -> PlanStatus | JSONResponse:
+    customer = customer_or_404(db, customer_id)
+    choice = core.choice_of(db, customer, body.replaces_id)
+    if choice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    try:
+        core.correct_plan(db, customer, choice, body.plan, by=login.staff)
+    except REFUSABLE as refused:
+        return _refusal(refused, CorrectionRefused, CorrectionConflict)
     return _status(db, customer)
 
 
@@ -94,7 +119,12 @@ def _status(db: DbSession, customer: Customer) -> PlanStatus:
     overview = core.plan_overview(db, customer)
     return PlanStatus(
         current_month=str(overview.current_month),
-        covering=None if overview.covering is None else _row(overview.covering),
+        covering=(
+            None
+            if overview.covering is None
+            else _row(overview.covering, overview.replaced_by)
+        ),
+        correctable=overview.correctable,
         options=[
             PlanOption(
                 plan=option.plan,
@@ -105,11 +135,11 @@ def _status(db: DbSession, customer: Customer) -> PlanStatus:
             )
             for option in overview.options
         ],
-        history=[_row(choice) for choice in overview.history],
+        history=[_row(choice, overview.replaced_by) for choice in overview.history],
     )
 
 
-def _row(choice: PlanChoice) -> PlanChoiceRow:
+def _row(choice: PlanChoice, replaced_by: dict[int, int]) -> PlanChoiceRow:
     return PlanChoiceRow(
         id=choice.id,
         plan=choice.plan,
@@ -121,8 +151,43 @@ def _row(choice: PlanChoice) -> PlanChoiceRow:
         chosen_by=choice.chosen_by,
         staff_name=None if choice.staff is None else choice.staff.display_name,
         replaces_id=choice.replaces_id,
+        replaced_by_id=replaced_by.get(choice.id),
     )
 
 
-def _answer(answer: PlanRefused | PlanConflict, code: int) -> JSONResponse:
+# Every refusal the plan core raises: its status and error code. A route
+# builds its own answer shape from these, so a code it doesn't document
+# fails loudly (the shapes' Literal) rather than reaching React unnoticed.
+# The refusals are answered, not raised: nothing was written, and the
+# request's transaction commits an empty change.
+REFUSALS: dict[type[ValueError], tuple[int, str]] = {
+    CustomerInactiveError: (status.HTTP_409_CONFLICT, "customer_inactive"),
+    core.ChoiceReplacedError: (status.HTTP_409_CONFLICT, "choice_replaced"),
+    core.MonthCoveredError: (status.HTTP_409_CONFLICT, "month_covered"),
+    core.MonthNotChoosableError: (status.HTTP_400_BAD_REQUEST, "month_not_choosable"),
+    core.NotCorrectableError: (status.HTTP_400_BAD_REQUEST, "not_correctable"),
+    core.PriceNotSetError: (status.HTTP_400_BAD_REQUEST, "price_not_set"),
+    core.NoChangeError: (status.HTTP_400_BAD_REQUEST, "no_change"),
+}
+REFUSABLE = tuple(REFUSALS)
+
+
+def _refusal(
+    refused: ValueError,
+    refused_shape: type[PlanRefused | CorrectionRefused],
+    conflict_shape: type[PlanConflict | CorrectionConflict],
+) -> JSONResponse:
+    code, error = REFUSALS[type(refused)]
+    if code == status.HTTP_409_CONFLICT:
+        # The choice in the way: the one covering the month, or the one that
+        # already replaced the choice being corrected.
+        if isinstance(refused, core.MonthCoveredError):
+            choice_id: int | None = refused.choice.id
+        elif isinstance(refused, core.ChoiceReplacedError):
+            choice_id = refused.replacement.id
+        else:
+            choice_id = None
+        answer: Answer = conflict_shape(error=error, choice_id=choice_id)
+    else:
+        answer = refused_shape(error=error)
     return JSONResponse(answer.model_dump(), code)

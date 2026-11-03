@@ -18,6 +18,7 @@ from app.core.db import get_engine
 from app.core.models import (
     ActivityLogEntry,
     AgeGroup,
+    ChosenBy,
     Customer,
     Plan,
     PlanChoice,
@@ -127,6 +128,19 @@ class Staff:
             f"/api/customers/{customer_id}/plan", json=json, headers=self.headers
         )
 
+    def correct(self, customer_id: int, json: object):
+        return self.client.post(
+            f"/api/customers/{customer_id}/plan/corrections",
+            json=json,
+            headers=self.headers,
+        )
+
+    def choose(self, customer_id: int, plan: str = "monthly") -> int:
+        """Choose ``plan`` this month; returns the choice's id."""
+        answer = self.post(customer_id, {"plan": plan, "month": "2026-11"})
+        assert answer.status_code == 201
+        return answer.json()["covering"]["id"]
+
 
 @pytest.fixture
 def as_manager(client: TestClient, manager: StaffUser) -> Staff:
@@ -190,6 +204,7 @@ def test_nothing_chosen_yet(as_manager: Staff, customer: Customer) -> None:
     assert answer.json() == {
         "current_month": "2026-11",
         "covering": None,
+        "correctable": False,
         "options": [
             {"plan": plan, "age_group": "adult", "amount_agorot": None}
             for plan in ("monthly", "tri_monthly", "single_entry")
@@ -215,11 +230,13 @@ def test_a_choice_answers_with_the_updated_status(
         "chosen_by": "staff",
         "staff_name": "מנהלת",
         "replaces_id": None,
+        "replaced_by_id": None,
     }
     # The gym's local time, with its offset.
     chosen_at = datetime.fromisoformat(covering["chosen_at"])
     assert chosen_at.utcoffset() in {timedelta(hours=2), timedelta(hours=3)}
     assert body["history"] == [covering]
+    assert body["correctable"] is True
     assert [o["amount_agorot"] for o in body["options"]] == [25000, 65000, 4000]
 
 
@@ -307,3 +324,332 @@ def test_a_malformed_request_is_422(
 ) -> None:
     assert as_manager.post(customer.id, body).status_code == 422
     assert choices_in_db(db) == 0
+
+
+# Corrections: who may make them
+
+
+def test_corrections_need_a_login(
+    client: TestClient, customer: Customer, as_manager: Staff, prices: None
+) -> None:
+    choice = as_manager.choose(customer.id)
+    client.cookies.clear()
+
+    answer = client.post(
+        f"/api/customers/{customer.id}/plan/corrections",
+        json={"replaces_id": choice, "plan": None},
+        headers=SAME_ORIGIN,
+    )
+    assert answer.status_code == 401
+
+
+@pytest.mark.parametrize("plan", ["single_entry", None])
+def test_an_instructor_cant_correct_a_plan(
+    as_manager: Staff,
+    instructor: StaffUser,
+    customer: Customer,
+    prices: None,
+    db: Session,
+    plan: str | None,
+) -> None:
+    choice = as_manager.choose(customer.id)
+    as_instructor = Staff(as_manager.client, instructor)
+
+    answer = as_instructor.correct(customer.id, {"replaces_id": choice, "plan": plan})
+
+    assert answer.status_code == 403
+    assert choices_in_db(db) == 1
+
+
+def test_a_correction_needs_the_csrf_token(
+    as_manager: Staff, customer: Customer, prices: None, db: Session
+) -> None:
+    choice = as_manager.choose(customer.id)
+
+    answer = as_manager.client.post(
+        f"/api/customers/{customer.id}/plan/corrections",
+        json={"replaces_id": choice, "plan": None},
+        headers=SAME_ORIGIN,
+    )
+
+    assert answer.status_code == 403
+    assert choices_in_db(db) == 1
+
+
+def test_another_customers_choice_is_404(
+    as_manager: Staff, customer: Customer, prices: None, db: Session
+) -> None:
+    other = Customer(
+        first_name="Dan",
+        last_name="Cohen",
+        phone="+972507654321",
+        date_of_birth=date(1985, 1, 1),
+    )
+    db.add(other)
+    db.commit()
+    theirs = as_manager.choose(other.id)
+
+    for customer_id, choice_id in ((customer.id, theirs), (customer.id, 999)):
+        answer = as_manager.correct(
+            customer_id, {"replaces_id": choice_id, "plan": None}
+        )
+        assert answer.status_code == 404
+    assert (
+        as_manager.correct(999, {"replaces_id": theirs, "plan": None}).status_code
+        == 404
+    )
+    assert choices_in_db(db) == 1
+
+
+# Corrections: the answers
+
+
+def test_a_correction_answers_with_the_updated_status(
+    as_manager: Staff, customer: Customer, prices: None
+) -> None:
+    single = as_manager.choose(customer.id, "single_entry")
+
+    answer = as_manager.correct(customer.id, {"replaces_id": single, "plan": "monthly"})
+
+    assert answer.status_code == 201
+    body = answer.json()
+    covering = body["covering"]
+    assert covering["plan"] == "monthly"
+    assert covering["unit_price_agorot"] == 25000
+    assert covering["replaces_id"] == single
+    assert covering["replaced_by_id"] is None
+    [new, old] = body["history"]
+    assert new == covering
+    assert (old["id"], old["plan"], old["replaced_by_id"]) == (
+        single,
+        "single_entry",
+        covering["id"],
+    )
+
+
+def test_clearing_answers_with_a_no_plan_row(
+    as_manager: Staff, customer: Customer, prices: None
+) -> None:
+    period = as_manager.choose(customer.id, "tri_monthly")
+
+    answer = as_manager.correct(customer.id, {"replaces_id": period, "plan": None})
+
+    assert answer.status_code == 201
+    body = answer.json()
+    assert body["covering"] is None
+    [cleared, old] = body["history"]
+    assert {k: v for k, v in cleared.items() if k not in {"id", "chosen_at"}} == {
+        "plan": None,
+        "start_month": "2026-11",
+        "end_month": "2027-01",
+        "age_group": None,
+        "unit_price_agorot": None,
+        "chosen_by": "staff",
+        "staff_name": "מנהלת",
+        "replaces_id": period,
+        "replaced_by_id": None,
+    }
+    assert old["replaced_by_id"] == cleared["id"]
+    # The month is free again.
+    assert as_manager.post(customer.id, MONTHLY).status_code == 201
+
+
+@pytest.mark.parametrize(
+    ("plan", "action"), [("monthly", "plan.correct"), (None, "plan.clear")]
+)
+def test_a_correction_is_logged_against_the_acting_manager(
+    as_manager: Staff,
+    manager: StaffUser,
+    customer: Customer,
+    prices: None,
+    db: Session,
+    plan: str | None,
+    action: str,
+) -> None:
+    single = as_manager.choose(customer.id, "single_entry")
+
+    as_manager.correct(customer.id, {"replaces_id": single, "plan": plan})
+
+    entry = db.scalar(select(ActivityLogEntry).where(ActivityLogEntry.action == action))
+    assert entry.staff_user_id == manager.id
+
+
+def test_a_correction_cannot_set_the_price(
+    as_manager: Staff, customer: Customer, prices: None
+) -> None:
+    single = as_manager.choose(customer.id, "single_entry")
+
+    answer = as_manager.correct(
+        customer.id,
+        {"replaces_id": single, "plan": "monthly", "unit_price_agorot": 1},
+    )
+
+    assert answer.json()["covering"]["unit_price_agorot"] == 25000
+
+
+# Corrections: refusals
+
+
+def test_a_replaced_choice_is_a_conflict(
+    as_manager: Staff, customer: Customer, prices: None, db: Session
+) -> None:
+    single = as_manager.choose(customer.id, "single_entry")
+    monthly = as_manager.correct(
+        customer.id, {"replaces_id": single, "plan": "monthly"}
+    ).json()["covering"]["id"]
+
+    # A page still showing the single-entry choice.
+    answer = as_manager.correct(customer.id, {"replaces_id": single, "plan": None})
+
+    assert answer.status_code == 409
+    assert answer.json() == {"error": "choice_replaced", "choice_id": monthly}
+    assert choices_in_db(db) == 2
+
+
+def test_a_choice_from_an_earlier_month_is_refused(
+    as_manager: Staff, customer: Customer, prices: None, db: Session
+) -> None:
+    october = PlanChoice(
+        customer_id=customer.id,
+        plan=Plan.TRI_MONTHLY,
+        start_month=Month(2026, 10),
+        end_month=Month(2026, 12),
+        age_group=AgeGroup.ADULT,
+        unit_price_agorot=65000,
+        chosen_by=ChosenBy.CUSTOMER,
+    )
+    db.add(october)
+    db.commit()
+
+    for plan in ("monthly", None):
+        answer = as_manager.correct(
+            customer.id, {"replaces_id": october.id, "plan": plan}
+        )
+        assert answer.status_code == 400
+        assert answer.json() == {"error": "not_correctable"}
+    assert choices_in_db(db) == 1
+    # The status says so, so the page doesn't offer the change.
+    status = as_manager.get(customer.id).json()
+    assert status["covering"]["id"] == october.id
+    assert status["correctable"] is False
+
+
+def test_a_no_plan_row_is_not_correctable(
+    as_manager: Staff, customer: Customer, prices: None
+) -> None:
+    monthly = as_manager.choose(customer.id)
+    cleared = as_manager.correct(
+        customer.id, {"replaces_id": monthly, "plan": None}
+    ).json()["history"][0]["id"]
+
+    answer = as_manager.correct(
+        customer.id, {"replaces_id": cleared, "plan": "monthly"}
+    )
+
+    assert answer.status_code == 400
+    assert answer.json() == {"error": "not_correctable"}
+
+
+def test_no_change_is_refused(
+    as_manager: Staff, customer: Customer, prices: None, db: Session
+) -> None:
+    monthly = as_manager.choose(customer.id)
+
+    answer = as_manager.correct(
+        customer.id, {"replaces_id": monthly, "plan": "monthly"}
+    )
+
+    assert answer.status_code == 400
+    assert answer.json() == {"error": "no_change"}
+    assert choices_in_db(db) == 1
+
+
+def test_an_unset_price_is_refused_for_a_correction(
+    as_manager: Staff, customer: Customer, prices: None, db: Session
+) -> None:
+    young = Customer(
+        first_name="Tal",
+        last_name="Ben",
+        phone="+972507654321",
+        date_of_birth=date(2010, 1, 1),
+    )
+    db.add(young)
+    db.commit()
+    choice = PlanChoice(
+        customer_id=young.id,
+        plan=Plan.MONTHLY,
+        start_month=Month(2026, 11),
+        end_month=Month(2026, 11),
+        age_group=AgeGroup.UNDER_18,
+        unit_price_agorot=20000,
+        chosen_by=ChosenBy.CUSTOMER,
+    )
+    db.add(choice)
+    db.commit()
+
+    # Only adult prices are set.
+    answer = as_manager.correct(
+        young.id, {"replaces_id": choice.id, "plan": "single_entry"}
+    )
+
+    assert answer.status_code == 400
+    assert answer.json() == {"error": "price_not_set"}
+
+
+def test_running_into_a_covered_month_is_a_conflict(
+    as_manager: Staff, customer: Customer, prices: None, db: Session
+) -> None:
+    monthly = as_manager.choose(customer.id)
+    december = PlanChoice(
+        customer_id=customer.id,
+        plan=Plan.MONTHLY,
+        start_month=Month(2026, 12),
+        end_month=Month(2026, 12),
+        age_group=AgeGroup.ADULT,
+        unit_price_agorot=25000,
+        chosen_by=ChosenBy.CUSTOMER,
+    )
+    db.add(december)
+    db.commit()
+
+    answer = as_manager.correct(
+        customer.id, {"replaces_id": monthly, "plan": "tri_monthly"}
+    )
+
+    assert answer.status_code == 409
+    assert answer.json() == {"error": "month_covered", "choice_id": december.id}
+
+
+def test_an_inactive_customers_plan_is_a_conflict(
+    as_manager: Staff, customer: Customer, prices: None, db: Session
+) -> None:
+    monthly = as_manager.choose(customer.id)
+    customer.active = False
+    db.commit()
+
+    answer = as_manager.correct(customer.id, {"replaces_id": monthly, "plan": None})
+
+    assert answer.status_code == 409
+    assert answer.json() == {"error": "customer_inactive", "choice_id": None}
+    assert choices_in_db(db) == 1
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # Clearing has to be said explicitly.
+        {"replaces_id": 1},
+        {"plan": "monthly"},
+        {"replaces_id": 1, "plan": "weekly"},
+        {"replaces_id": 0, "plan": None},
+        {"replaces_id": 2**63, "plan": None},
+        {"replaces_id": "one", "plan": None},
+    ],
+)
+def test_a_malformed_correction_is_422(
+    as_manager: Staff, customer: Customer, prices: None, db: Session, body: object
+) -> None:
+    as_manager.choose(customer.id)
+
+    assert as_manager.correct(customer.id, body).status_code == 422
+    assert choices_in_db(db) == 1

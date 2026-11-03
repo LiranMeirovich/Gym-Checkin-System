@@ -179,6 +179,13 @@ The manager probably doesn't want freezes, so none are built. A monthly customer
 
 Choices are never overwritten. Each one is a row with plan, months covered, price and who made it, which keeps every past report reproducible. A correction is another row that names the choice it replaces (decision 0025).
 
+**Corrections** (manager only, decision 0026)
+
+- The manager can change or clear a choice that started in the current month. A choice that started earlier (including a tri-monthly period still running) is in a past month's report and can't be changed.
+- A change is a new row from the same start month, priced from the current price table like a new choice. Changing single entry to monthly covers the whole month, visits already made included.
+- Clearing is a "no plan" row: it replaces the choice, has no plan or price, and covers nothing, so the months can be chosen again.
+- The customer page's history shows every row and which ones were replaced.
+
 **Punch cards** (*upcoming; details pending from the manager*)
 
 A punch card is a fixed number of entries (e.g. 12) bought for one price; each check-in uses one entry, and the customer pays again only when they buy a new card. The planned approach, to be confirmed:
@@ -221,7 +228,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | `customers` | id, first\_name, last\_name, phone (unique, normalised), date\_of\_birth, notes, created\_at, active | Date of birth sets the under-18 price; deactivate instead of delete (decision 0023). No photo column for now (decision 0022) |
 | `device_sessions` | id, customer\_id, token\_hash (unique), user\_agent, created\_at, last\_seen\_at, revoked\_at | One row per linked phone; at most 3 active per customer |
 | `link_codes` | id, customer\_id, code\_hash, expires\_at, used\_at, failed\_attempts | 6-digit code, 10-minute expiry, single use |
-| `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry), start\_month, end\_month, age\_group, unit\_price\_agorot, chosen\_at, chosen\_by (customer / staff), staff\_user\_id (nullable), replaces\_id (nullable, unique) | Tri-monthly spans 3 months. Append-only (triggers refuse UPDATE and DELETE): a correction is a new row pointing at the one it replaces, and a choice is active while nothing replaces it (decision 0025) |
+| `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry; NULL for "no plan"), start\_month, end\_month, age\_group (nullable), unit\_price\_agorot (nullable), chosen\_at, chosen\_by (customer / staff), staff\_user\_id (nullable), replaces\_id (nullable, unique) | Tri-monthly spans 3 months. Append-only (triggers refuse UPDATE and DELETE): a correction is a new row pointing at the one it replaces, from the same start month, and a choice is active while nothing replaces it (decision 0025). A "no plan" row (no plan, age group or price) clears the choice it replaces and covers nothing (decision 0026) |
 | `prices` | id, plan, age\_group (adult / under\_18), amount\_agorot, valid\_from\_month, created\_at | The manager's price table and its history; rows are only added. The row with the latest valid\_from\_month up to a month applies, and the newest row among those for the same month wins |
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable), entered\_by | Single-entry payments count these |
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
@@ -233,7 +240,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 
 **Rules the code and database enforce**
 
-- At most one active plan choice covers any customer-month (checked in the plan code and by a database trigger).
+- At most one active plan choice covers any customer-month (checked in the plan code and by a database trigger). "No plan" rows cover nothing.
 - A phone number belongs to one customer, active or not, stored as E.164 (`+972…`) after the Israeli normalising rules (decision 0023).
 - Login tokens and link codes are stored only as hashes; the plain values exist only in the cookie or on the admin screen.
 - Linking a phone fails after 5 wrong codes for the same phone number, locking that number for 15 minutes. The public app also rate-limits by IP.

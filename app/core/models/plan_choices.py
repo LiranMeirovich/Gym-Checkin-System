@@ -9,7 +9,12 @@ Rows are only ever added, never changed or deleted (triggers in the
 migration refuse both). A correction is a new row whose ``replaces_id``
 points at the choice it replaces; a choice is active while no row replaces
 it. Another trigger refuses a row that would give a customer-month two
-active choices. The rules the database can't check (which months can be
+active choices, and another keeps a correction on the months of the choice
+it replaces.
+
+A "no plan" row clears a choice: it replaces it and has no plan, age group
+or price, so the months it names are covered by nothing and can be chosen
+again. The rules the database can't check (which months can be
 chosen, where the price comes from) live in ``app.core.plans``.
 """
 
@@ -52,16 +57,27 @@ class PlanChoice(Base):
         CheckConstraint(_is_a_month("start_month"), name="start_month_is_a_month"),
         CheckConstraint(_is_a_month("end_month"), name="end_month_is_a_month"),
         # Tri-monthly covers its month and the next two; the others one month.
+        # A "no plan" row takes its months from the choice it clears (a
+        # trigger checks that).
         CheckConstraint(
-            "end_month IS CASE plan"
+            "plan IS NULL OR end_month IS CASE plan"
             " WHEN 'tri_monthly'"
             " THEN substr(date(start_month || '-01', '+2 months'), 1, 7)"
             " ELSE start_month END",
             name="months_match_plan",
         ),
         CheckConstraint(
-            "typeof(unit_price_agorot) = 'integer' AND unit_price_agorot >= 0",
+            "unit_price_agorot IS NULL"
+            " OR (typeof(unit_price_agorot) = 'integer' AND unit_price_agorot >= 0)",
             name="unit_price_is_whole_agorot",
+        ),
+        # A real choice has a plan, age group and price; a "no plan" row has
+        # none of them and always clears an earlier choice.
+        CheckConstraint(
+            "(plan IS NULL) = (age_group IS NULL)"
+            " AND (plan IS NULL) = (unit_price_agorot IS NULL)"
+            " AND (plan IS NOT NULL OR replaces_id IS NOT NULL)",
+            name="no_plan_row_is_complete",
         ),
         # A staff member's choice says who; a customer's names no one.
         CheckConstraint(
@@ -73,7 +89,8 @@ class PlanChoice(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
-    plan: Mapped[Plan] = mapped_column(
+    # ``None`` on a "no plan" row.
+    plan: Mapped[Plan | None] = mapped_column(
         Enum(
             Plan,
             name="plan",
@@ -86,7 +103,7 @@ class PlanChoice(Base):
     start_month: Mapped[Month]
     end_month: Mapped[Month]
     # On the 1st of ``start_month``, from the customer's date of birth.
-    age_group: Mapped[AgeGroup] = mapped_column(
+    age_group: Mapped[AgeGroup | None] = mapped_column(
         Enum(
             AgeGroup,
             name="age_group",
@@ -97,7 +114,7 @@ class PlanChoice(Base):
         )
     )
     # The whole price for monthly and tri-monthly; per visit for single entry.
-    unit_price_agorot: Mapped[int] = mapped_column(Integer)
+    unit_price_agorot: Mapped[int | None] = mapped_column(Integer)
     chosen_at: Mapped[datetime] = mapped_column(default=utc_now)
     chosen_by: Mapped[ChosenBy] = mapped_column(
         Enum(

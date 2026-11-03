@@ -213,6 +213,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/{customer_id}/plan/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct */
+        post: operations["correct_api_customers__customer_id__plan_corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -230,6 +247,35 @@ export interface components {
          * @enum {string}
          */
         ChosenBy: "customer" | "staff";
+        /**
+         * CorrectionConflict
+         * @description 409. ``choice_replaced``: already corrected or cleared, by
+         *     ``choice_id``. ``month_covered``: a month the new plan would cover has
+         *     another choice, ``choice_id``. ``customer_inactive``: reactivate them
+         *     first.
+         */
+        CorrectionConflict: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "choice_replaced" | "month_covered" | "customer_inactive";
+            /** Choice Id */
+            choice_id: number | null;
+        };
+        /**
+         * CorrectionRefused
+         * @description 400. ``not_correctable``: the choice started before this month, or
+         *     it's a "no plan" row. ``price_not_set``: as for a choice.
+         *     ``no_change``: same plan, same price. Nothing was saved.
+         */
+        CorrectionRefused: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "not_correctable" | "price_not_set" | "no_change";
+        };
         /**
          * CustomerAdded
          * @description 201 from ``POST /api/customers``. ``reactivated``: the phone was an
@@ -429,19 +475,23 @@ export interface components {
          * PlanChoiceRow
          * @description A choice as it was made. ``chosen_at`` is the gym's local time, with
          *     its offset. ``staff_name`` is who chose it when staff did. ``replaces_id``
-         *     is the choice it corrected, if any.
+         *     is the choice it corrected, if any; ``replaced_by_id`` the row that
+         *     corrected or cleared it, if any (then it's no longer in force).
+         *
+         *     A "no plan" row (``plan``, ``age_group`` and ``unit_price_agorot`` all
+         *     ``None``) cleared the choice it replaces; it's never ``covering``.
          */
         PlanChoiceRow: {
             /** Id */
             id: number;
-            plan: components["schemas"]["Plan"];
+            plan: components["schemas"]["Plan"] | null;
             /** Start Month */
             start_month: string;
             /** End Month */
             end_month: string;
-            age_group: components["schemas"]["AgeGroup"];
+            age_group: components["schemas"]["AgeGroup"] | null;
             /** Unit Price Agorot */
-            unit_price_agorot: number;
+            unit_price_agorot: number | null;
             /**
              * Chosen At
              * Format: date-time
@@ -452,6 +502,8 @@ export interface components {
             staff_name: string | null;
             /** Replaces Id */
             replaces_id: number | null;
+            /** Replaced By Id */
+            replaced_by_id: number | null;
         };
         /**
          * PlanConflict
@@ -466,6 +518,12 @@ export interface components {
             error: "month_covered" | "customer_inactive";
             /** Choice Id */
             choice_id: number | null;
+        };
+        /** PlanCorrectionRequest */
+        PlanCorrectionRequest: {
+            /** Replaces Id */
+            replaces_id: number;
+            plan: components["schemas"]["Plan"] | null;
         };
         /**
          * PlanOption
@@ -493,13 +551,16 @@ export interface components {
         };
         /**
          * PlanStatus
-         * @description ``covering`` is the choice covering ``current_month``, or ``None``.
-         *     ``history`` is every choice, latest month first.
+         * @description ``covering`` is the choice covering ``current_month``, or ``None``;
+         *     ``correctable`` says whether it may be changed or cleared (it started
+         *     this month). ``history`` is every choice, latest month first.
          */
         PlanStatus: {
             /** Current Month */
             current_month: string;
             covering: components["schemas"]["PlanChoiceRow"] | null;
+            /** Correctable */
+            correctable: boolean;
             /** Options */
             options: components["schemas"]["PlanOption"][];
             /** History */
@@ -1502,6 +1563,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    correct_api_customers__customer_id__plan_corrections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanStatus"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrectionRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrectionConflict"];
                 };
             };
             /** @description Validation Error */

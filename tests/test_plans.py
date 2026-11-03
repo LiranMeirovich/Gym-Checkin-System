@@ -1,6 +1,6 @@
 """Plans: the age group on the 1st of the month, the plans on offer, what
-covers a month, choosing a plan, and its activity-log entry. Names and
-amounts are made up."""
+covers a month, choosing, correcting and clearing a plan, and their
+activity-log entries. Names and amounts are made up."""
 
 import json
 from collections.abc import Iterator
@@ -27,11 +27,16 @@ from app.core.models import (
 from app.core.months import Month
 from app.core.permissions import Role
 from app.core.plans import (
+    ChoiceReplacedError,
     MonthCoveredError,
     MonthNotChoosableError,
+    NoChangeError,
+    NotCorrectableError,
     PriceNotSetError,
     age_group_for,
+    choice_of,
     choose_plan,
+    correct_plan,
     covering_choice,
     end_month,
     plan_options,
@@ -453,5 +458,313 @@ def test_the_overview_with_nothing_chosen(db: Session, adult: Customer) -> None:
     overview = plan_overview(db, adult)
 
     assert overview.covering is None
+    assert overview.correctable is False
     assert all(o.price is None for o in overview.options)
     assert overview.history == []
+    assert overview.replaced_by == {}
+
+
+@pytest.mark.parametrize(
+    ("plan", "start", "correctable"),
+    [
+        (Plan.MONTHLY, THIS_MONTH, True),
+        (Plan.TRI_MONTHLY, THIS_MONTH, True),
+        # Covers this month, but started in an earlier one.
+        (Plan.TRI_MONTHLY, Month(2026, 10), False),
+        (Plan.TRI_MONTHLY, Month(2026, 9), False),
+    ],
+)
+def test_the_overview_says_whether_the_covering_choice_is_correctable(
+    db: Session, adult: Customer, plan: Plan, start: Month, correctable: bool
+) -> None:
+    add_choice(db, adult, plan, start)
+
+    assert plan_overview(db, adult).correctable is correctable
+
+
+def test_the_overview_marks_replaced_choices(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    single = choose_plan(db, adult, Plan.SINGLE_ENTRY, THIS_MONTH, by=manager)
+    monthly = correct_plan(db, adult, single, Plan.MONTHLY, by=manager)
+    cleared = correct_plan(db, adult, monthly, None, by=manager)
+
+    overview = plan_overview(db, adult)
+
+    assert overview.covering is None
+    assert overview.history == [cleared, monthly, single]
+    assert overview.replaced_by == {single.id: monthly.id, monthly.id: cleared.id}
+
+
+# Corrections
+
+
+def test_a_correction_replaces_the_choice(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    single = choose_plan(db, adult, Plan.SINGLE_ENTRY, THIS_MONTH, by=manager)
+
+    monthly = correct_plan(db, adult, single, Plan.MONTHLY, by=manager)
+
+    assert monthly.replaces_id == single.id
+    assert (monthly.plan, monthly.start_month, monthly.end_month) == (
+        Plan.MONTHLY,
+        THIS_MONTH,
+        THIS_MONTH,
+    )
+    assert (monthly.age_group, monthly.unit_price_agorot) == (AgeGroup.ADULT, 25000)
+    assert (monthly.chosen_by, monthly.staff_user_id) == (ChosenBy.STAFF, manager.id)
+    assert covering_choice(db, adult, THIS_MONTH) == monthly
+    # The replaced row is kept as it was.
+    assert single.plan is Plan.SINGLE_ENTRY
+
+
+def test_a_correction_to_tri_monthly_covers_the_next_two_months(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    monthly = choose_plan(db, adult, Plan.MONTHLY, THIS_MONTH, by=manager)
+
+    period = correct_plan(db, adult, monthly, Plan.TRI_MONTHLY, by=manager)
+
+    assert (period.end_month, period.unit_price_agorot) == (Month(2027, 1), 65000)
+    assert covering_choice(db, adult, Month(2027, 1)) == period
+
+
+def test_a_correction_from_tri_monthly_frees_the_later_months(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    period = choose_plan(db, adult, Plan.TRI_MONTHLY, THIS_MONTH, by=manager)
+
+    correct_plan(db, adult, period, Plan.MONTHLY, by=manager)
+
+    assert covering_choice(db, adult, Month(2026, 12)) is None
+    assert covering_choice(db, adult, Month(2027, 1)) is None
+
+
+def test_a_correction_uses_the_under_18_price(
+    db: Session, manager: StaffUser, prices: None
+) -> None:
+    young = add_customer(db, "+972507654321", date(2010, 1, 1))
+    single = choose_plan(db, young, Plan.SINGLE_ENTRY, THIS_MONTH, by=manager)
+
+    monthly = correct_plan(db, young, single, Plan.MONTHLY, by=manager)
+
+    assert (monthly.age_group, monthly.unit_price_agorot) == (AgeGroup.UNDER_18, 24000)
+
+
+def test_a_correction_to_the_same_plan_takes_a_corrected_price(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    monthly = choose_plan(db, adult, Plan.MONTHLY, THIS_MONTH, by=manager)
+    # The manager fixes this month's price after the choice was made.
+    add_price(db, Plan.MONTHLY, AgeGroup.ADULT, 23000, THIS_MONTH)
+
+    repriced = correct_plan(db, adult, monthly, Plan.MONTHLY, by=manager)
+
+    assert repriced.unit_price_agorot == 23000
+
+
+def test_a_correction_that_changes_nothing_is_refused(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    monthly = choose_plan(db, adult, Plan.MONTHLY, THIS_MONTH, by=manager)
+
+    with pytest.raises(NoChangeError):
+        correct_plan(db, adult, monthly, Plan.MONTHLY, by=manager)
+    assert covering_choice(db, adult, THIS_MONTH) == monthly
+    assert len(log_entries(db)) == 1
+
+
+def test_a_correction_writes_the_activity_log(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    single = choose_plan(db, adult, Plan.SINGLE_ENTRY, THIS_MONTH, by=manager)
+
+    monthly = correct_plan(db, adult, single, Plan.MONTHLY, by=manager)
+
+    entry = log_entries(db)[-1]
+    assert entry.staff_user_id == manager.id
+    assert entry.action == "plan.correct"
+    assert (entry.target_type, entry.target_id) == ("plan_choice", monthly.id)
+    assert json.loads(entry.before_json or "") == {
+        "id": single.id,
+        "customer_id": adult.id,
+        "plan": "single_entry",
+        "start_month": "2026-11",
+        "end_month": "2026-11",
+        "age_group": "adult",
+        "unit_price_agorot": 4000,
+    }
+    assert json.loads(entry.after_json or "") == {
+        "customer_id": adult.id,
+        "plan": "monthly",
+        "start_month": "2026-11",
+        "end_month": "2026-11",
+        "age_group": "adult",
+        "unit_price_agorot": 25000,
+        "replaces_id": single.id,
+    }
+
+
+# Clearing
+
+
+def test_clearing_leaves_the_months_without_a_plan(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    period = choose_plan(db, adult, Plan.TRI_MONTHLY, THIS_MONTH, by=manager)
+
+    cleared = correct_plan(db, adult, period, None, by=manager)
+
+    assert cleared.replaces_id == period.id
+    assert (cleared.plan, cleared.age_group, cleared.unit_price_agorot) == (
+        None,
+        None,
+        None,
+    )
+    assert (cleared.start_month, cleared.end_month) == (THIS_MONTH, Month(2027, 1))
+    for month in (THIS_MONTH, Month(2026, 12), Month(2027, 1)):
+        assert covering_choice(db, adult, month) is None
+
+
+def test_a_cleared_month_can_be_chosen_again(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    monthly = choose_plan(db, adult, Plan.MONTHLY, THIS_MONTH, by=manager)
+    correct_plan(db, adult, monthly, None, by=manager)
+
+    again = choose_plan(db, adult, Plan.SINGLE_ENTRY, THIS_MONTH, by=manager)
+
+    assert again.replaces_id is None
+    assert covering_choice(db, adult, THIS_MONTH) == again
+
+
+def test_clearing_writes_the_activity_log(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    monthly = choose_plan(db, adult, Plan.MONTHLY, THIS_MONTH, by=manager)
+
+    cleared = correct_plan(db, adult, monthly, None, by=manager)
+
+    entry = log_entries(db)[-1]
+    assert entry.action == "plan.clear"
+    assert entry.target_id == cleared.id
+    assert json.loads(entry.before_json or "")["plan"] == "monthly"
+    assert json.loads(entry.after_json or "") == {
+        "customer_id": adult.id,
+        "plan": None,
+        "start_month": "2026-11",
+        "end_month": "2026-11",
+        "age_group": None,
+        "unit_price_agorot": None,
+        "replaces_id": monthly.id,
+    }
+
+
+def test_clearing_needs_no_price(
+    db: Session, manager: StaffUser, adult: Customer
+) -> None:
+    monthly = add_choice(db, adult, Plan.MONTHLY, THIS_MONTH)
+
+    assert correct_plan(db, adult, monthly, None, by=manager).plan is None
+
+
+# Refused corrections
+
+
+@pytest.mark.parametrize("plan", [Plan.MONTHLY, None])
+def test_a_replaced_choice_cannot_be_corrected_again(
+    db: Session, manager: StaffUser, adult: Customer, prices: None, plan: Plan | None
+) -> None:
+    single = choose_plan(db, adult, Plan.SINGLE_ENTRY, THIS_MONTH, by=manager)
+    tri = correct_plan(db, adult, single, Plan.TRI_MONTHLY, by=manager)
+
+    with pytest.raises(ChoiceReplacedError) as refused:
+        correct_plan(db, adult, single, plan, by=manager)
+    assert refused.value.replacement == tri
+
+
+def test_a_no_plan_row_cannot_be_corrected(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    monthly = choose_plan(db, adult, Plan.MONTHLY, THIS_MONTH, by=manager)
+    cleared = correct_plan(db, adult, monthly, None, by=manager)
+
+    for plan in (Plan.MONTHLY, None):
+        with pytest.raises(NotCorrectableError):
+            correct_plan(db, adult, cleared, plan, by=manager)
+
+
+@pytest.mark.parametrize(
+    ("plan", "start"),
+    [
+        (Plan.MONTHLY, Month(2026, 10)),
+        # Still covering this month, but it started in October.
+        (Plan.TRI_MONTHLY, Month(2026, 10)),
+        (Plan.TRI_MONTHLY, Month(2026, 9)),
+    ],
+)
+@pytest.mark.parametrize("correction", [Plan.SINGLE_ENTRY, None])
+def test_a_choice_from_an_earlier_month_cannot_be_corrected(
+    db: Session,
+    manager: StaffUser,
+    adult: Customer,
+    prices: None,
+    plan: Plan,
+    start: Month,
+    correction: Plan | None,
+) -> None:
+    earlier = add_choice(db, adult, plan, start)
+
+    with pytest.raises(NotCorrectableError):
+        correct_plan(db, adult, earlier, correction, by=manager)
+    assert len(db.scalars(select(PlanChoice)).all()) == 1
+    assert log_entries(db) == []
+
+
+def test_a_correction_cannot_run_into_a_covered_month(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    monthly = choose_plan(db, adult, Plan.MONTHLY, THIS_MONTH, by=manager)
+    december = add_choice(db, adult, Plan.MONTHLY, Month(2026, 12))
+
+    with pytest.raises(MonthCoveredError) as refused:
+        correct_plan(db, adult, monthly, Plan.TRI_MONTHLY, by=manager)
+    assert refused.value.choice == december
+
+
+def test_a_correction_with_no_price_is_refused(
+    db: Session, manager: StaffUser, adult: Customer
+) -> None:
+    add_price(db, Plan.MONTHLY, AgeGroup.ADULT, 25000)
+    monthly = choose_plan(db, adult, Plan.MONTHLY, THIS_MONTH, by=manager)
+
+    with pytest.raises(PriceNotSetError) as refused:
+        correct_plan(db, adult, monthly, Plan.SINGLE_ENTRY, by=manager)
+    assert refused.value.plan is Plan.SINGLE_ENTRY
+    assert len(log_entries(db)) == 1
+
+
+@pytest.mark.parametrize("plan", [Plan.SINGLE_ENTRY, None])
+def test_an_inactive_customers_plan_cannot_be_corrected(
+    db: Session, manager: StaffUser, adult: Customer, prices: None, plan: Plan | None
+) -> None:
+    monthly = choose_plan(db, adult, Plan.MONTHLY, THIS_MONTH, by=manager)
+    adult.active = False
+    db.flush()
+
+    with pytest.raises(CustomerInactiveError):
+        correct_plan(db, adult, monthly, plan, by=manager)
+    assert len(log_entries(db)) == 1
+
+
+def test_another_customers_choice_cannot_be_corrected(
+    db: Session, manager: StaffUser, adult: Customer, prices: None
+) -> None:
+    other = add_customer(db, "+972507654321", date(1985, 1, 1))
+    theirs = choose_plan(db, other, Plan.MONTHLY, THIS_MONTH, by=manager)
+
+    assert choice_of(db, adult, theirs.id) is None
+    assert choice_of(db, other, theirs.id) == theirs
+    with pytest.raises(ValueError, match="isn't customer"):
+        correct_plan(db, adult, theirs, None, by=manager)
