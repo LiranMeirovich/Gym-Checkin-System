@@ -1,13 +1,18 @@
 """Plans: what covers a customer in a month, what each plan would cost them,
-and choosing one (design doc: "Plans, prices and billing"; decisions 0017,
-0022).
+choosing one, and correcting or clearing it (design doc: "Plans, prices and
+billing"; decisions 0017, 0022, 0025).
 
 A choice covers its month, or three months for tri-monthly. It's active
-while no later row replaces it (``replaces_id``, feature 4's corrections),
-and a customer-month has at most one active choice: this module refuses a
-second one, and a database trigger backs that up. The price and age group
-are copied onto the choice when it's made, so later price changes never
-reach it.
+while no later row replaces it (``replaces_id``), and a customer-month has
+at most one active choice: this module refuses a second one, and a database
+trigger backs that up. The price and age group are copied onto the choice
+when it's made, so later price changes never reach it.
+
+A correction is a new row that replaces a choice, from the same start
+month. Clearing is a "no plan" row: it replaces the choice, has no plan or
+price, and covers nothing, so its months are free to choose again. Only a
+choice starting in the current month can be corrected; one that started
+earlier is already in a past month's report.
 
 The age group comes from the customer's age on the 1st of the month, so
 someone who turns 18 mid-month keeps the under-18 price until the next one.
@@ -57,6 +62,24 @@ class PriceNotSetError(ValueError):
         self.age_group = age_group
 
 
+class ChoiceReplacedError(ValueError):
+    """The choice was already corrected or cleared (often a page left open).
+    ``replacement`` is the row that replaced it."""
+
+    def __init__(self, replacement: PlanChoice) -> None:
+        super().__init__(f"already replaced by plan choice {replacement.id}")
+        self.replacement = replacement
+
+
+class NotCorrectableError(ValueError):
+    """Only a choice starting in the current month can be corrected. A "no
+    plan" row can't be either: choose a plan for the month instead."""
+
+
+class NoChangeError(ValueError):
+    """The correction would give the same plan at the same price."""
+
+
 class MonthCoveredError(ValueError):
     """A month the plan would cover already has an active choice.
     ``choice`` is that choice; changing it is a correction."""
@@ -86,8 +109,11 @@ class PlanOverview:
     # Every plan with this customer's price for this month, in a fixed order.
     options: list[PlanOption]
     # Every choice ever made for the customer, latest month first, newest
-    # first within it, replaced ones included.
+    # first within it, replaced ones and "no plan" rows included.
     history: list[PlanChoice]
+    # For each replaced choice in ``history``, the id of the row that
+    # replaced it.
+    replaced_by: dict[int, int]
 
 
 def age_group_for(date_of_birth: date, month: Month) -> AgeGroup:
@@ -118,20 +144,35 @@ def covering_choice(db: Session, customer: Customer, month: Month) -> PlanChoice
     return _first_active(db, customer, month, month)
 
 
+def choice_of(db: Session, customer: Customer, choice_id: int) -> PlanChoice | None:
+    """``customer``'s choice ``choice_id``, or ``None`` if it isn't theirs."""
+    return db.scalar(
+        select(PlanChoice).where(
+            PlanChoice.id == choice_id, PlanChoice.customer_id == customer.id
+        )
+    )
+
+
 def plan_overview(db: Session, customer: Customer) -> PlanOverview:
     """This month's plan, the plans on offer, and the customer's history."""
     today = Month.current()
+    history = list(
+        db.scalars(
+            select(PlanChoice)
+            .where(PlanChoice.customer_id == customer.id)
+            .order_by(PlanChoice.start_month.desc(), PlanChoice.id.desc())
+        )
+    )
     return PlanOverview(
         current_month=today,
         covering=covering_choice(db, customer, today),
         options=plan_options(db, customer, today),
-        history=list(
-            db.scalars(
-                select(PlanChoice)
-                .where(PlanChoice.customer_id == customer.id)
-                .order_by(PlanChoice.start_month.desc(), PlanChoice.id.desc())
-            )
-        ),
+        history=history,
+        # A correction is always the same customer's (a trigger checks), so
+        # the history holds both ends of every replacement.
+        replaced_by={
+            row.replaces_id: row.id for row in history if row.replaces_id is not None
+        },
     )
 
 
@@ -169,21 +210,106 @@ def choose_plan(
     db.add(choice)
     db.flush()
     record(
-        db,
-        by,
-        Action.PLAN_CHOOSE,
-        Target.PLAN_CHOICE,
-        choice.id,
-        after={
-            "customer_id": customer.id,
-            "plan": plan.value,
-            "start_month": str(month),
-            "end_month": str(last),
-            "age_group": age_group.value,
-            "unit_price_agorot": price.amount_agorot,
-        },
+        db, by, Action.PLAN_CHOOSE, Target.PLAN_CHOICE, choice.id, after=_logged(choice)
     )
     return choice
+
+
+def correct_plan(
+    db: Session,
+    customer: Customer,
+    choice: PlanChoice,
+    plan: Plan | None,
+    *,
+    by: StaffUser,
+) -> PlanChoice:
+    """Replace ``customer``'s ``choice`` with ``plan`` from the same start
+    month, at this month's price for their age group, or clear it with a
+    "no plan" row if ``plan`` is ``None``. Returns the new row.
+
+    Raises ``CustomerInactiveError``, ``ChoiceReplacedError``,
+    ``NotCorrectableError``, ``MonthCoveredError``, ``PriceNotSetError`` or
+    ``NoChangeError``, checked in that order.
+    """
+    if choice.customer_id != customer.id:
+        raise ValueError(f"plan choice {choice.id} isn't customer {customer.id}'s")
+    if not customer.active:
+        raise CustomerInactiveError("reactivate the customer first")
+    replacement = db.scalar(
+        select(PlanChoice).where(PlanChoice.replaces_id == choice.id)
+    )
+    if replacement is not None:
+        raise ChoiceReplacedError(replacement)
+    if choice.plan is None:
+        raise NotCorrectableError("a cleared choice has no plan to correct")
+    month = choice.start_month
+    if month != Month.current():
+        raise NotCorrectableError(f"{month} is not the current month")
+
+    if plan is None:
+        action = Action.PLAN_CLEAR
+        new = PlanChoice(
+            customer_id=customer.id,
+            plan=None,
+            start_month=month,
+            end_month=choice.end_month,
+            age_group=None,
+            unit_price_agorot=None,
+            chosen_by=ChosenBy.STAFF,
+            staff_user_id=by.id,
+            replaces_id=choice.id,
+        )
+    else:
+        action = Action.PLAN_CORRECT
+        last = end_month(plan, month)
+        covered = _first_active(db, customer, month, last, besides=choice)
+        if covered is not None:
+            raise MonthCoveredError(covered)
+        age_group = age_group_for(customer.date_of_birth, month)
+        price = price_for(db, plan, age_group, month)
+        if price is None:
+            raise PriceNotSetError(plan, age_group)
+        if (plan, age_group, price.amount_agorot) == (
+            choice.plan,
+            choice.age_group,
+            choice.unit_price_agorot,
+        ):
+            raise NoChangeError(f"plan choice {choice.id} is already that")
+        new = PlanChoice(
+            customer_id=customer.id,
+            plan=plan,
+            start_month=month,
+            end_month=last,
+            age_group=age_group,
+            unit_price_agorot=price.amount_agorot,
+            chosen_by=ChosenBy.STAFF,
+            staff_user_id=by.id,
+            replaces_id=choice.id,
+        )
+    db.add(new)
+    db.flush()
+    record(
+        db,
+        by,
+        action,
+        Target.PLAN_CHOICE,
+        new.id,
+        before={"id": choice.id, **_logged(choice)},
+        after={**_logged(new), "replaces_id": choice.id},
+    )
+    return new
+
+
+def _logged(choice: PlanChoice) -> dict[str, object]:
+    """How a choice reads in the activity log."""
+    return {
+        "customer_id": choice.customer_id,
+        "plan": None if choice.plan is None else choice.plan.value,
+        "start_month": str(choice.start_month),
+        "end_month": str(choice.end_month),
+        "age_group": None if choice.age_group is None else choice.age_group.value,
+        "unit_price_agorot": choice.unit_price_agorot,
+    }
 
 
 def _is_active() -> ColumnElement[bool]:
@@ -192,18 +318,23 @@ def _is_active() -> ColumnElement[bool]:
 
 
 def _first_active(
-    db: Session, customer: Customer, start: Month, end: Month
+    db: Session,
+    customer: Customer,
+    start: Month,
+    end: Month,
+    *,
+    besides: PlanChoice | None = None,
 ) -> PlanChoice | None:
     """The earliest active choice covering any month from ``start`` to
-    ``end``. There's at most one per month."""
-    return db.scalar(
-        select(PlanChoice)
-        .where(
-            PlanChoice.customer_id == customer.id,
-            PlanChoice.start_month <= end,
-            PlanChoice.end_month >= start,
-            _is_active(),
-        )
-        .order_by(PlanChoice.start_month)
-        .limit(1)
+    ``end``, leaving out ``besides`` (the choice a correction replaces).
+    There's at most one per month. "No plan" rows cover nothing."""
+    query = select(PlanChoice).where(
+        PlanChoice.customer_id == customer.id,
+        PlanChoice.plan.is_not(None),
+        PlanChoice.start_month <= end,
+        PlanChoice.end_month >= start,
+        _is_active(),
     )
+    if besides is not None:
+        query = query.where(PlanChoice.id != besides.id)
+    return db.scalar(query.order_by(PlanChoice.start_month).limit(1))

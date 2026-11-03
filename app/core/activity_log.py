@@ -45,6 +45,9 @@ class Action(StrEnum):
     PRICE_ADD = "price.add"
 
     PLAN_CHOOSE = "plan.choose"
+    # A choice replaced by another plan, or cleared by a "no plan" row.
+    PLAN_CORRECT = "plan.correct"
+    PLAN_CLEAR = "plan.clear"
 
 
 class Target(StrEnum):
