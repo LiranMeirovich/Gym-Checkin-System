@@ -274,18 +274,23 @@ class PricesRefused(Answer):
 class PlanChoiceRow(Answer):
     """A choice as it was made. ``chosen_at`` is the gym's local time, with
     its offset. ``staff_name`` is who chose it when staff did. ``replaces_id``
-    is the choice it corrected, if any."""
+    is the choice it corrected, if any; ``replaced_by_id`` the row that
+    corrected or cleared it, if any (then it's no longer in force).
+
+    A "no plan" row (``plan``, ``age_group`` and ``unit_price_agorot`` all
+    ``None``) cleared the choice it replaces; it's never ``covering``."""
 
     id: int
-    plan: Plan
+    plan: Plan | None
     start_month: MonthText
     end_month: MonthText
-    age_group: AgeGroup
-    unit_price_agorot: int
+    age_group: AgeGroup | None
+    unit_price_agorot: int | None
     chosen_at: datetime
     chosen_by: ChosenBy
     staff_name: str | None
     replaces_id: int | None
+    replaced_by_id: int | None
 
 
 class PlanOption(Answer):
@@ -327,4 +332,29 @@ class PlanConflict(Answer):
     choice, ``choice_id``. ``customer_inactive``: reactivate them first."""
 
     error: Literal["month_covered", "customer_inactive"]
+    choice_id: int | None = None
+
+
+class PlanCorrectionRequest(BaseModel):
+    # The choice to correct; the new row starts in its month.
+    replaces_id: int = Field(ge=1, le=MAX_ID)
+    # The new plan, or ``None`` (sent explicitly) to clear the choice.
+    plan: Plan | None
+
+
+class CorrectionRefused(Answer):
+    """400. ``not_correctable``: the choice started before this month, or
+    it's a "no plan" row. ``price_not_set``: as for a choice.
+    ``no_change``: same plan, same price. Nothing was saved."""
+
+    error: Literal["not_correctable", "price_not_set", "no_change"]
+
+
+class CorrectionConflict(Answer):
+    """409. ``choice_replaced``: already corrected or cleared, by
+    ``choice_id``. ``month_covered``: a month the new plan would cover has
+    another choice, ``choice_id``. ``customer_inactive``: reactivate them
+    first."""
+
+    error: Literal["choice_replaced", "month_covered", "customer_inactive"]
     choice_id: int | None = None
