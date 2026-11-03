@@ -91,3 +91,42 @@ def test_both_react_apps_are_hebrew_right_to_left(build: str) -> None:
     index_html = FRONTEND_DIST.parent / "src" / build / "index.html"
 
     assert '<html lang="he" dir="rtl">' in index_html.read_text(encoding="utf-8")
+
+
+@both_apps
+@pytest.mark.usefixtures("migrated_db")
+def test_both_apps_refuse_cross_site_posts(app: FastAPI) -> None:
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+        refused = client.post("/health", headers={"Origin": "https://evil.example"})
+        own = client.post("/health", headers={"Origin": "http://127.0.0.1:8000"})
+
+    # Refused before routing (403); the app's own origin reaches the router,
+    # which has no POST /health (405).
+    assert refused.status_code == 403
+    assert own.status_code == 405
+
+
+@both_apps
+@pytest.mark.usefixtures("migrated_db")
+def test_both_apps_never_cache_api_answers(app: FastAPI) -> None:
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
+        response = client.get("/api/no-such-route")
+
+    assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.usefixtures("migrated_db")
+def test_the_public_origin_check_matches_the_tunnels_https() -> None:
+    # Behind cloudflared, uvicorn takes the scheme from X-Forwarded-Proto,
+    # so the request URL is https and matches the phone's Origin.
+    with TestClient(public_app, base_url="https://checkin.example.com") as client:
+        response = client.post(
+            "/health",
+            headers={
+                "Origin": "https://checkin.example.com",
+                "Sec-Fetch-Site": "same-origin",
+            },
+        )
+
+    assert response.status_code == 405

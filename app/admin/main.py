@@ -7,13 +7,12 @@ from fastapi import FastAPI
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.admin import security
-from app.admin.api import API_PREFIX, NoStoreMiddleware
 from app.admin.api import auth as api_auth
 from app.admin.api import customers as api_customers
 from app.admin.api import plans as api_plans
 from app.admin.api import prices as api_prices
 from app.admin.api import setup as api_setup
-from app.admin.csrf import SameOriginMiddleware
+from app.core.http import API_PREFIX, NoStoreMiddleware, SameOriginMiddleware
 from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
 

@@ -7,6 +7,7 @@ Run with: uvicorn app.public.main:app --host 127.0.0.1 --port 8001
 
 from fastapi import FastAPI
 
+from app.core.http import NoStoreMiddleware, SameOriginMiddleware
 from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
 
@@ -19,6 +20,10 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+app.add_middleware(NoStoreMiddleware)
+# Without it, another website could post a link form from the customer's
+# own phone. The tunnel hostname check waits on hosting (decision 0028).
+app.add_middleware(SameOriginMiddleware)
 
 
 @app.get("/health")
