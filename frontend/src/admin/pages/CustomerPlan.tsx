@@ -5,7 +5,7 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
-import { formatDate, isManager, type Customer } from "../customers";
+import { formatDate, isManager, planKey, type Customer } from "../customers";
 import {
   AGE_GROUP_NAMES,
   PLAN_NAMES,
@@ -18,12 +18,6 @@ import { useSession } from "../session";
 type PlanStatus = Schemas["PlanStatus"];
 type PlanChoice = Schemas["PlanChoiceRow"];
 type PlanOption = Schemas["PlanOption"];
-
-// Under the customer's own key, so anything refreshing the customer
-// refreshes their plan too.
-function planKey(id: number) {
-  return ["customers", id, "plan"] as const;
-}
 
 const REFUSALS: Record<string, string> = {
   month_not_choosable: "החודש התחלף מאז שהדף נפתח. רעננו את הדף.",

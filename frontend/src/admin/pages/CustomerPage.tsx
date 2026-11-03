@@ -15,6 +15,7 @@ import {
   formatDate,
   formatPhone,
   isManager,
+  planKey,
   type Customer,
   type CustomerField,
 } from "../customers";
@@ -93,6 +94,9 @@ function CustomerDetails({ customer }: { customer: Customer }) {
       const { data, error, response } = await send();
       if (data) {
         queryClient.setQueryData(customerKey(data.id), data);
+        // A new date of birth can change the age group, and so the prices
+        // the Plan section offers.
+        void queryClient.invalidateQueries({ queryKey: planKey(data.id) });
         void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
         setReactivated(false);
         return { saved: true };
