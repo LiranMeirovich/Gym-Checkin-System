@@ -17,11 +17,12 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import CheckConstraint, Enum, ForeignKey, Index, Integer
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.clock import utc_now
 from app.core.models.base import Base
 from app.core.models.prices import AgeGroup, Plan
+from app.core.models.staff import StaffUser
 from app.core.months import Month
 
 
@@ -114,3 +115,6 @@ class PlanChoice(Base):
     replaces_id: Mapped[int | None] = mapped_column(
         ForeignKey("plan_choices.id"), unique=True
     )
+
+    # Who chose it, when staff did; for the customer page's history.
+    staff: Mapped[StaffUser | None] = relationship()
