@@ -13,12 +13,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.admin import security
-from app.admin.csrf import SameOriginMiddleware, csrf_token, csrf_token_matches
+from app.admin.csrf import csrf_token, csrf_token_matches
 from app.admin.main import app as admin_app
 from app.admin.security import SESSION_COOKIE, CurrentStaff
 from app.core import staff_sessions
 from app.core.config import get_settings
 from app.core.db import get_engine
+from app.core.http import SameOriginMiddleware
 from app.core.models import StaffUser
 from app.core.permissions import Role
 from app.core.staff_sessions import start_session

@@ -15,8 +15,10 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "api:types": "uv run --directory .. python -m app.export_openapi admin frontend/node_modules/.tmp/openapi-admin.json && openapi-typescript node_modules/.tmp/openapi-admin.json -o src/admin/backend/schema.d.ts",
-    "api:check": "npm run api:types && git diff --exit-code -- src/admin/backend/schema.d.ts"
+    "api:types": "npm run api:types:admin && npm run api:types:public",
+    "api:types:admin": "uv run --directory .. python -m app.export_openapi admin frontend/node_modules/.tmp/openapi-admin.json && openapi-typescript node_modules/.tmp/openapi-admin.json -o src/admin/backend/schema.d.ts",
+    "api:types:public": "uv run --directory .. python -m app.export_openapi public frontend/node_modules/.tmp/openapi-public.json && openapi-typescript node_modules/.tmp/openapi-public.json -o src/public/backend/schema.d.ts",
+    "api:check": "npm run api:types && git diff --exit-code -- src/admin/backend/schema.d.ts src/public/backend/schema.d.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.104.5",

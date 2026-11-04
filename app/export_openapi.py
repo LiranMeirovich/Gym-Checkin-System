@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from app.admin.api import API_PREFIX
+from app.core.http import API_PREFIX
 
 _SCHEMA_REF = "#/components/schemas/"
 

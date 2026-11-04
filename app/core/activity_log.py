@@ -49,6 +49,10 @@ class Action(StrEnum):
     PLAN_CORRECT = "plan.correct"
     PLAN_CLEAR = "plan.clear"
 
+    # A link code for a customer's phone (never the code itself).
+    PHONE_ISSUE_CODE = "phone.issue_code"
+    PHONE_UNLINK = "phone.unlink"
+
 
 class Target(StrEnum):
     """What kind of thing a change was made to; ``activity_log.target_type``.
@@ -61,6 +65,7 @@ class Target(StrEnum):
     CUSTOMER = "customer"
     PRICE = "price"
     PLAN_CHOICE = "plan_choice"
+    DEVICE_SESSION = "device_session"
 
 
 def record(

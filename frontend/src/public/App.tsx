@@ -1,8 +1,15 @@
-// Placeholder until the check-in pages (milestone 3).
+// The customer app's routes. `/c` is the page the wall QR opens (design
+// doc: "The wall QR"); any other path goes there too.
+import { Navigate, Route, Routes } from "react-router";
+import { CheckIn } from "./pages/CheckIn";
+
 export function App() {
   return (
     <main>
-      <h1>כניסה למכון</h1>
+      <Routes>
+        <Route path="/c" element={<CheckIn />} />
+        <Route path="*" element={<Navigate to="/c" replace />} />
+      </Routes>
     </main>
   );
 }

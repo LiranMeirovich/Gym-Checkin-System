@@ -21,12 +21,12 @@ from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.activity_log import Action, Target, record
 from app.core.clock import to_local, utc_now
-from app.core.models import Customer, StaffUser
+from app.core.models import Customer, DeviceSession, StaffUser
 
 NAME_MAX_LENGTH = 50
 NOTES_MAX_LENGTH = 256
@@ -242,10 +242,20 @@ def change_date_of_birth(
 
 
 def deactivate_customer(db: Session, customer: Customer, *, by: StaffUser) -> None:
-    """Hide the customer from the default list. Nothing else changes."""
+    """Hide the customer from the default list and unlink their phones
+    (decision 0029): after reactivation, each phone links again with a new
+    code. The log entry stays ``active: True → False``."""
     if not customer.active:
         return
     _apply(db, customer, {"active": False}, Action.CUSTOMER_DEACTIVATE, by=by)
+    db.execute(
+        update(DeviceSession)
+        .where(
+            DeviceSession.customer_id == customer.id,
+            DeviceSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=utc_now())
+    )
 
 
 def reactivate_customer(db: Session, customer: Customer, *, by: StaffUser) -> None:

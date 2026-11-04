@@ -27,6 +27,12 @@ export function planKey(id: number) {
   return ["customers", id, "plan"] as const;
 }
 
+// The customer's linked phones. An unlink answers with the new list, which
+// goes straight into the cache.
+export function phonesKey(id: number) {
+  return ["customers", id, "phones"] as const;
+}
+
 // Shown next to the field. Each field has one rule, so one message each.
 export const FIELD_ERRORS: Record<CustomerField, string> = {
   first_name: "שם פרטי: 1 עד 50 תווים",
@@ -57,4 +63,10 @@ export function formatPhone(stored: string): string {
 export function formatDate(isoDate: string): string {
   const [year, month, day] = isoDate.slice(0, 10).split("-").map(Number);
   return `${day}.${month}.${year}`;
+}
+
+/** "2026-11-03T14:05:00+02:00" → "14:05". The server sends the gym's
+ * local time, so this reads it as written, without a timezone. */
+export function formatTime(isoDateTime: string): string {
+  return isoDateTime.slice(11, 16);
 }

@@ -29,8 +29,9 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from app.admin.api.schemas import NotLoggedIn
-from app.admin.csrf import CSRF_HEADER, UNSAFE_METHODS, csrf_token_matches
+from app.admin.csrf import CSRF_HEADER, csrf_token_matches
 from app.core.db import DbSession, get_engine
+from app.core.http import UNSAFE_METHODS
 from app.core.models import StaffSession, StaffUser
 from app.core.permissions import Permission, has_permission
 from app.core.staff import any_staff_exists

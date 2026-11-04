@@ -159,6 +159,7 @@ def test_offline_sql_scripts_are_refused(alembic_config: Config) -> None:
 # and the downgrade must not drop history it can't hold.
 
 BEFORE_NO_PLAN_ROWS = "391fa9399bd0"
+NO_PLAN_ROWS = "818f444bb393"
 
 SEED_PLAN_CHOICES = (
     "INSERT INTO customers (id, first_name, last_name, phone, date_of_birth,"
@@ -207,7 +208,7 @@ def test_the_downgrade_keeps_no_plan_rows(alembic_config: Config) -> None:
     with get_engine().begin() as connection:
         for statement in SEED_PLAN_CHOICES:
             connection.exec_driver_sql(statement)
-    command.upgrade(alembic_config, "head")
+    command.upgrade(alembic_config, NO_PLAN_ROWS)
     with get_engine().begin() as connection:
         connection.exec_driver_sql(
             "INSERT INTO plan_choices (customer_id, start_month, end_month,"
@@ -215,10 +216,8 @@ def test_the_downgrade_keeps_no_plan_rows(alembic_config: Config) -> None:
             " (1, '2026-11', '2027-01', '2026-11-03 11:00:00.000000', 'staff',"
             " 1, 2)"
         )
-    head = current_revision()
-
     with pytest.raises(RuntimeError, match="no plan"):
-        command.downgrade(alembic_config, "-1")
+        command.downgrade(alembic_config, BEFORE_NO_PLAN_ROWS)
 
-    assert current_revision() == head
+    assert current_revision() == NO_PLAN_ROWS
     assert len(plan_choice_rows()) == 3
