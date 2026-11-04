@@ -120,11 +120,11 @@ The plan page lists the three plans with this customer's prices (adult or under 
 
 **Linking a phone (first visit, new phone, lost login)**
 
-1. On the customer's page, a staff member (instructor or manager) clicks "Link a phone". The admin app shows a 6-digit code, valid for 10 minutes and usable once.
+1. On the customer's page, a staff member (instructor or manager) clicks "Link a phone". The admin app shows a 6-digit code, valid for 15 minutes and usable once. Only the customer's newest code works.
 2. The customer scans the wall QR. The phone isn't recognised, so the link page opens; they enter their phone number and the code.
 3. The server checks both, creates a device session, sets the login cookie, and checks the customer in straight away.
 
-A customer can have up to 3 linked phones. The customer page lists them (device, last used) with an "Unlink" button for each.
+A customer can have up to 3 linked phones; linking a 4th unlinks the least recently used one. The customer page lists them (device, last used) with an "Unlink" button for each.
 
 **Login cookie**
 
@@ -227,7 +227,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | --- | --- | --- |
 | `customers` | id, first\_name, last\_name, phone (unique, normalised), date\_of\_birth, notes, created\_at, active | Date of birth sets the under-18 price; deactivate instead of delete (decision 0023). No photo column for now (decision 0022) |
 | `device_sessions` | id, customer\_id, token\_hash (unique), user\_agent, created\_at, last\_seen\_at, revoked\_at | One row per linked phone; at most 3 active per customer |
-| `link_codes` | id, customer\_id, code\_hash, expires\_at, used\_at, failed\_attempts | 6-digit code, 10-minute expiry, single use |
+| `link_codes` | id, customer\_id, code\_hash, created\_by, created\_at, expires\_at, used\_at | 6-digit code, 15-minute expiry, single use; only the customer's newest code counts |
 | `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry; NULL for "no plan"), start\_month, end\_month, age\_group (nullable), unit\_price\_agorot (nullable), chosen\_at, chosen\_by (customer / staff), staff\_user\_id (nullable), replaces\_id (nullable, unique) | Tri-monthly spans 3 months. Append-only (triggers refuse UPDATE and DELETE): a correction is a new row pointing at the one it replaces, from the same start month, and a choice is active while nothing replaces it (decision 0025). A "no plan" row (no plan, age group or price) clears the choice it replaces and covers nothing (decision 0026) |
 | `prices` | id, plan, age\_group (adult / under\_18), amount\_agorot, valid\_from\_month, created\_at | The manager's price table and its history; rows are only added. The row with the latest valid\_from\_month up to a month applies, and the newest row among those for the same month wins |
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable), entered\_by | Single-entry payments count these |
@@ -243,7 +243,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 - At most one active plan choice covers any customer-month (checked in the plan code and by a database trigger). "No plan" rows cover nothing.
 - A phone number belongs to one customer, active or not, stored as E.164 (`+972…`) after the Israeli normalising rules (decision 0023).
 - Login tokens and link codes are stored only as hashes; the plain values exist only in the cookie or on the admin screen.
-- Linking a phone fails after 5 wrong codes for the same phone number, locking that number for 15 minutes. The public app also rate-limits by IP.
+- Linking has no wrong-code lockout: a code is single use, lasts 15 minutes and is replaced by the next one. Guessing is limited by rate limiting at the edge (Cloudflare), not in the app (decision 0029).
 - No check-in (phone or manual) is recorded for a customer without a valid health form on that day.
 - A second check-in by the same customer within 10 minutes is ignored (shown as "already checked in") and doesn't count as an extra single entry.
 - Staff PINs (6–12 digits) are stored as Argon2id hashes, and 5 wrong PINs in a row (each within 15 minutes of the last) lock that account for 5 minutes; the SMTP password is kept in the OS secret store or an environment variable (TBD), not in the database.
@@ -287,7 +287,7 @@ The only thing reachable from outside is the public app's check-in pages; everyt
 - Mounts only the customer routes: the check-in page, the link page, and static files. Admin routes are not registered on this instance, so they can't be reached even by guessing URLs.
 - Listens on `127.0.0.1:8001` only; `cloudflared` is the one thing that connects to it. No router ports are opened.
 - Shows a customer only their own name, plan and visit count, never other customers' data.
-- Rate-limits requests by IP, and locks linking for a phone number after 5 wrong codes (see Data model).
+- Is rate-limited by IP at the edge (a Cloudflare rule in front of the tunnel), not in the app (decision 0029).
 - Sends security headers (HTTPS-only, no framing) and rejects requests that don't come through the tunnel's hostname.
 - Dependencies (Python packages, `cloudflared`) are kept up to date; Windows Update stays on.
 
@@ -394,10 +394,10 @@ Build in six milestones, each usable and testable on its own; hand them to Claud
 
 1. **Foundation**: project layout, settings, SQLite schema and migrations, first manager account on first run, staff accounts with roles and server-side permission checks, the activity log, and the two app entry points (admin and public) sharing one core package. It ends with the frontend foundation: the React + TypeScript project with its admin and public builds, served by the two apps, with the first screens (setup, login) moved to React (decision 0020).
 2. **Customers, prices and plans**: customer create/edit/archive with date of birth, the price table with valid-from months, plan choices and corrections, and the monthly plan logic, with unit tests for every rule in Plans, prices and billing. Split into four features (decision 0022): Customers, Prices, Plan choices and monthly status, Plan corrections. Each ships its core logic, admin JSON routes and a plain, unstyled React page; freezes are dropped for now.
-3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, rate limiting, and manual check-in with plan selection and paper-form upload. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (placeholder questions until the official form arrives), Phone check-in and plan page, Manual check-in and paper forms.
+3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, and manual check-in with plan selection and paper-form upload. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (placeholder questions until the official form arrives), Phone check-in and plan page, Manual check-in and paper forms.
 4. **Admin screens**: dashboard with live check-ins and expiring health forms, customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role, building on the plain pages from milestones 2 and 3. Style every screen, admin and customer (including the milestone 3 phone pages), using the `frontend-design` skill. Test every manager-only action as an instructor and confirm it's refused.
 5. **Report**: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan, age group and edge case.
-6. **Operations**: encrypted backups and restore, Windows services for both apps and `cloudflared`, the named Cloudflare tunnel on the gym domain, SMTP setup, a printable wall-QR page, and a setup guide for the gym PC.
+6. **Operations**: encrypted backups and restore, Windows services for both apps and `cloudflared`, the named Cloudflare tunnel on the gym domain, SMTP setup, a printable wall-QR page, and a setup guide for the gym PC. All deployment testing happens here, through the chosen host: proxy headers, https and the login cookie on real phones, and edge rate limiting (decisions 0029, 0030).
 
 **Notes for Claude Code**
 

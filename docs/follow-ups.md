@@ -18,7 +18,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Check-in: an instructor's manual check-in with no plan for the month records single entry; only the manager picks or changes plans (decision 0017). The change-plan route decides whether a single-entry → monthly correction covers the visits already made.
 - Opening a health form's contents is logged in the activity log (decision 0021).
 - The instructor's check-in screen shows only what check-in needs (name, health form valid or not, plan status), never date of birth, notes or activity-log entries (decision 0023).
-- Linking: look the customer up with `find_by_phone()` (`app/core/customers.py`, built for this) and key the wrong-code lockout on the normalised number, so every way of typing one number counts together (decision 0023).
+- Phone check-in: linking a phone should also check the customer in straight away (design doc "Check-in flow", step 3); the link page only says "linked" for now. A check-in counts as using the phone (`last_seen_at`) and refreshes the cookie's year.
 
 ## Milestone 4: admin screens (from Customers)
 - Customer list: search, and sorting / filtering by recent check-ins (e.g. who came in the past month), as queries.
@@ -28,6 +28,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Settings screen: load with `load_gym_settings_for_editing()`, convert form fields to their types before `update_gym_settings()`, and require a manager-only permission on the server. Email addresses are ASCII-only for now (decision 0016).
 - Activity log screen (`activity_log.view`) must cope with older before/after shapes.
 - Lock screen: style it, add the role-filtered menus in React. A polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
+- Customer page, Phones: the list doesn't refresh itself while a code is on screen, because every React request counts as activity for the auto-lock. Once background refreshes skip the idle timer (the server already allows a request that doesn't `touch`), poll the list and hide the code once a phone links. The device name is a rough guess from the user agent (iPhone / Android / iPad); fine for telling phones apart.
 - The "אין חיבור לשרת" error markup is copied in six screens (setup, lock screen, the three customer pages); make it a shared component.
 
 ## Milestone 5: report (from Plan corrections)
@@ -39,6 +40,8 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - SMTP host/user and the backup folder become settings (after hosting).
 - Relative `GYM_DATABASE_PATH` and the `.env` lookup depend on the process's working directory. A missing DB file stops startup, but the two apps could still open different files if started from different folders. Pin a base folder or require absolute paths in prod.
 - Packaging: the apps need `alembic.ini` and `migrations/` next to the code at runtime (the startup check reads them), and `npm ci` + `npm run build` must run before they start (a missing build is a 503 page, not a startup error).
+- Deployment checks (decision 0030), through the chosen host or tunnel: `X-Forwarded-Proto: https` reaches the public app so the same-origin check passes (otherwise compare against a configured public hostname, `app/core/http.py`); linking and the `Secure` `gym_device` cookie work on a real iPhone and Android phone and survive a reload; `CF-Connecting-IP` (or the host's equivalent) carries the client IP.
+- Rate limiting (decision 0029): the app has none and no wrong-code lockout. Before launch, add an edge (Cloudflare) rate-limit rule for `POST /api/link` by IP, and consider one for the whole public hostname.
 - Security headers: the design doc asks the public app for HTTPS-only and no-framing headers; add a content security policy for both React builds too.
 - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config.
 - Dependabot for the SHA-pinned GitHub Actions.

@@ -40,7 +40,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 - Get "now" from `app.core.clock.utc_now()` and display times with `to_local()`. Timestamp columns are `Mapped[datetime]` (stored as `UTCDateTime`); naive datetimes are refused.
 - The apps never create or migrate the database; they refuse to start unless it's at the newest migration.
 - Every admin API route except `/api/lock-screen`, `/api/login`, `/api/setup` and `/health` declares `CurrentStaff` or `require_permission(Permission.X)` (`app/admin/security.py`); forgetting it leaves the route open. Not logged in is a 401 `NotLoggedIn`. The one other exception is the SPA catch-all (`app/core/spa.py`, `serve_frontend()`, registered last), which serves the same data-free `index.html` to everyone.
-- Admin API: routes in `app/admin/api/`, request/response shapes in `app/admin/api/schemas.py` (response models extend `Answer`), errors as codes (Hebrew text lives in React). Every `/api` response is `no-store`. After changing a route or schema, run `npm run api:types --prefix frontend` and commit `frontend/src/admin/backend/schema.d.ts`; CI fails if it's out of date.
+- Admin API: routes in `app/admin/api/`, request/response shapes in `app/admin/api/schemas.py` (response models extend `Answer`), errors as codes (Hebrew text lives in React). Every `/api` response is `no-store`. After changing a route or schema, run `npm run api:types --prefix frontend` and commit both `frontend/src/admin/backend/schema.d.ts` and `frontend/src/public/backend/schema.d.ts`; CI fails if either is out of date.
 - React talks to the API only through `frontend/src/admin/backend/client.ts`, which sends the CSRF token as `X-CSRF-Token` (decision 0019; the server accepts only the header). The token comes from `GET /api/session` or the login/setup answer and lives in memory only. `session.tsx` runs the auto-lock timer and sends any 401 to the lock screen. No source folder under `frontend/src/<app>/` may be named `api` (Vite serves source from the site root and proxies `/api/`).
 - Admin test clients use `base_url="http://127.0.0.1:8000"` (the host guard refuses `testserver`), and POSTs need a matching `Origin` header.
 - Run uvicorn with a single worker, so scheduled jobs (report, backups) never run twice.
@@ -61,6 +61,7 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - **Ask before architectural decisions.** Don't choose libraries, change the database schema, change the folder structure or change route contracts without asking first. Suggest options and give a recommendation.
 - **Flag what's risky.** In every summary, call out anything surprising, security-relevant or hard to undo, even if it's small.
 - **Add a dependency only in the feature that first uses it** (decision 0010).
+- **Test features locally.** A feature is done when its tests pass and it works in the browser on `127.0.0.1` (phone-sized for customer pages). Anything that needs the real deployment (host or tunnel, proxy headers, https, real phones) waits for milestone 6; note it in that section of `docs/follow-ups.md` (decision 0030).
 - **Keep changes small and focused.** Do one feature or fix at a time, so each change can be reviewed and committed on its own.
 - **Never commit or push** unless asked.
 - **If the code and the design doc disagree, stop and ask.** Don't silently pick one.
@@ -104,5 +105,5 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - Lint / format: `uv run ruff check .` / `uv run ruff format .`
 - All hooks on every file: `pre-commit run --all-files`
 - Secret scan of the branch: `gitleaks git --log-opts="main..HEAD"`
-- Phone testing tunnel: `cloudflared tunnel --url http://127.0.0.1:8001`
+- Phone testing tunnel (milestone 6 only, decision 0030): `cloudflared tunnel --url http://127.0.0.1:8001`
 - Windows note: the Claude desktop app sandboxes `AppData`, so run `uv python install`, `uv tool install` and `pre-commit install` from your own terminal, not through Claude.
