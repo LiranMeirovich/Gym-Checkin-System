@@ -124,6 +124,13 @@ def normalise_phone(text: str) -> str:
     return "+972" + national
 
 
+def display_phone(phone: str) -> str:
+    """A stored number (E.164) as it's written in Israel: ``+972501234567``
+    is ``050-1234567``, ``+97221234567`` is ``02-1234567``."""
+    national = "0" + phone.removeprefix("+972")
+    return f"{national[:-7]}-{national[-7:]}"
+
+
 def find_by_phone(db: Session, phone: str) -> Customer | None:
     """The customer with this phone, active or not, in any typed form.
     ``None`` if nobody has it or it isn't a valid number."""

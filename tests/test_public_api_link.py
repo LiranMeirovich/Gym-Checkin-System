@@ -93,8 +93,11 @@ def test_linking_answers_with_the_first_name_only(
     response = post_link(client, new_code(db, customer, staff))
 
     assert response.status_code == 200
-    # Never the last name, phone or anything else.
-    assert response.json() == {"first_name": "Noa"}
+    # Never the last name, phone or anything else; no form signed yet.
+    assert response.json() == {
+        "first_name": "Noa",
+        "health_form": {"state": "missing", "valid_until": None},
+    }
     assert response.headers["cache-control"] == "no-store"
 
 
@@ -122,7 +125,10 @@ def test_a_linked_phone_knows_whose_it_is(
     response = client.get("/api/me")
 
     assert response.status_code == 200
-    assert response.json() == {"first_name": "Noa"}
+    assert response.json() == {
+        "first_name": "Noa",
+        "health_form": {"state": "missing", "valid_until": None},
+    }
 
 
 def test_a_wrong_code_is_refused_without_a_cookie(

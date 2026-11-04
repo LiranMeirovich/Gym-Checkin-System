@@ -21,6 +21,8 @@ from fpdf import FPDF
 from fpdf.enums import Align, XPos, YPos
 from PIL import Image, UnidentifiedImageError
 
+from app.core.customers import display_phone
+
 if TYPE_CHECKING:
     from app.core.health_forms import CheckedForm
 
@@ -104,7 +106,7 @@ def render_snapshot(
     )
     pdf.line_of(
         f"מין: {_GENDER[checked.gender.value]}"
-        f"    מספר טלפון: ⁦{_local_phone(details.phone)}⁩"
+        f"    מספר טלפון: {_ltr(display_phone(details.phone))}"
     )
     pdf.line_of(form.wording_note, size=9)
     pdf.ln(2)
@@ -143,16 +145,14 @@ def render_snapshot(
     return bytes(pdf.output())
 
 
-def _local_phone(phone: str) -> str:
-    """+972501234567 as it's written in Israel: 050-1234567."""
-    national = "0" + phone.removeprefix("+972")
-    return f"{national[:-7]}-{national[-7:]}"
+def _ltr(text: str) -> str:
+    # Wrapped as left-to-right (LRI ... PDI), so the bidi algorithm keeps
+    # 04/11/2026 and 050-1234567 in order inside a Hebrew line.
+    return f"⁦{text}⁩"
 
 
 def _day(day: date) -> str:
-    # Wrapped as left-to-right, so the bidi algorithm keeps 04/11/2026 in
-    # order inside a Hebrew line.
-    return f"⁦{day:%d/%m/%Y}⁩"
+    return _ltr(f"{day:%d/%m/%Y}")
 
 
 class _Pdf(FPDF):

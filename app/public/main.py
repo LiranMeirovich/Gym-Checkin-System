@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from app.core.http import API_PREFIX, NoStoreMiddleware, SameOriginMiddleware
 from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
+from app.public.api import health_form as api_health_form
 from app.public.api import link as api_link
 
 # FastAPI adds /docs, /redoc and /openapi.json by default. On the public app
@@ -26,6 +27,7 @@ app.add_middleware(NoStoreMiddleware)
 # own phone. The tunnel hostname check waits on hosting (decision 0028).
 app.add_middleware(SameOriginMiddleware)
 app.include_router(api_link.router, prefix=API_PREFIX)
+app.include_router(api_health_form.router, prefix=API_PREFIX)
 
 
 @app.get("/health")
