@@ -1,6 +1,6 @@
 # 0028. Split milestone 3 into four features, phone path first
 
-- Status: Accepted
+- Status: Accepted (feature 4 amended by [0031](0031-health-forms-are-online-only.md): no paper forms; the form is filled in on a gym device)
 - Date: 2026-11-03
 
 ## Context
