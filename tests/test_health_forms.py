@@ -2,13 +2,19 @@
 long a form lasts, who signs, and the status staff and the phone see.
 Names and answers are made up."""
 
+import io
+import json
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
 import pytest
+from PIL import Image, ImageDraw
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.activity_log import Action, Target
+from app.core.customers import CustomerInactiveError
 from app.core.db import get_engine
 from app.core.health_forms import (
     CURRENT_VERSION,
@@ -21,12 +27,31 @@ from app.core.health_forms import (
     check_form,
     expires_on,
     health_form_status,
+    list_forms,
+    open_form_document,
+    save_form,
     signed_by_guardian,
 )
-from app.core.models import Customer, HealthForm
+from app.core.models import ActivityLogEntry, Customer, HealthForm, StaffUser
+from app.core.permissions import Role
 
 FORM = FORMS[CURRENT_VERSION]
 ALL_NO = {question.key: False for question in FORM.questions}
+
+
+def signature_png(*, drawn: bool = True, size: tuple[int, int] = (600, 240)) -> bytes:
+    """A made-up signature: a zigzag on a transparent canvas, as the
+    phone's signature pad sends it."""
+    image = Image.new("RGBA", size, (0, 0, 0, 0))
+    if drawn:
+        ImageDraw.Draw(image).line([(20, 100), (100, 30), (180, 90)], "black", 5)
+    out = io.BytesIO()
+    image.save(out, "PNG")
+    return out.getvalue()
+
+
+SIGNATURE = signature_png()
+PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 
 
 def filled(**changes: object) -> dict[str, object]:
@@ -37,6 +62,7 @@ def filled(**changes: object) -> dict[str, object]:
         "gender": "female",
         "signer_name": "Noa Levi",
         "confirmed": True,
+        "signature_png": SIGNATURE,
     }
     return fields | changes
 
@@ -58,6 +84,10 @@ def test_the_gym_name_comes_from_settings() -> None:
 
     assert "Made-up Gym" in notes[0]
     assert not any("{" in note for note in notes)
+
+
+def test_without_a_gym_name_the_form_says_the_gym() -> None:
+    assert "חדר הכושר" in FORM.notes(None)[0]
 
 
 def test_the_guardian_consent_names_the_trainee() -> None:
@@ -123,6 +153,11 @@ def test_the_name_and_details_are_tidied() -> None:
         ({"signer_name": "   "}, "signer_name"),
         ({"signer_name": "x" * 101}, "signer_name"),
         ({"confirmed": False}, "confirmed"),
+        ({"signature_png": signature_png(drawn=False)}, "signature"),
+        ({"signature_png": b""}, "signature"),
+        ({"signature_png": PNG_HEADER + b" not really"}, "signature"),
+        ({"signature_png": b"GIF89a"}, "signature"),
+        ({"signature_png": signature_png(size=(30, 30))}, "signature"),
     ],
     ids=[
         "a question unanswered",
@@ -136,6 +171,11 @@ def test_the_name_and_details_are_tidied() -> None:
         "no name",
         "name too long",
         "not confirmed",
+        "a blank signature",
+        "no signature",
+        "a broken png",
+        "not a png",
+        "a tiny signature",
     ],
 )
 def test_a_bad_field_is_refused(changes: dict[str, object], field: str) -> None:
@@ -303,3 +343,84 @@ def test_another_customers_form_doesnt_count(db: Session, customer: Customer) ->
     assert health_form_status(db, customer, date(2026, 11, 4)).state is (
         FormState.MISSING
     )
+
+
+def test_the_signature_is_re_encoded_as_a_png() -> None:
+    checked = check_form(**filled())
+
+    assert checked.signature_png.startswith(PNG_HEADER)
+    assert checked.signature_png != SIGNATURE
+
+
+# ── Saving and opening a form ──────────────────────────────────────────
+
+
+def test_a_saved_form_keeps_its_answers_dates_and_snapshot(
+    db: Session, customer: Customer
+) -> None:
+    checked = check_form(
+        **filled(answers=ALL_NO | {"other": True}, details={"other": "knee"})
+    )
+
+    form = save_form(db, customer, checked, today=date(2026, 11, 4))
+    db.commit()
+
+    assert form.form_version == CURRENT_VERSION
+    assert json.loads(form.answers_json) == {
+        "answers": ALL_NO | {"other": True},
+        "details": {"other": "knee"},
+        "gender": "female",
+    }
+    assert form.needs_doctor_note is True
+    assert form.signer_name == "Noa Levi"
+    assert form.signed_by_guardian is False
+    assert form.signed_on == date(2026, 11, 4)
+    assert form.expires_on == date(2027, 11, 3)
+    assert form.document.startswith(b"%PDF-")
+
+
+def test_a_parent_signs_for_an_under_18_customer(
+    db: Session, customer: Customer
+) -> None:
+    customer.date_of_birth = date(2010, 5, 1)
+    db.commit()
+
+    form = save_form(
+        db,
+        customer,
+        check_form(**filled(signer_name="Dana Levi")),
+        today=date(2026, 11, 4),
+    )
+
+    assert form.signed_by_guardian is True
+    assert form.signer_name == "Dana Levi"
+
+
+def test_an_inactive_customer_cant_sign(db: Session, customer: Customer) -> None:
+    customer.active = False
+    db.commit()
+
+    with pytest.raises(CustomerInactiveError):
+        save_form(db, customer, check_form(**filled()), today=date(2026, 11, 4))
+
+
+def test_forms_are_listed_newest_first(db: Session, customer: Customer) -> None:
+    older = add_form(db, customer, date(2026, 1, 10))
+    newer = add_form(db, customer, date(2026, 6, 1))
+
+    assert list_forms(db, customer) == [newer, older]
+
+
+def test_opening_a_form_is_logged(db: Session, customer: Customer) -> None:
+    manager = StaffUser(display_name="Dana", role=Role.MANAGER, pin_hash="$argon2id$x")
+    db.add(manager)
+    db.flush()
+    form = add_form(db, customer, date(2026, 11, 4))
+
+    document = open_form_document(db, form, by=manager)
+
+    assert document.startswith(b"%PDF-")
+    entry = db.scalars(select(ActivityLogEntry)).one()
+    assert entry.staff_user_id == manager.id
+    assert entry.action == Action.HEALTH_FORM_OPEN
+    assert (entry.target_type, entry.target_id) == (Target.HEALTH_FORM, form.id)

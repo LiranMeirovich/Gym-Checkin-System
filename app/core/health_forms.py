@@ -12,6 +12,7 @@ doctor's note (feature 4), so it blocks check-in like a missing form.
 """
 
 import calendar
+import json
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import StrEnum
@@ -19,7 +20,17 @@ from enum import StrEnum
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.models import Customer, HealthForm
+from app.core.activity_log import Action, Target, record
+from app.core.clock import to_local, utc_now
+from app.core.customers import CustomerInactiveError
+from app.core.gym_settings import load_gym_settings
+from app.core.health_form_pdf import (
+    InvalidSignatureError,
+    SnapshotDetails,
+    check_signature,
+    render_snapshot,
+)
+from app.core.models import Customer, HealthForm, StaffUser
 from app.core.plans import ADULT_AGE
 
 # How long a form lasts, counted from the day it's signed. Each form keeps
@@ -66,8 +77,10 @@ class FormText:
     guardian_title: str
     guardian_consent: str
 
-    def notes(self, gym_name: str) -> tuple[str, ...]:
-        return tuple(note.format(gym_name=gym_name) for note in self.part_a_notes)
+    def notes(self, gym_name: str | None) -> tuple[str, ...]:
+        # Before first-run setup there's no gym name yet: "the gym".
+        name = gym_name or "חדר הכושר"
+        return tuple(note.format(gym_name=name) for note in self.part_a_notes)
 
     def consent(self, customer_name: str) -> str:
         return self.guardian_consent.format(customer_name=customer_name)
@@ -165,6 +178,8 @@ class CheckedForm:
     details: dict[str, str]
     gender: Gender
     signer_name: str
+    # The clean copy from ``check_signature()``.
+    signature_png: bytes
 
     @property
     def needs_doctor_note(self) -> bool:
@@ -229,11 +244,11 @@ def check_form(
     gender: str,
     signer_name: str,
     confirmed: bool,
+    signature_png: bytes,
 ) -> CheckedForm:
     """Check a filled-in form against the current version: every question
     answered, details only where the form has a line for them, a gender, a
-    name and the confirmation box ticked. The signature is checked with
-    the PDF snapshot."""
+    name, the confirmation box ticked and a usable signature image."""
     if version != CURRENT_VERSION:
         raise FormVersionChangedError(version)
     form = FORMS[version]
@@ -260,6 +275,11 @@ def check_form(
     if confirmed is not True:
         bad.add(FormField.CONFIRMED)
 
+    try:
+        signature = check_signature(signature_png)
+    except InvalidSignatureError:
+        bad.add(FormField.SIGNATURE)
+
     if bad:
         raise InvalidHealthFormError(bad)
     return CheckedForm(
@@ -269,7 +289,76 @@ def check_form(
         details={key: text for key, text in cleaned_details.items() if text},
         gender=Gender(gender),
         signer_name=name,
+        signature_png=signature,
     )
+
+
+def local_today() -> date:
+    """Today in Israel time: the day a form is signed or checked on."""
+    return to_local(utc_now()).date()
+
+
+def save_form(
+    db: Session, customer: Customer, checked: CheckedForm, *, today: date
+) -> HealthForm:
+    """Sign and store a checked form for ``customer`` on ``today``, with
+    its PDF snapshot. Works in the caller's transaction and never commits.
+
+    Not logged: the customer fills it in themselves, on their phone or on
+    a gym device (decision 0031). The PDF is built inside the transaction
+    (decision 0031: moved out only if it proves slow).
+    """
+    if not customer.active:
+        raise CustomerInactiveError("reactivate the customer first")
+    guardian = signed_by_guardian(customer, today)
+    last_day = expires_on(today)
+    document = render_snapshot(
+        checked,
+        SnapshotDetails(
+            gym_name=load_gym_settings(db).gym_name,
+            customer_name=f"{customer.first_name} {customer.last_name}",
+            date_of_birth=customer.date_of_birth,
+            phone=customer.phone,
+            signed_on=today,
+            expires_on=last_day,
+            signed_by_guardian=guardian,
+        ),
+        checked.signature_png,
+    )
+    form = HealthForm(
+        customer_id=customer.id,
+        form_version=checked.form.version,
+        answers_json=json.dumps(checked.answers_json_value(), ensure_ascii=False),
+        needs_doctor_note=checked.needs_doctor_note,
+        signer_name=checked.signer_name,
+        signed_by_guardian=guardian,
+        signed_on=today,
+        expires_on=last_day,
+        document=document,
+    )
+    db.add(form)
+    db.flush()
+    return form
+
+
+def list_forms(db: Session, customer: Customer) -> list[HealthForm]:
+    """Every form the customer has signed, newest first. The PDFs stay
+    unloaded."""
+    return list(
+        db.scalars(
+            select(HealthForm)
+            .where(HealthForm.customer_id == customer.id)
+            .order_by(HealthForm.signed_on.desc(), HealthForm.id.desc())
+        )
+    )
+
+
+def open_form_document(db: Session, form: HealthForm, *, by: StaffUser) -> bytes:
+    """A form's PDF, for the manager. Every opening is written to the
+    activity log (design doc: "Validity and access"); the caller checks
+    ``health_forms.view_contents``."""
+    record(db, by, Action.HEALTH_FORM_OPEN, Target.HEALTH_FORM, form.id)
+    return form.document
 
 
 def health_form_status(
