@@ -82,12 +82,12 @@ def test_the_current_form_has_the_official_fifteen_questions() -> None:
 def test_the_gym_name_comes_from_settings() -> None:
     notes = FORM.notes("Made-up Gym")
 
-    assert "Made-up Gym" in notes[0]
+    assert "לחדר כושר Made-up Gym" in notes[0]
     assert not any("{" in note for note in notes)
 
 
 def test_without_a_gym_name_the_form_says_the_gym() -> None:
-    assert "חדר הכושר" in FORM.notes(None)[0]
+    assert "לחדר הכושר" in FORM.notes(None)[0]
 
 
 def test_the_guardian_consent_names_the_trainee() -> None:

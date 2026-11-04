@@ -1,10 +1,12 @@
 // The page the wall QR opens. A phone that isn't linked gets the link
-// form (its phone number and the code from the desk); a linked phone is
-// greeted by first name. Checking in from here comes in feature 3
-// (decision 0028).
+// form (its phone number and the code from the desk). A linked phone with
+// no valid health form gets the form first (decision 0004); one whose
+// form needs a doctor's note is sent to the desk. Checking in from here
+// comes in feature 3 (decision 0028).
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
+import { HealthForm } from "./HealthForm";
 
 type Me = Schemas["Me"];
 
@@ -31,10 +33,47 @@ export function CheckIn() {
   if (isPending) return null;
   if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
   if (!me) return <LinkForm />;
+  return <Linked me={me} />;
+}
+
+function day(iso: string): string {
+  const [year, month, date] = iso.split("-");
+  return `${date}/${month}/${year}`;
+}
+
+function Linked({ me }: { me: Me }) {
+  const queryClient = useQueryClient();
+  const form = me.health_form;
+
+  if (form.state === "missing") {
+    return (
+      <HealthForm
+        onSigned={(status) =>
+          queryClient.setQueryData<Me>(ME_KEY, { ...me, health_form: status })
+        }
+      />
+    );
+  }
+  if (form.state === "needs_doctor_note") {
+    return (
+      <>
+        <h1>שלום, {me.first_name}</h1>
+        <p role="alert">
+          הצהרת הבריאות התקבלה. מכיוון שסימנת &quot;כן&quot; באחת השאלות, יש
+          להביא לדלפק אישור רפואי מרופא לפני האימון.
+        </p>
+      </>
+    );
+  }
   return (
     <>
       <h1>שלום, {me.first_name}</h1>
       <p>הטלפון מקושר.</p>
+      {form.valid_until && (
+        <p>
+          הצהרת הבריאות בתוקף עד <bdi>{day(form.valid_until)}</bdi>.
+        </p>
+      )}
     </>
   );
 }

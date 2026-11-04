@@ -61,7 +61,8 @@ class Question:
 @dataclass(frozen=True)
 class FormText:
     """Everything a version of the form says, in the order it's shown.
-    ``{gym_name}`` in a paragraph is filled in from the gym settings."""
+    ``{to_gym}`` in a paragraph becomes "to the gym <name>", the name
+    from the gym settings."""
 
     version: str
     title: str
@@ -78,9 +79,10 @@ class FormText:
     guardian_consent: str
 
     def notes(self, gym_name: str | None) -> tuple[str, ...]:
-        # Before first-run setup there's no gym name yet: "the gym".
-        name = gym_name or "חדר הכושר"
-        return tuple(note.format(gym_name=name) for note in self.part_a_notes)
+        # As the official form words it: "לחדר כושר <name>". Before
+        # first-run setup there's no name yet: "to the gym".
+        to_gym = f"לחדר כושר {gym_name}" if gym_name else "לחדר הכושר"
+        return tuple(note.format(to_gym=to_gym) for note in self.part_a_notes)
 
     def consent(self, customer_name: str) -> str:
         return self.guardian_consent.format(customer_name=customer_name)
@@ -96,7 +98,7 @@ _FORM_2026_11 = FormText(
     part_a_title="חלק א': שאלון רפואי",
     part_a_notes=(
         "אם התשובה על אחת מהשאלות, או יותר בחלק זה היא חיובית, אז יש להמציא"
-        " ל{gym_name} גם תעודה רפואית מרופא לפיה הרופא מאשר כי אין סיכון"
+        " {to_gym} גם תעודה רפואית מרופא לפיה הרופא מאשר כי אין סיכון"
         " לבריאותך באימון הכושר. מכון הכושר יקבל מתאמן שהמציא תעודה רפואית"
         " שלא עברו 3 חודשים מיום הנפקתה",
         "אם כל התשובות לשאלות בחלק זה הן שליליות – יש למלא ולחתום על ההצהרה בחלק ב'",
