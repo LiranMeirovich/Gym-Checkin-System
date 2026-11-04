@@ -13,7 +13,7 @@ The phone opens the gym's check-in page, which is served from the gym PC through
 - Check-in: customers scan a fixed wall QR with their own phone (no personal QR codes, no desk scanner).
 - Hosting: the system runs on the gym PC; Cloudflare Tunnel makes the customer check-in page reachable from phones. No cloud server. **Under review:** the manager wants the system always on, so it will probably move to a server (the village's server or a paid VPS). See Open questions.
 - Plans: customers choose their own plan (monthly, tri-monthly or single entry) on their phone at their first check-in of each month, which also confirms they're continuing. Punch cards are coming as a fourth option (see Punch cards).
-- Health form: every customer must have a valid signed health form before any check-in. It's filled in on the phone, or uploaded as a paper form by staff (see Health form).
+- Health form: every customer must have a valid signed health form before any check-in. It's filled in on the phone, or on a gym device at the desk (see Health form).
 - Prices: the manager keeps an editable price table with adult and under-18 prices for every plan.
 - Report: generated automatically on the 1st, emailed to the manager, and sent on to the other recipients once the manager approves it.
 
@@ -54,7 +54,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | Add a customer; edit name, phone and notes | Yes | Yes |
 | Link or unlink a customer's phone | Yes | Yes |
 | See whether a customer's health form is valid and when it expires | Yes | Yes |
-| Upload a signed paper health form for a customer | Yes | Yes |
+| Open the health form on a gym device for a customer, add a doctor's note | Yes | Yes |
 | View the contents of a health form | No | Yes |
 | Edit a customer's date of birth (sets the under-18 price) | No | Yes |
 | Change or clear a plan already chosen | No | Yes |
@@ -139,7 +139,7 @@ A photo of the wall QR opens the page from anywhere, so a linked phone could che
 
 **Manual check-in**
 
-From the customer list, a staff member finds the customer and clicks "Check in". It records who did it, is logged with method `manual`, and works even when the internet is down. If the customer has no valid health form, the button is disabled and the dialog offers "Upload paper form" instead; once a signed paper form is uploaded, the check-in goes ahead.
+From the customer list, a staff member finds the customer and clicks "Check in". It records who did it, is logged with method `manual`, and works even when the internet is down. If the customer has no valid health form, the button is disabled and the dialog offers to open the health form on a gym device instead; once the customer has filled it in and signed, the check-in goes ahead (decision 0031).
 
 ## Plans, prices and billing
 
@@ -204,17 +204,18 @@ Every customer needs a valid signed health declaration before they can train. Wi
 **On the phone**
 
 - After linking, and whenever the form is missing or expired, the phone shows the health form before the plan page: the declaration questions, a confirmation checkbox, the customer's full name and a finger-drawn signature.
-- Customers under 18 (from their date of birth) get the version signed by a parent or guardian (*assumption*).
+- Customers under 18 (from their date of birth) get the version signed by a parent or guardian.
+- The questions are the gym's official health declaration. Any "yes" answer means the form counts only once staff add a doctor's note (an image); until then check-in is blocked (decision 0031).
 - On submit, the system stores the answers, the form version, and a PDF snapshot of exactly what was signed, so the form stays readable even after the questions change.
 
-**On paper (at the desk)**
+**On a gym device (at the desk)**
 
-- For customers without a smartphone, or with an existing paper form, staff upload a photo or scan from the customer page and enter the date it was signed.
+- For customers without a smartphone, or who have trouble with it, staff open the same form on a gym tablet or computer, and the customer fills it in and signs there (decision 0031). There are no paper forms.
 - This is also how manual check-in handles a customer with no valid form.
 
 **Validity and access**
 
-- A form is valid for 12 months from the date it was signed (*assumption*). The dashboard lists forms expiring in the next 30 days, and the next scan after expiry asks for a new form.
+- Each form stores its own expiry date, 12 months from the date it was signed for now (decision 0031), so changing the rule never rewrites old forms. The dashboard lists forms expiring in the next 30 days, and the next scan after expiry asks for a new form.
 - Instructors see only "valid until …" or "missing / expired". Only the manager can open a form's contents, and every opening is written to the activity log.
 - Old forms are kept (never overwritten); the newest valid one counts.
 - The exact questions follow the official health declaration form the manager provides.
@@ -236,7 +237,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
 | staff\_sessions | id, staff\_user\_id, token\_hash (unique), created\_at, last\_seen\_at, ended\_at | One row per staff login; the `gym_staff` cookie holds the token, only its SHA-256 hash is stored. Ends on Lock, a new login, the role's idle time or 12 hours; ended, never deleted |
 | activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change, in the same transaction; append-only (database triggers refuse UPDATE and DELETE). Never holds PINs, hashes or tokens |
-| `health_forms` | id, customer\_id, source (phone / paper), form\_version, answers\_json (nullable for paper), signer\_name, signed\_by\_guardian, signed\_on, expires\_on, document (blob: PDF snapshot or uploaded scan), uploaded\_by (nullable), created\_at | Never overwritten; the newest valid row counts. The document is stored inside the database, not as a loose file, so it gets the same encryption and backups |
+| `health_forms` | id, customer\_id, form\_version, answers\_json, needs\_doctor\_note, signer\_name, signed\_by\_guardian, signed\_on, expires\_on, document (blob: PDF snapshot), created\_at | Never overwritten; the newest unexpired row counts, and one with `needs_doctor_note` counts only with a doctor's note (its own table, milestone 3 feature 4). The document is stored inside the database, not as a loose file, so it gets the same encryption and backups |
 
 **Rules the code and database enforce**
 
@@ -394,7 +395,7 @@ Build in six milestones, each usable and testable on its own; hand them to Claud
 
 1. **Foundation**: project layout, settings, SQLite schema and migrations, first manager account on first run, staff accounts with roles and server-side permission checks, the activity log, and the two app entry points (admin and public) sharing one core package. It ends with the frontend foundation: the React + TypeScript project with its admin and public builds, served by the two apps, with the first screens (setup, login) moved to React (decision 0020).
 2. **Customers, prices and plans**: customer create/edit/archive with date of birth, the price table with valid-from months, plan choices and corrections, and the monthly plan logic, with unit tests for every rule in Plans, prices and billing. Split into four features (decision 0022): Customers, Prices, Plan choices and monthly status, Plan corrections. Each ships its core logic, admin JSON routes and a plain, unstyled React page; freezes are dropped for now.
-3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, and manual check-in with plan selection and paper-form upload. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (placeholder questions until the official form arrives), Phone check-in and plan page, Manual check-in and paper forms.
+3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, and manual check-in with plan selection and the health form on a gym device. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (the official form's questions, decision 0031), Phone check-in and plan page, Manual check-in and the form on a gym device.
 4. **Admin screens**: dashboard with live check-ins and expiring health forms, customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role, building on the plain pages from milestones 2 and 3. Style every screen, admin and customer (including the milestone 3 phone pages), using the `frontend-design` skill. Test every manager-only action as an instructor and confirm it's refused.
 5. **Report**: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan, age group and edge case.
 6. **Operations**: encrypted backups and restore, Windows services for both apps and `cloudflared`, the named Cloudflare tunnel on the gym domain, SMTP setup, a printable wall-QR page, and a setup guide for the gym PC. All deployment testing happens here, through the chosen host: proxy headers, https and the login cookie on real phones, and edge rate limiting (decisions 0029, 0030).

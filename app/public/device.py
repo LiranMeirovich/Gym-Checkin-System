@@ -9,11 +9,13 @@ SameSite=Lax rather than Strict, so a phone opening the wall QR's link
 from the Camera app (a top-level navigation from outside) still sends it.
 """
 
-from fastapi import Request, Response
+from fastapi import Request, Response, status
+from fastapi.responses import JSONResponse
 
 from app.core.db import DbSession
 from app.core.models import DeviceSession
 from app.core.phone_links import DEVICE_SESSION_LIFETIME, find_device
+from app.public.api.schemas import NotLinked
 
 DEVICE_COOKIE = "gym_device"
 
@@ -42,3 +44,14 @@ def this_device(request: Request, db: DbSession) -> DeviceSession | None:
     """The live device session behind this request's cookie, if any."""
     token = request.cookies.get(DEVICE_COOKIE)
     return find_device(db, token) if token else None
+
+
+def refuse_not_linked(request: Request) -> JSONResponse:
+    """401 ``not_linked``. A dead token is no use to the browser, so it's
+    dropped."""
+    refused = JSONResponse(
+        NotLinked().model_dump(), status_code=status.HTTP_401_UNAUTHORIZED
+    )
+    if DEVICE_COOKIE in request.cookies:
+        clear_device_cookie(refused)
+    return refused

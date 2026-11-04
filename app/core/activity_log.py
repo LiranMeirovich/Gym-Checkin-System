@@ -53,6 +53,9 @@ class Action(StrEnum):
     PHONE_ISSUE_CODE = "phone.issue_code"
     PHONE_UNLINK = "phone.unlink"
 
+    # The manager opened a health form's contents (its PDF).
+    HEALTH_FORM_OPEN = "health_form.open"
+
 
 class Target(StrEnum):
     """What kind of thing a change was made to; ``activity_log.target_type``.
@@ -66,6 +69,7 @@ class Target(StrEnum):
     PRICE = "price"
     PLAN_CHOICE = "plan_choice"
     DEVICE_SESSION = "device_session"
+    HEALTH_FORM = "health_form"
 
 
 def record(

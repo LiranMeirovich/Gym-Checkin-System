@@ -1,8 +1,7 @@
 // One customer's page: their details, editing name, phone and notes, and
 // the manager's date-of-birth change and deactivation. An inactive
-// customer is read-only until reactivated. The Plan section is its own
-// component, and so is Phones; the health form joins this page in a later
-// feature.
+// customer is read-only until reactivated. The Plan, Health form and
+// Phones sections are their own components.
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
@@ -20,6 +19,7 @@ import {
   type CustomerField,
 } from "../customers";
 import { useSession } from "../session";
+import { CustomerHealthForm } from "./CustomerHealthForm";
 import { CustomerPhones } from "./CustomerPhones";
 import { CustomerPlan } from "./CustomerPlan";
 
@@ -188,6 +188,7 @@ function CustomerDetails({ customer }: { customer: Customer }) {
           refusal message). */}
       {!editing && <CustomerPlan key={customer.id} customer={customer} />}
       {/* Keyed so another customer's page never shows this one's code. */}
+      {!editing && <CustomerHealthForm key={customer.id} customer={customer} />}
       {!editing && <CustomerPhones key={customer.id} customer={customer} />}
     </>
   );
