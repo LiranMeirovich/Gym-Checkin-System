@@ -25,10 +25,15 @@ export function SignaturePad({ onChange, label }: Props) {
     padRef.current = pad;
 
     // The canvas is drawn at the screen's real pixel density, so the
-    // signature is sharp. Resizing clears it (the package's own advice:
-    // scaling a drawing distorts it), so the customer signs again.
+    // signature is sharp. Refitting clears it (the package's own advice:
+    // scaling a drawing distorts it), so it happens only when the pad's
+    // width changes, as on turning the phone. Phones also fire `resize`
+    // when the keyboard opens or the toolbar hides on scrolling; those
+    // change only the height and must keep the signature.
+    let fittedWidth = -1;
     function fit() {
-      if (!canvas) return;
+      if (!canvas || canvas.offsetWidth === fittedWidth) return;
+      fittedWidth = canvas.offsetWidth;
       const ratio = Math.max(window.devicePixelRatio || 1, 1);
       canvas.width = canvas.offsetWidth * ratio;
       canvas.height = canvas.offsetHeight * ratio;

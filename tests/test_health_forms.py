@@ -124,6 +124,17 @@ def test_answers_are_kept_in_the_forms_order() -> None:
     assert list(checked.answers) == [q.key for q in FORM.questions]
 
 
+def test_hebrew_latin_and_punctuation_are_accepted() -> None:
+    checked = check_form(
+        **filled(
+            signer_name="\u05e0\u05d5\u05e2\u05d4 Levi-Cohen (O'Brien)",
+            details={"other": "\u05e0\u05d9\u05ea\u05d5\u05d7, 2020; 3."},
+        )
+    )
+
+    assert checked.signer_name == "\u05e0\u05d5\u05e2\u05d4 Levi-Cohen (O'Brien)"
+
+
 def test_the_name_and_details_are_tidied() -> None:
     checked = check_form(
         **filled(
@@ -153,6 +164,11 @@ def test_the_name_and_details_are_tidied() -> None:
         ({"signer_name": "   "}, "signer_name"),
         ({"signer_name": "x" * 101}, "signer_name"),
         ({"confirmed": False}, "confirmed"),
+        ({"signer_name": "\u041d\u0430\u0442\u0430\u0448\u0430"}, "signer_name"),
+        ({"signer_name": "Noa \u202eiveL"}, "signer_name"),
+        ({"signer_name": "Noa \U0001f600"}, "signer_name"),
+        ({"details": {"other": "line\nbreak"}}, "details"),
+        ({"details": {"other": "\u0645\u062d\u0645\u062f"}}, "details"),
         ({"signature_png": signature_png(drawn=False)}, "signature"),
         ({"signature_png": b""}, "signature"),
         ({"signature_png": PNG_HEADER + b" not really"}, "signature"),
@@ -171,6 +187,11 @@ def test_the_name_and_details_are_tidied() -> None:
         "no name",
         "name too long",
         "not confirmed",
+        "a cyrillic name",
+        "a bidi override in the name",
+        "an emoji in the name",
+        "a control character in the details",
+        "arabic details",
         "a blank signature",
         "no signature",
         "a broken png",
@@ -210,7 +231,7 @@ def test_an_old_version_is_refused() -> None:
         (date(2026, 11, 4), date(2027, 11, 3)),
         (date(2026, 1, 1), date(2026, 12, 31)),
         (date(2026, 3, 1), date(2027, 2, 28)),
-        (date(2028, 2, 29), date(2029, 2, 27)),
+        (date(2028, 2, 29), date(2029, 2, 28)),
         (date(2026, 12, 31), date(2027, 12, 30)),
     ],
 )

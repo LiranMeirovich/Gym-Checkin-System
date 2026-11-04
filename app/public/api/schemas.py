@@ -2,9 +2,9 @@
 TypeScript types are generated from these (through the OpenAPI spec)."""
 
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StrictBool
+from pydantic import BaseModel, Field, StrictBool, StringConstraints
 
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
@@ -94,7 +94,10 @@ class HealthFormRequest(BaseModel):
     version: str = Field(max_length=20)
     # Strict: "true" or 1 is not an answer.
     answers: dict[str, StrictBool] = Field(max_length=50)
-    details: dict[str, str] = Field(default_factory=dict, max_length=10)
+    details: dict[
+        Annotated[str, StringConstraints(max_length=50)],
+        Annotated[str, StringConstraints(max_length=1000)],
+    ] = Field(default_factory=dict, max_length=10)
     gender: str = Field(max_length=20)
     signer_name: str = Field(max_length=200)
     confirmed: StrictBool

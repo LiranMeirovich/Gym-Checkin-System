@@ -9,6 +9,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { SignaturePad } from "../components/SignaturePad";
+import { formatDay } from "../dates";
 
 type Page = Schemas["HealthFormPage"];
 type Status = Schemas["HealthFormStatus"];
@@ -16,9 +17,10 @@ type Field = Schemas["FormField"];
 
 const FIELD_ERRORS: Record<Field, string> = {
   answers: "יש לענות כן או לא על כל השאלות.",
-  details: "הפירוט ארוך מדי (עד 200 תווים).",
+  details:
+    "הפירוט ארוך מדי או כולל תווים שאי אפשר להדפיס (עד 200 תווים, בעברית או באותיות לועזיות).",
   gender: "יש לבחור מין.",
-  signer_name: "יש לכתוב שם מלא.",
+  signer_name: "יש לכתוב שם מלא, באותיות עבריות או לועזיות.",
   confirmed: "יש לסמן את תיבת האישור.",
   signature: "יש לחתום בתיבת החתימה.",
 };
@@ -29,17 +31,17 @@ async function fetchForm(): Promise<Page> {
   throw new Error(`GET /api/health-form failed: ${response.status}`);
 }
 
-function day(iso: string): string {
-  const [year, month, date] = iso.split("-");
-  return `${date}/${month}/${year}`;
-}
-
 type Props = {
   /** Called with the new status once the form is saved. */
   onSigned: (status: Status) => void;
 };
 
+const VERSION_CHANGED = "הטופס עודכן בזמן שמילאתם אותו. יש למלא אותו מחדש.";
+
 export function HealthForm({ onSigned }: Props) {
+  // Kept here, not in the form: a new version remounts the form, which
+  // would drop the message saying why it's empty again.
+  const [versionChanged, setVersionChanged] = useState(false);
   const {
     data: page,
     isPending,
@@ -50,23 +52,29 @@ export function HealthForm({ onSigned }: Props) {
   if (isPending) return null;
   if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
   return (
-    <FilledForm
-      key={page.version}
-      page={page}
-      onSigned={onSigned}
-      reload={refetch}
-    />
+    <>
+      {versionChanged && <p role="alert">{VERSION_CHANGED}</p>}
+      <FilledForm
+        key={page.version}
+        page={page}
+        onSigned={onSigned}
+        onVersionChanged={() => {
+          setVersionChanged(true);
+          void refetch();
+        }}
+      />
+    </>
   );
 }
 
 function FilledForm({
   page,
   onSigned,
-  reload,
+  onVersionChanged,
 }: {
   page: Page;
   onSigned: (status: Status) => void;
-  reload: () => void;
+  onVersionChanged: () => void;
 }) {
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   const [details, setDetails] = useState<Record<string, string>>({});
@@ -110,8 +118,7 @@ function FilledForm({
         return;
       }
       if (response.status === 409) {
-        setErrors(["הטופס עודכן בזמן שמילאתם אותו. יש למלא אותו מחדש."]);
-        reload();
+        onVersionChanged();
         return;
       }
       if (response.status === 400 && error && "errors" in error) {
@@ -137,7 +144,7 @@ function FilledForm({
       <p>
         שם פרטי ושם משפחה: {page.customer_name}
         <br />
-        תאריך לידה: <bdi>{day(page.date_of_birth)}</bdi>
+        תאריך לידה: <bdi>{formatDay(page.date_of_birth)}</bdi>
         <br />
         מספר טלפון: <bdi>{page.phone}</bdi>
       </p>
@@ -230,7 +237,7 @@ function FilledForm({
         <p key={paragraph}>{paragraph}</p>
       ))}
       <p>
-        תוקף ההצהרה עד: <bdi>{day(page.valid_until_if_signed)}</bdi>
+        תוקף ההצהרה עד: <bdi>{formatDay(page.valid_until_if_signed)}</bdi>
       </p>
 
       {guardian && (

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "public",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "uvicorn", "app.public.main:app", "--host", "127.0.0.1", "--port", "8001"],
+      "port": 8001
+    },
+    {
+      "name": "admin",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "uvicorn", "app.admin.main:app", "--host", "127.0.0.1", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}

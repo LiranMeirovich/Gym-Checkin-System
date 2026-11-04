@@ -28,6 +28,7 @@ from app.core.health_form_pdf import (
     InvalidSignatureError,
     SnapshotDetails,
     check_signature,
+    is_printable,
     render_snapshot,
 )
 from app.core.models import Customer, HealthForm, StaffUser
@@ -219,13 +220,18 @@ class HealthFormStatus:
 
 
 def expires_on(signed_on: date) -> date:
-    """A form's last valid day: the day before the same date
-    ``VALIDITY_MONTHS`` later (the month's last day when that date doesn't
-    exist, e.g. 29 February)."""
+    """A form's last valid day: the day before its anniversary
+    ``VALIDITY_MONTHS`` later. When that date doesn't exist (29 February in
+    a common year), the anniversary is the 1st of the next month, so the
+    form still lasts the full period and ends on the month's last day."""
     months = signed_on.month - 1 + VALIDITY_MONTHS
     year, month = signed_on.year + months // 12, months % 12 + 1
-    day = min(signed_on.day, calendar.monthrange(year, month)[1])
-    return date(year, month, day) - timedelta(days=1)
+    if signed_on.day <= calendar.monthrange(year, month)[1]:
+        anniversary = date(year, month, signed_on.day)
+    else:
+        next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
+        anniversary = date(next_year, next_month, 1)
+    return anniversary - timedelta(days=1)
 
 
 def signed_by_guardian(customer: Customer, signed_on: date) -> bool:
@@ -250,7 +256,10 @@ def check_form(
 ) -> CheckedForm:
     """Check a filled-in form against the current version: every question
     answered, details only where the form has a line for them, a gender, a
-    name, the confirmation box ticked and a usable signature image."""
+    name, the confirmation box ticked and a usable signature image. The
+    name and details must be text the PDF can print exactly (Hebrew or
+    Latin letters, digits, punctuation), so the signed record never loses
+    or garbles them."""
     if version != CURRENT_VERSION:
         raise FormVersionChangedError(version)
     form = FORMS[version]
@@ -263,7 +272,8 @@ def check_form(
 
     cleaned_details = {key: text.strip() for key, text in details.items()}
     if not set(cleaned_details) <= detail_keys or any(
-        len(text) > DETAILS_MAX_LENGTH for text in cleaned_details.values()
+        len(text) > DETAILS_MAX_LENGTH or not is_printable(text)
+        for text in cleaned_details.values()
     ):
         bad.add(FormField.DETAILS)
 
@@ -271,7 +281,7 @@ def check_form(
         bad.add(FormField.GENDER)
 
     name = " ".join(signer_name.split())
-    if not 1 <= len(name) <= SIGNER_NAME_MAX_LENGTH:
+    if not 1 <= len(name) <= SIGNER_NAME_MAX_LENGTH or not is_printable(name):
         bad.add(FormField.SIGNER_NAME)
 
     if confirmed is not True:

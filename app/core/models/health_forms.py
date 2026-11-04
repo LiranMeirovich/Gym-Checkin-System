@@ -73,10 +73,14 @@ class HealthForm(Base):
     answers_json: Mapped[str] = mapped_column(Text)
     # Any "yes" answer: the form counts only once a doctor's note is added
     # (milestone 3, feature 4).
-    needs_doctor_note: Mapped[bool] = mapped_column(Boolean)
+    needs_doctor_note: Mapped[bool] = mapped_column(
+        Boolean(create_constraint=True, name="needs_doctor_note")
+    )
     # The customer, or their parent or guardian for an under-18.
     signer_name: Mapped[str] = mapped_column(Text)
-    signed_by_guardian: Mapped[bool] = mapped_column(Boolean)
+    signed_by_guardian: Mapped[bool] = mapped_column(
+        Boolean(create_constraint=True, name="signed_by_guardian")
+    )
     # Israel-local calendar dates. ``expires_on`` is the last valid day.
     signed_on: Mapped[date]
     expires_on: Mapped[date]

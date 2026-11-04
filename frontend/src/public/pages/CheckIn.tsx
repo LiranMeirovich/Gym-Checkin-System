@@ -6,6 +6,7 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
+import { formatDay } from "../dates";
 import { HealthForm } from "./HealthForm";
 
 type Me = Schemas["Me"];
@@ -34,11 +35,6 @@ export function CheckIn() {
   if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
   if (!me) return <LinkForm />;
   return <Linked me={me} />;
-}
-
-function day(iso: string): string {
-  const [year, month, date] = iso.split("-");
-  return `${date}/${month}/${year}`;
 }
 
 function Linked({ me }: { me: Me }) {
@@ -71,7 +67,7 @@ function Linked({ me }: { me: Me }) {
       <p>הטלפון מקושר.</p>
       {form.valid_until && (
         <p>
-          הצהרת הבריאות בתוקף עד <bdi>{day(form.valid_until)}</bdi>.
+          הצהרת הבריאות בתוקף עד <bdi>{formatDay(form.valid_until)}</bdi>.
         </p>
       )}
     </>

@@ -255,3 +255,14 @@ def test_an_oversized_signature_is_refused_before_decoding(linked: TestClient) -
     huge = "data:image/png;base64," + "A" * 500_000
 
     assert sign(linked, signature=huge).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "details",
+    [{"other": "x" * 1001}, {"k" * 51: "x"}],
+    ids=["long value", "long key"],
+)
+def test_oversized_details_are_refused_before_checking(
+    linked: TestClient, details: dict[str, str]
+) -> None:
+    assert sign(linked, details=details).status_code == 422

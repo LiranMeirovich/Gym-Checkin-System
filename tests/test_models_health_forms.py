@@ -101,6 +101,33 @@ def test_the_database_refuses_a_bad_row(db: Session, values: dict[str, object]) 
 
 
 @pytest.mark.parametrize(
+    ("needs_doctor_note", "signed_by_guardian"),
+    [(2, 0), (0, 2)],
+    ids=["needs_doctor_note", "signed_by_guardian"],
+)
+def test_the_database_refuses_a_boolean_that_isnt_0_or_1(
+    db: Session, needs_doctor_note: int, signed_by_guardian: int
+) -> None:
+    # Raw SQL: the ORM would only ever write 0 or 1.
+    with pytest.raises(IntegrityError):
+        db.execute(
+            text(
+                "INSERT INTO health_forms (customer_id, form_version, answers_json,"
+                " needs_doctor_note, signer_name, signed_by_guardian, signed_on,"
+                " expires_on, document, created_at)"
+                " VALUES (1, '2026-11', '{}', :note, 'Noa Levi', :guardian,"
+                " '2026-11-04', '2027-11-03', :document,"
+                " '2026-11-04 10:00:00.000000')"
+            ),
+            {
+                "note": needs_doctor_note,
+                "guardian": signed_by_guardian,
+                "document": PDF,
+            },
+        )
+
+
+@pytest.mark.parametrize(
     ("signed_on", "expires_on"),
     [("2026-13-01", "2027-11-03"), ("2026-11-04", "2027-02-30")],
     ids=["signed_on", "expires_on"],

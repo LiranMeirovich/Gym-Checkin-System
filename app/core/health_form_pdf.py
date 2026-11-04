@@ -12,11 +12,14 @@ digits for names, dates and phone numbers.
 """
 
 import io
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fontTools.ttLib import TTFont
 from fpdf import FPDF
 from fpdf.enums import Align, XPos, YPos
 from PIL import Image, UnidentifiedImageError
@@ -35,6 +38,23 @@ _SIGNATURE_MAX_SIDE = 3000
 _SIGNATURE_MIN_SIDE = 50
 
 _GENDER = {"male": "זכר", "female": "נקבה"}
+
+
+@cache
+def _font_characters() -> frozenset[int]:
+    return frozenset(TTFont(FONT).getBestCmap())
+
+
+def is_printable(text: str) -> bool:
+    """Whether the snapshot can show ``text`` exactly: every character is
+    in the font (Hebrew, Latin, digits, punctuation), and none is a
+    control, format or bidi character (Unicode category C), which could
+    hide or reverse part of a name on a signed record."""
+    characters = _font_characters()
+    return all(
+        ord(ch) in characters and not unicodedata.category(ch).startswith("C")
+        for ch in text
+    )
 
 
 class InvalidSignatureError(ValueError):

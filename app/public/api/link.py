@@ -12,6 +12,7 @@ flow"; decision 0028).
 
 from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
 from app.core.db import DbSession
 from app.core.health_forms import health_form_status, local_today
@@ -65,6 +66,6 @@ def me(request: Request, db: DbSession) -> Me | JSONResponse:
     return _me(db, device.customer)
 
 
-def _me(db: DbSession, customer: Customer) -> Me:
+def _me(db: Session, customer: Customer) -> Me:
     found = health_form_status(db, customer, local_today())
     return Me(first_name=customer.first_name, health_form=status_answer(found))
