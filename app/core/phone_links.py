@@ -12,9 +12,10 @@
    (``find_device``).
 
 A customer has at most ``MAX_PHONES`` live sessions: linking one more
-revokes the least recently used. A session dies when it's revoked, when
-it hasn't been seen for ``DEVICE_SESSION_LIFETIME`` (the cookie's own
-lifetime), or when its customer is deactivated.
+revokes the least recently used. A session dies when it's revoked (by
+staff, by a newer phone, or because its customer was deactivated, which
+revokes them all), or when it hasn't been seen for
+``DEVICE_SESSION_LIFETIME`` (the cookie's own lifetime).
 
 There's deliberately no wrong-code lockout: a code only exists while the
 customer stands at the desk, it's used once and gone after 15 minutes

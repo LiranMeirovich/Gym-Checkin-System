@@ -51,9 +51,17 @@ function LinkForm() {
     setSending(true);
     setMessage(null);
     try {
-      const { data } = await api.POST("/api/link", { body: { phone, code } });
+      const { data, response } = await api.POST("/api/link", {
+        body: { phone, code },
+      });
       if (data) {
         queryClient.setQueryData(ME_KEY, data);
+        return;
+      }
+      if (response.status !== 400) {
+        // Not a refusal (a 403 or a server error): asking for a new code
+        // wouldn't help.
+        setMessage("משהו השתבש. נסו שוב בעוד רגע.");
         return;
       }
       // One message for every refusal: the server never says which part

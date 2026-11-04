@@ -12,7 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import phone_links
-from app.core.customers import CustomerInactiveError
+from app.core.customers import (
+    CustomerInactiveError,
+    deactivate_customer,
+    reactivate_customer,
+)
 from app.core.db import get_engine
 from app.core.models import (
     ActivityLogEntry,
@@ -414,6 +418,30 @@ def test_a_deactivated_customers_phone_is_not_recognised(
     db.flush()
 
     assert find_device(db, linked.token) is None
+
+
+def test_deactivating_a_customer_unlinks_their_phones(
+    db: Session, customer: Customer, staff: StaffUser
+) -> None:
+    linked = link_new_phone(db, customer, staff)
+
+    deactivate_customer(db, customer, by=staff)
+    reactivate_customer(db, customer, by=staff)
+
+    # Reactivating doesn't bring the old login back.
+    assert find_device(db, linked.token) is None
+    assert list_devices(db, customer) == []
+
+
+def test_deactivating_leaves_other_customers_phones(
+    db: Session, customer: Customer, staff: StaffUser
+) -> None:
+    other = make_customer(db, phone="+972521112233")
+    linked = link(db, issue_link_code(db, other, by=staff).code, "0521112233")
+
+    deactivate_customer(db, customer, by=staff)
+
+    assert find_device(db, linked.token) is not None
 
 
 def test_a_found_device_comes_with_its_customer(

@@ -4,7 +4,7 @@ it, and what's logged. Names and numbers are made up."""
 
 import json
 from collections.abc import Iterator
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.admin.main import app
 from app.core import pins
+from app.core.clock import to_local
 from app.core.db import get_engine
 from app.core.models import (
     ActivityLogEntry,
@@ -154,8 +155,8 @@ def test_staff_can_issue_a_link_code(
     answer = response.json()
     assert len(answer["code"]) == 6 and answer["code"].isdigit()
     expires_at = datetime.fromisoformat(answer["expires_at"])
-    # The gym's local time, with its offset (Israel: +02:00 in November).
-    assert expires_at.utcoffset() == timedelta(hours=2)
+    # The gym's local time, with its offset (+02:00 or +03:00 in summer).
+    assert expires_at.utcoffset() == to_local(expires_at).utcoffset()
     assert response.headers["cache-control"] == "no-store"
     row = db.scalars(select(LinkCode)).one()
     assert row.code_hash == hash_token(answer["code"])
