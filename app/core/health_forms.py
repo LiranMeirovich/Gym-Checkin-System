@@ -353,6 +353,12 @@ def list_forms(db: Session, customer: Customer) -> list[HealthForm]:
     )
 
 
+def form_of(db: Session, customer: Customer, form_id: int) -> HealthForm | None:
+    """One of the customer's forms, or None if ``form_id`` isn't theirs."""
+    form = db.get(HealthForm, form_id)
+    return form if form is not None and form.customer_id == customer.id else None
+
+
 def open_form_document(db: Session, form: HealthForm, *, by: StaffUser) -> bytes:
     """A form's PDF, for the manager. Every opening is written to the
     activity log (design doc: "Validity and access"); the caller checks

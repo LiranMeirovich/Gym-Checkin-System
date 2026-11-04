@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, Field
 
+from app.core.health_forms import FormState
 from app.core.http import Answer
 from app.core.models import AgeGroup, ChosenBy, Plan
 from app.core.permissions import Role
@@ -378,3 +379,35 @@ class LinkedPhones(Answer):
     """The customer's live phones, most recently used first."""
 
     phones: list[LinkedPhone]
+
+
+# ── Health forms ────────────────────────────────────────────────────────
+
+
+class HealthFormStatus(Answer):
+    """What every staff member sees: ``valid``, ``needs_doctor_note`` (a
+    "yes" answer; blocks check-in until a doctor's note is added) or
+    ``missing`` (none, or expired). ``valid_until``: the last day of the
+    form that counts, or null for ``missing``. Never the answers."""
+
+    state: FormState
+    valid_until: date | None
+
+
+class HealthFormSummary(Answer):
+    """One signed form, for the manager. The answers stay in the PDF,
+    which is opened (and logged) on its own."""
+
+    id: int
+    form_version: str
+    signed_on: date
+    expires_on: date
+    signer_name: str
+    signed_by_guardian: bool
+    needs_doctor_note: bool
+
+
+class HealthFormList(Answer):
+    """Every form the customer has signed, newest first."""
+
+    forms: list[HealthFormSummary]

@@ -281,6 +281,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/{customer_id}/health-form": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health Form Status */
+        get: operations["health_form_status_api_customers__customer_id__health_form_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{customer_id}/health-forms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health Form List */
+        get: operations["health_form_list_api_customers__customer_id__health_forms_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{customer_id}/health-forms/{form_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open Health Form */
+        post: operations["open_health_form_api_customers__customer_id__health_forms__form_id__open_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -438,10 +489,62 @@ export interface components {
              */
             date_of_birth: string;
         };
+        /**
+         * FormState
+         * @enum {string}
+         */
+        FormState: "valid" | "needs_doctor_note" | "missing";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HealthFormList
+         * @description Every form the customer has signed, newest first.
+         */
+        HealthFormList: {
+            /** Forms */
+            forms: components["schemas"]["HealthFormSummary"][];
+        };
+        /**
+         * HealthFormStatus
+         * @description What every staff member sees: ``valid``, ``needs_doctor_note`` (a
+         *     "yes" answer; blocks check-in until a doctor's note is added) or
+         *     ``missing`` (none, or expired). ``valid_until``: the last day of the
+         *     form that counts, or null for ``missing``. Never the answers.
+         */
+        HealthFormStatus: {
+            state: components["schemas"]["FormState"];
+            /** Valid Until */
+            valid_until: string | null;
+        };
+        /**
+         * HealthFormSummary
+         * @description One signed form, for the manager. The answers stay in the PDF,
+         *     which is opened (and logged) on its own.
+         */
+        HealthFormSummary: {
+            /** Id */
+            id: number;
+            /** Form Version */
+            form_version: string;
+            /**
+             * Signed On
+             * Format: date
+             */
+            signed_on: string;
+            /**
+             * Expires On
+             * Format: date
+             */
+            expires_on: string;
+            /** Signer Name */
+            signer_name: string;
+            /** Signed By Guardian */
+            signed_by_guardian: boolean;
+            /** Needs Doctor Note */
+            needs_doctor_note: boolean;
         };
         /**
          * LinkCodeIssued
@@ -1878,6 +1981,169 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinkedPhones"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_form_status_api_customers__customer_id__health_form_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormStatus"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_form_list_api_customers__customer_id__health_forms_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_health_form_api_customers__customer_id__health_forms__form_id__open_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+                form_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
                 };
             };
             /** @description Unauthorized */
