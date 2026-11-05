@@ -382,16 +382,26 @@ def open_form_document(db: Session, form: HealthForm, *, by: StaffUser) -> bytes
 def health_form_status(
     db: Session, customer: Customer, today: date
 ) -> HealthFormStatus:
-    """The customer's health form on ``today`` (an Israel-local date). The
-    newest form that hasn't expired counts, even if an older one has no
-    "yes": a newer "yes" means their health changed. A form with a "yes"
-    is valid once a doctor's note has been added for it."""
-    form = db.scalars(
+    """The customer's health form on ``today`` (an Israel-local date): the
+    status of ``counting_form()``."""
+    return status_of(db, counting_form(db, customer, today))
+
+
+def counting_form(db: Session, customer: Customer, today: date) -> HealthForm | None:
+    """The form that counts for ``customer`` on ``today``: the newest one
+    that hasn't expired, even if an older one has no "yes" (a newer "yes"
+    means their health changed). ``None`` when there is none."""
+    return db.scalars(
         select(HealthForm)
         .where(HealthForm.customer_id == customer.id, HealthForm.expires_on >= today)
         .order_by(HealthForm.signed_on.desc(), HealthForm.id.desc())
         .limit(1)
     ).first()
+
+
+def status_of(db: Session, form: HealthForm | None) -> HealthFormStatus:
+    """The status of the form that counts (``None``: missing). A form with
+    a "yes" is valid once a doctor's note has been added for it."""
     if form is None:
         return HealthFormStatus(FormState.MISSING, None)
     if form.needs_doctor_note and not has_doctor_note(db, form):

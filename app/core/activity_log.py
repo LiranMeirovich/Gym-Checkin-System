@@ -55,6 +55,10 @@ class Action(StrEnum):
 
     # The manager opened a health form's contents (its PDF).
     HEALTH_FORM_OPEN = "health_form.open"
+    # Staff added a doctor's note to a form with a "yes" (never the image).
+    HEALTH_FORM_ADD_DOCTOR_NOTE = "health_form.add_doctor_note"
+    # The manager opened a doctor's note (its image).
+    DOCTOR_NOTE_OPEN = "doctor_note.open"
 
     # A staff member checked a customer in at the desk. A repeat within
     # the 10-minute window records nothing, so it isn't logged.
@@ -74,6 +78,7 @@ class Target(StrEnum):
     PLAN_CHOICE = "plan_choice"
     DEVICE_SESSION = "device_session"
     HEALTH_FORM = "health_form"
+    DOCTOR_NOTE = "doctor_note"
     CHECKIN = "checkin"
 
 

@@ -405,9 +405,39 @@ class HealthFormSummary(Answer):
     signer_name: str
     signed_by_guardian: bool
     needs_doctor_note: bool
+    # The doctor's notes added for this form, oldest first; each image is
+    # opened (and logged) on its own.
+    doctor_note_ids: list[int]
 
 
 class HealthFormList(Answer):
     """Every form the customer has signed, newest first."""
 
     forms: list[HealthFormSummary]
+
+
+# A shrunk phone photo is far smaller; 12 MB of image is 16 MB of base64.
+DOCTOR_NOTE_MAX_CHARS = 16 * 1024 * 1024 + 100
+
+
+class DoctorNoteRequest(BaseModel):
+    """The note as a data URL (``data:image/jpeg;base64,...`` or PNG), as
+    the browser reads a file."""
+
+    image: str = Field(max_length=DOCTOR_NOTE_MAX_CHARS)
+
+
+class DoctorNoteRefused(Answer):
+    """400. ``invalid_image``: not a JPEG or PNG, too large or too small.
+    Nothing was saved."""
+
+    error: Literal["invalid_image"] = "invalid_image"
+
+
+class DoctorNoteConflict(Answer):
+    """409. ``no_note_needed``: the form that counts today isn't waiting
+    for a note (``state``: ``valid``, or ``missing`` when there is none).
+    ``customer_inactive``: reactivate them first. Nothing was saved."""
+
+    error: Literal["no_note_needed", "customer_inactive"]
+    state: FormState | None = None

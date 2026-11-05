@@ -16,7 +16,8 @@ INSTRUCTOR_CAN = {
     "checkins.manual",
     "phones.link",
     "health_forms.view_status",
-    "health_forms.upload_paper",
+    "health_forms.add_doctor_note",
+    "health_forms.fill_in",
     "prices.view",
 }
 

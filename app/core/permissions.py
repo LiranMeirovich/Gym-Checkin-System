@@ -51,7 +51,10 @@ class Permission(StrEnum):
     # Valid or not, and when it expires.
     HEALTH_FORMS_VIEW_STATUS = "health_forms.view_status"
     HEALTH_FORMS_VIEW_CONTENTS = "health_forms.view_contents"
-    HEALTH_FORMS_UPLOAD_PAPER = "health_forms.upload_paper"
+    # Add a doctor's note to a form with a "yes" answer.
+    HEALTH_FORMS_ADD_DOCTOR_NOTE = "health_forms.add_doctor_note"
+    # Open the form on the desk PC for a customer to fill in and sign.
+    HEALTH_FORMS_FILL_IN = "health_forms.fill_in"
 
     # The price table, upcoming changes and the history.
     PRICES_VIEW = "prices.view"
@@ -74,7 +77,8 @@ _INSTRUCTOR = frozenset(
         Permission.CHECKINS_MANUAL,
         Permission.PHONES_LINK,
         Permission.HEALTH_FORMS_VIEW_STATUS,
-        Permission.HEALTH_FORMS_UPLOAD_PAPER,
+        Permission.HEALTH_FORMS_ADD_DOCTOR_NOTE,
+        Permission.HEALTH_FORMS_FILL_IN,
         Permission.PRICES_VIEW,
     }
 )

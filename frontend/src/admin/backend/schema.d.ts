@@ -332,6 +332,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/{customer_id}/health-form/doctor-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Doctor Note */
+        post: operations["add_doctor_note_api_customers__customer_id__health_form_doctor_note_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{customer_id}/doctor-notes/{note_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open Doctor Note */
+        post: operations["open_doctor_note_api_customers__customer_id__doctor_notes__note_id__open_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -490,6 +524,42 @@ export interface components {
             date_of_birth: string;
         };
         /**
+         * DoctorNoteConflict
+         * @description 409. ``no_note_needed``: the form that counts today isn't waiting
+         *     for a note (``state``: ``valid``, or ``missing`` when there is none).
+         *     ``customer_inactive``: reactivate them first. Nothing was saved.
+         */
+        DoctorNoteConflict: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "no_note_needed" | "customer_inactive";
+            state: components["schemas"]["FormState"] | null;
+        };
+        /**
+         * DoctorNoteRefused
+         * @description 400. ``invalid_image``: not a JPEG or PNG, too large or too small.
+         *     Nothing was saved.
+         */
+        DoctorNoteRefused: {
+            /**
+             * Error
+             * @default invalid_image
+             * @constant
+             */
+            error: "invalid_image";
+        };
+        /**
+         * DoctorNoteRequest
+         * @description The note as a data URL (``data:image/jpeg;base64,...`` or PNG), as
+         *     the browser reads a file.
+         */
+        DoctorNoteRequest: {
+            /** Image */
+            image: string;
+        };
+        /**
          * FormState
          * @enum {string}
          */
@@ -545,6 +615,8 @@ export interface components {
             signed_by_guardian: boolean;
             /** Needs Doctor Note */
             needs_doctor_note: boolean;
+            /** Doctor Note Ids */
+            doctor_note_ids: number[];
         };
         /**
          * LinkCodeIssued
@@ -2144,6 +2216,138 @@ export interface operations {
                 };
                 content: {
                     "application/pdf": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_doctor_note_api_customers__customer_id__health_form_doctor_note_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DoctorNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormStatus"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorNoteRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorNoteConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_doctor_note_api_customers__customer_id__doctor_notes__note_id__open_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+                note_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
                 };
             };
             /** @description Unauthorized */
