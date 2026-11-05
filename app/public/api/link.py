@@ -7,7 +7,7 @@ flow"; decision 0028).
   answer is the customer's first name and health form status. Otherwise 400 ``link_refused``.
 - ``GET /api/me``: whose phone this is and their health form status
   (so the page knows to show the form), or 401 ``not_linked``. Doesn't
-  count as using the phone; a check-in does (feature 3).
+  count as using the phone; a check-in does (``POST /api/check-in``).
 """
 
 from fastapi import APIRouter, Request, Response, status

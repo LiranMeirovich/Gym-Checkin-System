@@ -56,10 +56,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/check-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check In */
+        post: operations["check_in_api_check_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * CheckInRequest
+         * @description ``plan``: the plan the customer tapped on the plan page, chosen
+         *     first if no plan covers this month (ignored if one does). Leave it out
+         *     for a plain check-in.
+         */
+        CheckInRequest: {
+            plan?: components["schemas"]["Plan"] | null;
+        };
+        /**
+         * CheckedIn
+         * @description ``checked_in``: a visit was recorded. ``already_checked_in``: the
+         *     customer checked in less than 10 minutes ago, and ``checked_in_at`` is
+         *     that visit; nothing new was recorded. ``plan`` is null only for a
+         *     repeat whose month has since lost its plan.
+         */
+        CheckedIn: {
+            outcome: components["schemas"]["Outcome"];
+            /**
+             * Checked In At
+             * Format: date-time
+             */
+            checked_in_at: string;
+            plan: components["schemas"]["CoveringPlan"] | null;
+        };
+        /**
+         * CoveringPlan
+         * @description The plan covering this month: one month, or three for tri-monthly
+         *     (``end_month`` is the last).
+         */
+        CoveringPlan: {
+            plan: components["schemas"]["Plan"];
+            /** Start Month */
+            start_month: string;
+            /** End Month */
+            end_month: string;
+        };
         /**
          * FormField
          * @description The fields a refused form can name.
@@ -172,6 +226,20 @@ export interface components {
             signature: string;
         };
         /**
+         * HealthFormRequired
+         * @description 409: no valid health form today; nothing was recorded. Show the
+         *     form (``missing``) or send the customer to the desk
+         *     (``needs_doctor_note``).
+         */
+        HealthFormRequired: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            detail: "health_form_required";
+            health_form: components["schemas"]["HealthFormStatus"];
+        };
+        /**
          * HealthFormStatus
          * @description The customer's health form today. ``valid`` lets them check in;
          *     ``needs_doctor_note`` (a "yes" answer) and ``missing`` (none, or
@@ -225,6 +293,56 @@ export interface components {
              * @constant
              */
             detail: "not_linked";
+        };
+        /**
+         * Outcome
+         * @enum {string}
+         */
+        Outcome: "checked_in" | "already_checked_in";
+        /**
+         * Plan
+         * @description What a customer can choose for a month. The values are what the
+         *     database stores.
+         * @enum {string}
+         */
+        Plan: "monthly" | "tri_monthly" | "single_entry";
+        /**
+         * PlanOffer
+         * @description One plan at this customer's price this month (adult or under 18).
+         *     ``price_agorot`` null: the price isn't set, so it can't be chosen.
+         */
+        PlanOffer: {
+            plan: components["schemas"]["Plan"];
+            /** Price Agorot */
+            price_agorot: number | null;
+        };
+        /**
+         * PlanRequired
+         * @description 409: no plan covers ``month``; nothing was recorded. Show the plan
+         *     page and send the tapped plan with the next check-in.
+         */
+        PlanRequired: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            detail: "plan_required";
+            /** Month */
+            month: string;
+            /** Options */
+            options: components["schemas"]["PlanOffer"][];
+        };
+        /**
+         * PriceNotSet
+         * @description 409: the chosen plan's price isn't set (it changed while the page
+         *     was open); nothing was recorded. Check in again for fresh options.
+         */
+        PriceNotSet: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            detail: "price_not_set";
         };
         /** Question */
         Question: {
@@ -404,6 +522,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FormVersionChanged"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_in_api_check_in_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckInRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckedIn"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLinked"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormRequired"] | components["schemas"]["PlanRequired"] | components["schemas"]["PriceNotSet"];
                 };
             };
             /** @description Validation Error */

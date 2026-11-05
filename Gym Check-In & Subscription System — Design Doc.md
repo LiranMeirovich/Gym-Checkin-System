@@ -231,7 +231,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | `link_codes` | id, customer\_id, code\_hash, created\_by, created\_at, expires\_at, used\_at | 6-digit code, 15-minute expiry, single use; only the customer's newest code counts |
 | `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry; NULL for "no plan"), start\_month, end\_month, age\_group (nullable), unit\_price\_agorot (nullable), chosen\_at, chosen\_by (customer / staff), staff\_user\_id (nullable), replaces\_id (nullable, unique) | Tri-monthly spans 3 months. Append-only (triggers refuse UPDATE and DELETE): a correction is a new row pointing at the one it replaces, from the same start month, and a choice is active while nothing replaces it (decision 0025). A "no plan" row (no plan, age group or price) clears the choice it replaces and covers nothing (decision 0026) |
 | `prices` | id, plan, age\_group (adult / under\_18), amount\_agorot, valid\_from\_month, created\_at | The manager's price table and its history; rows are only added. The row with the latest valid\_from\_month up to a month applies, and the newest row among those for the same month wins |
-| `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable), entered\_by | Single-entry payments count these |
+| `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable, phone only), staff\_user\_id (nullable, manual only) | Single-entry payments count these. Append-only (triggers refuse UPDATE and DELETE); no link to a plan choice, since a correction changes which one is active (decision 0032) |
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
 | staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
@@ -246,7 +246,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 - Login tokens and link codes are stored only as hashes; the plain values exist only in the cookie or on the admin screen.
 - Linking has no wrong-code lockout: a code is single use, lasts 15 minutes and is replaced by the next one. Guessing is limited by rate limiting at the edge (Cloudflare), not in the app (decision 0029).
 - No check-in (phone or manual) is recorded for a customer without a valid health form on that day.
-- A second check-in by the same customer within 10 minutes is ignored (shown as "already checked in") and doesn't count as an extra single entry.
+- A second check-in by the same customer within 10 minutes, in the same month, is ignored (shown as "already checked in") and doesn't count as an extra single entry. The first visit of a month is never a repeat of the evening before (decision 0032).
 - Staff PINs (6–12 digits) are stored as Argon2id hashes, and 5 wrong PINs in a row (each within 15 minutes of the last) lock that account for 5 minutes; the SMTP password is kept in the OS secret store or an environment variable (TBD), not in the database.
 
 ## Monthly report
