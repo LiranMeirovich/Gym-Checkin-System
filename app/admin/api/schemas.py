@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, Field
 
+from app.core.checkins import Outcome
 from app.core.health_forms import FormState
 from app.core.http import Answer
 from app.core.models import AgeGroup, ChosenBy, Plan
@@ -441,3 +442,73 @@ class DoctorNoteConflict(Answer):
 
     error: Literal["no_note_needed", "customer_inactive"]
     state: FormState | None = None
+
+
+# ── Manual check-in ─────────────────────────────────────────────────────
+
+
+class ManualCheckInRequest(BaseModel):
+    """``plan``: the plan the manager picked, chosen first if no plan
+    covers this month (ignored if one does). Only staff with
+    ``plans.choose`` may send one; an instructor leaves it out and gets
+    single entry when the month has no plan (decision 0017)."""
+
+    plan: Plan | None = None
+
+
+class CoveringPlan(Answer):
+    """The plan covering this month: one month, or three for tri-monthly
+    (``end_month`` is the last)."""
+
+    plan: Plan
+    start_month: MonthText
+    end_month: MonthText
+
+
+class CheckedIn(Answer):
+    """``checked_in``: a visit was recorded. ``already_checked_in``: the
+    customer checked in less than 10 minutes ago, by any method, and
+    ``checked_in_at`` (the gym's local time) is that visit; nothing new was
+    recorded. ``plan`` is null only for a repeat whose month has since
+    lost its plan."""
+
+    outcome: Outcome
+    checked_in_at: datetime
+    plan: CoveringPlan | None
+
+
+class CheckInHealthFormRequired(Answer):
+    """409: no valid health form today (``missing``, or
+    ``needs_doctor_note``); nothing was recorded."""
+
+    error: Literal["health_form_required"] = "health_form_required"
+    health_form: HealthFormStatus
+
+
+class CheckInPlanRequired(Answer):
+    """409: no plan covers ``month`` and the manager didn't pick one;
+    nothing was recorded. Ask for one from ``options`` and send it."""
+
+    error: Literal["plan_required"] = "plan_required"
+    month: MonthText
+    options: list[PlanOption]
+
+
+class CheckInRefusedOther(Answer):
+    """409. ``price_not_set``: the plan (or an instructor's single entry)
+    has no price for the customer's age group. ``customer_inactive``:
+    reactivate them first. Nothing was recorded."""
+
+    error: Literal["price_not_set", "customer_inactive"]
+
+
+CheckInRefused = Annotated[
+    CheckInHealthFormRequired | CheckInPlanRequired | CheckInRefusedOther,
+    Field(discriminator="error"),
+]
+
+
+class CheckInForbidden(Answer):
+    """403: a plan was sent by staff who may not choose plans."""
+
+    error: Literal["plan_not_allowed"] = "plan_not_allowed"

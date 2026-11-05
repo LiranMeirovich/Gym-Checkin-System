@@ -366,6 +366,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/{customer_id}/check-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check In */
+        post: operations["check_in_api_customers__customer_id__check_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -377,6 +394,77 @@ export interface components {
          * @enum {string}
          */
         AgeGroup: "adult" | "under_18";
+        /**
+         * CheckInForbidden
+         * @description 403: a plan was sent by staff who may not choose plans.
+         */
+        CheckInForbidden: {
+            /**
+             * Error
+             * @default plan_not_allowed
+             * @constant
+             */
+            error: "plan_not_allowed";
+        };
+        /**
+         * CheckInHealthFormRequired
+         * @description 409: no valid health form today (``missing``, or
+         *     ``needs_doctor_note``); nothing was recorded.
+         */
+        CheckInHealthFormRequired: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            error: "health_form_required";
+            health_form: components["schemas"]["HealthFormStatus"];
+        };
+        /**
+         * CheckInPlanRequired
+         * @description 409: no plan covers ``month`` and the manager didn't pick one;
+         *     nothing was recorded. Ask for one from ``options`` and send it.
+         */
+        CheckInPlanRequired: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            error: "plan_required";
+            /** Month */
+            month: string;
+            /** Options */
+            options: components["schemas"]["PlanOption"][];
+        };
+        /**
+         * CheckInRefusedOther
+         * @description 409. ``price_not_set``: the plan (or an instructor's single entry)
+         *     has no price for the customer's age group. ``customer_inactive``:
+         *     reactivate them first. Nothing was recorded.
+         */
+        CheckInRefusedOther: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            error: "price_not_set" | "customer_inactive";
+        };
+        /**
+         * CheckedIn
+         * @description ``checked_in``: a visit was recorded. ``already_checked_in``: the
+         *     customer checked in less than 10 minutes ago, by any method, and
+         *     ``checked_in_at`` (the gym's local time) is that visit; nothing new was
+         *     recorded. ``plan`` is null only for a repeat whose month has since
+         *     lost its plan.
+         */
+        CheckedIn: {
+            outcome: components["schemas"]["Outcome"];
+            /**
+             * Checked In At
+             * Format: date-time
+             */
+            checked_in_at: string;
+            plan: components["schemas"]["CoveringPlan"] | null;
+        };
         /**
          * ChosenBy
          * @description Who made a choice. The values are what the database stores.
@@ -411,6 +499,18 @@ export interface components {
              * @enum {string}
              */
             error: "not_correctable" | "price_not_set" | "no_change";
+        };
+        /**
+         * CoveringPlan
+         * @description The plan covering this month: one month, or three for tri-monthly
+         *     (``end_month`` is the last).
+         */
+        CoveringPlan: {
+            plan: components["schemas"]["Plan"];
+            /** Start Month */
+            start_month: string;
+            /** End Month */
+            end_month: string;
         };
         /**
          * CustomerAdded
@@ -688,6 +788,16 @@ export interface components {
             /** Pin */
             pin: string;
         };
+        /**
+         * ManualCheckInRequest
+         * @description ``plan``: the plan the manager picked, chosen first if no plan
+         *     covers this month (ignored if one does). Only staff with
+         *     ``plans.choose`` may send one; an instructor leaves it out and gets
+         *     single entry when the month has no plan (decision 0017).
+         */
+        ManualCheckInRequest: {
+            plan?: components["schemas"]["Plan"] | null;
+        };
         /** NewCustomer */
         NewCustomer: {
             /** First Name */
@@ -723,6 +833,11 @@ export interface components {
             /** Setup Needed */
             setup_needed: boolean;
         };
+        /**
+         * Outcome
+         * @enum {string}
+         */
+        Outcome: "checked_in" | "already_checked_in";
         /**
          * Plan
          * @description What a customer can choose for a month. The values are what the
@@ -2372,6 +2487,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_in_api_customers__customer_id__check_in_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualCheckInRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckedIn"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckInForbidden"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckInHealthFormRequired"] | components["schemas"]["CheckInPlanRequired"] | components["schemas"]["CheckInRefusedOther"];
+                };
             };
             /** @description Validation Error */
             422: {
