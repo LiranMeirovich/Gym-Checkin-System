@@ -1,10 +1,12 @@
-// The customer list: active customers by name, or the inactive ones.
+// The customer list: active customers by name, each with a check-in
+// button, or the inactive ones.
 // Search and sorting by recent check-ins come in milestone 4.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api } from "../backend/client";
 import { CUSTOMER_LIST_KEY, formatPhone } from "../customers";
+import { CheckInButton } from "./CheckInDialog";
 
 async function fetchCustomers(active: boolean) {
   const { data, response } = await api.GET("/api/customers", {
@@ -45,6 +47,7 @@ export function Customers() {
             <tr>
               <th>שם</th>
               <th>טלפון</th>
+              {!showInactive && <th />}
             </tr>
           </thead>
           <tbody>
@@ -56,6 +59,14 @@ export function Customers() {
                   </Link>
                 </td>
                 <td dir="ltr">{formatPhone(customer.phone)}</td>
+                {!showInactive && (
+                  <td>
+                    <CheckInButton
+                      customerId={customer.id}
+                      name={`${customer.first_name} ${customer.last_name}`}
+                    />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

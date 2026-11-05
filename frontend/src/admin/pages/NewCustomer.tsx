@@ -1,6 +1,10 @@
 // Adding a customer. A phone that belongs to an inactive customer brings
 // that customer back instead (decision 0023); one that belongs to an
 // active customer links to them.
+//
+// A customer without a smartphone fills in the health form here on the PC:
+// with the box ticked, saving goes straight to the form, and then on to
+// the customer's page.
 import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router";
@@ -31,6 +35,7 @@ export function NewCustomer() {
   const [takenBy, setTakenBy] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [formOnPc, setFormOnPc] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -45,7 +50,8 @@ export function NewCustomer() {
         const { customer, reactivated } = data;
         queryClient.setQueryData(customerKey(customer.id), customer);
         void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
-        navigate(`/customers/${customer.id}`, { state: { reactivated } });
+        if (formOnPc) navigate(`/customers/${customer.id}/health-form`);
+        else navigate(`/customers/${customer.id}`, { state: { reactivated } });
         return;
       }
       setErrors({});
@@ -121,6 +127,16 @@ export function NewCustomer() {
             }
           />{" "}
           {errors.notes && <span role="alert">{errors.notes}</span>}
+        </p>
+        <p>
+          <label>
+            <input
+              type="checkbox"
+              checked={formOnPc}
+              onChange={(event) => setFormOnPc(event.target.checked)}
+            />{" "}
+            אין ללקוח סמארטפון: אחרי ההוספה הוא ימלא את הצהרת הבריאות כאן, במחשב
+          </label>
         </p>
         <p>
           <button type="submit" disabled={sending}>
