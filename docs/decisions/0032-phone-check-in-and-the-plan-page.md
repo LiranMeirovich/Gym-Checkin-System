@@ -22,7 +22,7 @@ Feature 3 of milestone 3 (decision 0028) lets a linked phone check in from the w
 - **The customer's own plan choice** (`choose_plan_by_customer()`, `chosen_by = customer`) **and their check-in are not logged**: the activity log is for staff changes (decision 0021).
 - **A plan whose price isn't set can't be tapped.** If none has a price, the page sends the customer to the desk and nothing is recorded; the instructor's manual check-in is feature 4.
 - **Customers see only their own prices** (adult or under 18), on the plan page. No route for the whole price table.
-- The 10-minute window counts the customer's check-ins by any phone or method, and is checked before the plan.
+- The 10-minute window counts the customer's check-ins by any phone or method, only within the same Israel month, and is checked before the plan. A visit just after midnight on the 1st is never a repeat of the evening before, so the new month's plan page still shows. One reading of the clock drives the whole check-in (form day, month, window, plan choice), so a tap at midnight can't split them across two months.
 
 ## Consequences
 - Check-ins can't be edited or voided, even a fake one; voiding would be a new kind of row.

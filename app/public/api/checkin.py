@@ -98,7 +98,9 @@ def check_in(
         checked_in_at=result.check_in.checked_in_at,
         plan=(
             None
-            if plan is None or plan.plan is None
+            if plan is None
+            # A covering choice always has a plan: "no plan" rows cover
+            # nothing (decision 0026).
             else CoveringPlan(
                 plan=plan.plan,
                 start_month=str(plan.start_month),

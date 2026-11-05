@@ -17,9 +17,9 @@ earlier is already in a past month's report.
 The age group comes from the customer's age on the 1st of the month, so
 someone who turns 18 mid-month keeps the under-18 price until the next one.
 
-A customer chooses their own plan on their phone, for the current month
-(``choose_plan_by_customer``), under the same rules as staff; the row
-names no staff member.
+A customer chooses their own plan on their phone, for the month of the
+check-in it comes with (``choose_plan_by_customer``), under the same rules
+as staff; the row names no staff member.
 
 Every function works inside the caller's transaction and never commits.
 Each staff choice is written to the activity log in the same transaction,
@@ -202,6 +202,10 @@ def choose_plan(
     Raises ``CustomerInactiveError``, ``MonthNotChoosableError``,
     ``MonthCoveredError`` or ``PriceNotSetError``, checked in that order.
     """
+    if not customer.active:
+        raise CustomerInactiveError("reactivate the customer first")
+    if month != Month.current():
+        raise MonthNotChoosableError(f"{month} is not the current month")
     choice = _new_choice(db, customer, plan, month, by=by)
     record(
         db, by, Action.PLAN_CHOOSE, Target.PLAN_CHOICE, choice.id, after=_logged(choice)
@@ -209,10 +213,17 @@ def choose_plan(
     return choice
 
 
-def choose_plan_by_customer(db: Session, customer: Customer, plan: Plan) -> PlanChoice:
-    """``customer`` chooses ``plan`` themselves, on their phone, from the
-    current month (design doc: "The monthly choice"). The same rules as a
-    staff choice; the row names no staff member.
+def choose_plan_by_customer(
+    db: Session, customer: Customer, plan: Plan, month: Month
+) -> PlanChoice:
+    """``customer`` chooses ``plan`` themselves, on their phone, from
+    ``month`` (design doc: "The monthly choice"). The same rules as a staff
+    choice; the row names no staff member.
+
+    ``month`` is the month of the check-in this choice comes with, worked
+    out by the caller from the same "now" as the check-in itself. Reading
+    the clock again here could land in the next month at midnight, and
+    give the visit's month no plan (``app.core.checkins``).
 
     Not written to the activity log: the log is for staff changes, and the
     customer acting for themselves is not one (as with linking a phone).
@@ -220,18 +231,17 @@ def choose_plan_by_customer(db: Session, customer: Customer, plan: Plan) -> Plan
     Raises ``CustomerInactiveError``, ``MonthCoveredError`` or
     ``PriceNotSetError``, checked in that order.
     """
-    return _new_choice(db, customer, plan, Month.current(), by=None)
+    return _new_choice(db, customer, plan, month, by=None)
 
 
 def _new_choice(
     db: Session, customer: Customer, plan: Plan, month: Month, *, by: StaffUser | None
 ) -> PlanChoice:
     """Check and add a new choice of ``plan`` from ``month``: by staff
-    member ``by``, or by the customer when ``by`` is ``None``."""
+    member ``by``, or by the customer when ``by`` is ``None``. Which months
+    may be chosen is the caller's check."""
     if not customer.active:
         raise CustomerInactiveError("reactivate the customer first")
-    if month != Month.current():
-        raise MonthNotChoosableError(f"{month} is not the current month")
     last = end_month(plan, month)
     covered = _first_active(db, customer, month, last)
     if covered is not None:

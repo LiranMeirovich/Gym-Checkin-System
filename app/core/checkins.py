@@ -7,9 +7,10 @@ Every check-in runs the same checks in order:
    nothing is recorded (``HealthFormRequiredError``): the gym isn't insured
    (decision 0004).
 2. **Not a repeat:** a second check-in by the same customer within
-   ``REPEAT_WINDOW`` of the last one, by any method, is "already checked
-   in". Nothing new is recorded, so it doesn't count as another single
-   entry.
+   ``REPEAT_WINDOW`` of the last one, by any method, in the same month, is
+   "already checked in". Nothing new is recorded, so it doesn't count as
+   another single entry. A first visit just after midnight on the 1st is
+   never a repeat of the evening before: it belongs to the new month.
 3. **A plan covering this month.** If none does, the phone shows the plan
    page (``PlanRequiredError``, with this customer's options); the plan the
    customer taps comes back with the next call, which chooses it and
@@ -89,8 +90,9 @@ class CheckInResult:
     outcome: Outcome
     # The new check-in, or the recent one this repeats.
     check_in: CheckIn
-    # The plan covering this month. ``None`` only for a repeat whose month
-    # has since lost its plan (the manager cleared it).
+    # The plan covering this month, never a "no plan" row. ``None`` only
+    # for a repeat whose month has since lost its plan (the manager
+    # cleared it).
     plan: PlanChoice | None
 
 
@@ -107,14 +109,21 @@ def check_in_by_phone(
     customer = device.customer
     if not customer.active:
         raise CustomerInactiveError("reactivate the customer first")
+    # One reading of the clock for the whole check-in: the form's day, the
+    # month, the repeat window and the plan choice all follow from it.
     now = utc_now()
-    today = to_local(now).date()
+    local_now = to_local(now)
+    today = local_now.date()
     form = health_form_status(db, customer, today)
     if not form.allows_check_in:
         raise HealthFormRequiredError(form)
 
     month = Month.of(today)
-    recent = _latest_since(db, customer, now - REPEAT_WINDOW)
+    # A repeat only within this month: the first visit of a month is never
+    # swallowed by a late visit the evening before, so it still gets the
+    # plan page and is counted in its own month.
+    month_start = local_now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    recent = _recent(db, customer, after=now - REPEAT_WINDOW, from_=month_start)
     if recent is not None:
         device.last_seen_at = now
         db.flush()
@@ -126,7 +135,7 @@ def check_in_by_phone(
     if covering is None:
         if plan is None:
             raise PlanRequiredError(month, plan_options(db, customer, month))
-        covering = choose_plan_by_customer(db, customer, plan)
+        covering = choose_plan_by_customer(db, customer, plan, month)
 
     check_in = CheckIn(
         customer_id=customer.id,
@@ -140,11 +149,18 @@ def check_in_by_phone(
     return CheckInResult(Outcome.CHECKED_IN, check_in, covering)
 
 
-def _latest_since(db: Session, customer: Customer, since: datetime) -> CheckIn | None:
-    """The customer's latest check-in after ``since``, by any method."""
+def _recent(
+    db: Session, customer: Customer, *, after: datetime, from_: datetime
+) -> CheckIn | None:
+    """The customer's latest check-in, by any method, later than ``after``
+    and no earlier than ``from_``."""
     return db.scalar(
         select(CheckIn)
-        .where(CheckIn.customer_id == customer.id, CheckIn.checked_in_at > since)
+        .where(
+            CheckIn.customer_id == customer.id,
+            CheckIn.checked_in_at > after,
+            CheckIn.checked_in_at >= from_,
+        )
         .order_by(CheckIn.checked_in_at.desc(), CheckIn.id.desc())
         .limit(1)
     )

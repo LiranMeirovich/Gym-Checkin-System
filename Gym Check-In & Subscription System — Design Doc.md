@@ -246,7 +246,7 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 - Login tokens and link codes are stored only as hashes; the plain values exist only in the cookie or on the admin screen.
 - Linking has no wrong-code lockout: a code is single use, lasts 15 minutes and is replaced by the next one. Guessing is limited by rate limiting at the edge (Cloudflare), not in the app (decision 0029).
 - No check-in (phone or manual) is recorded for a customer without a valid health form on that day.
-- A second check-in by the same customer within 10 minutes is ignored (shown as "already checked in") and doesn't count as an extra single entry.
+- A second check-in by the same customer within 10 minutes, in the same month, is ignored (shown as "already checked in") and doesn't count as an extra single entry. The first visit of a month is never a repeat of the evening before (decision 0032).
 - Staff PINs (6–12 digits) are stored as Argon2id hashes, and 5 wrong PINs in a row (each within 15 minutes of the last) lock that account for 5 minutes; the SMTP password is kept in the OS secret store or an environment variable (TBD), not in the database.
 
 ## Monthly report

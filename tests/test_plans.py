@@ -444,7 +444,7 @@ def test_a_covered_month_is_reported_before_a_missing_price(
 def test_a_customer_chooses_for_this_month_and_names_no_staff(
     db: Session, adult: Customer, prices: None, plan: Plan, last: Month, price: int
 ) -> None:
-    choice = choose_plan_by_customer(db, adult, plan)
+    choice = choose_plan_by_customer(db, adult, plan, THIS_MONTH)
 
     assert choice.plan is plan
     assert (choice.start_month, choice.end_month) == (THIS_MONTH, last)
@@ -458,7 +458,7 @@ def test_a_customer_chooses_for_this_month_and_names_no_staff(
 def test_a_customers_choice_is_not_logged(
     db: Session, adult: Customer, prices: None
 ) -> None:
-    choose_plan_by_customer(db, adult, Plan.MONTHLY)
+    choose_plan_by_customer(db, adult, Plan.MONTHLY, THIS_MONTH)
 
     assert log_entries(db) == []
 
@@ -468,23 +468,20 @@ def test_an_under_18_customer_chooses_at_the_under_18_price(
 ) -> None:
     young = add_customer(db, "+972507654321", date(2010, 1, 1))
 
-    choice = choose_plan_by_customer(db, young, Plan.MONTHLY)
+    choice = choose_plan_by_customer(db, young, Plan.MONTHLY, THIS_MONTH)
 
     assert choice.age_group is AgeGroup.UNDER_18
     assert choice.unit_price_agorot == 24000
 
 
-def test_a_customers_month_is_the_gyms_not_utcs(
-    db: Session, adult: Customer, prices: None, monkeypatch: pytest.MonkeyPatch
+def test_a_customer_chooses_from_the_month_given(
+    db: Session, adult: Customer, prices: None
 ) -> None:
-    # 23:30 UTC on 30 November is already 1 December in Israel.
-    monkeypatch.setattr(
-        months, "utc_now", lambda: datetime(2026, 11, 30, 23, 30, tzinfo=UTC)
-    )
+    # The check-in's month, from the same reading of the clock as the
+    # check-in: never read again here.
+    choice = choose_plan_by_customer(db, adult, Plan.TRI_MONTHLY, Month(2026, 12))
 
-    choice = choose_plan_by_customer(db, adult, Plan.MONTHLY)
-
-    assert choice.start_month == Month(2026, 12)
+    assert (choice.start_month, choice.end_month) == (Month(2026, 12), Month(2027, 2))
 
 
 def test_a_customer_cannot_choose_a_covered_month(
@@ -493,7 +490,7 @@ def test_a_customer_cannot_choose_a_covered_month(
     period = add_choice(db, adult, Plan.TRI_MONTHLY, Month(2026, 10))
 
     with pytest.raises(MonthCoveredError) as refused:
-        choose_plan_by_customer(db, adult, Plan.MONTHLY)
+        choose_plan_by_customer(db, adult, Plan.MONTHLY, THIS_MONTH)
     assert refused.value.choice == period
 
 
@@ -503,7 +500,7 @@ def test_a_customer_cannot_choose_a_plan_whose_price_is_not_set(
     add_price(db, Plan.MONTHLY, AgeGroup.ADULT, 25000)
 
     with pytest.raises(PriceNotSetError):
-        choose_plan_by_customer(db, adult, Plan.SINGLE_ENTRY)
+        choose_plan_by_customer(db, adult, Plan.SINGLE_ENTRY, THIS_MONTH)
     assert db.scalars(select(PlanChoice)).all() == []
 
 
@@ -514,13 +511,13 @@ def test_an_inactive_customer_cannot_choose(
     db.flush()
 
     with pytest.raises(CustomerInactiveError):
-        choose_plan_by_customer(db, adult, Plan.MONTHLY)
+        choose_plan_by_customer(db, adult, Plan.MONTHLY, THIS_MONTH)
 
 
 def test_a_customers_choice_can_be_corrected_by_the_manager(
     db: Session, manager: StaffUser, adult: Customer, prices: None
 ) -> None:
-    choice = choose_plan_by_customer(db, adult, Plan.SINGLE_ENTRY)
+    choice = choose_plan_by_customer(db, adult, Plan.SINGLE_ENTRY, THIS_MONTH)
 
     correction = correct_plan(db, adult, choice, Plan.MONTHLY, by=manager)
 

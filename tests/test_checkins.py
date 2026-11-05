@@ -35,7 +35,7 @@ from app.core.models import (
     Price,
 )
 from app.core.months import Month
-from app.core.plans import PriceNotSetError, end_month
+from app.core.plans import PriceNotSetError, covering_choice, end_month
 
 # Midday on 15 November 2026, UTC (14:00 in Israel).
 START = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
@@ -545,3 +545,68 @@ def test_the_first_check_in_of_a_new_month_asks_again(
 
     with pytest.raises(PlanRequiredError):
         check_in_by_phone(db, phone)
+
+
+# Midnight at the end of a month
+
+
+def test_a_late_visit_does_not_swallow_the_first_of_the_month(
+    db: Session,
+    customer: Customer,
+    phone: DeviceSession,
+    valid_form: None,
+    prices: None,
+    clock: Clock,
+) -> None:
+    # 23:55 on 30 November in Israel, then 00:03 on 1 December: within ten
+    # minutes, but December's first visit still gets its plan page.
+    add_choice(db, customer, Plan.MONTHLY, THIS_MONTH)
+    clock.now = datetime(2026, 11, 30, 21, 55, tzinfo=UTC)
+    check_in_by_phone(db, phone)
+    clock.advance(timedelta(minutes=8))
+
+    with pytest.raises(PlanRequiredError) as refused:
+        check_in_by_phone(db, phone)
+    assert refused.value.month == Month(2026, 12)
+
+    december = check_in_by_phone(db, phone, Plan.MONTHLY)
+    assert december.outcome is Outcome.CHECKED_IN
+    assert len(recorded(db)) == 2
+
+
+def test_a_repeat_just_after_midnight_on_the_first_is_still_a_repeat(
+    db: Session,
+    customer: Customer,
+    phone: DeviceSession,
+    valid_form: None,
+    prices: None,
+    clock: Clock,
+) -> None:
+    clock.now = datetime(2026, 11, 30, 22, 1, tzinfo=UTC)  # 00:01 on 1 December
+    check_in_by_phone(db, phone, Plan.MONTHLY)
+    clock.advance(timedelta(minutes=3))
+
+    assert check_in_by_phone(db, phone).outcome is Outcome.ALREADY_CHECKED_IN
+
+
+def test_the_plan_is_chosen_for_the_check_ins_own_month(
+    db: Session,
+    customer: Customer,
+    phone: DeviceSession,
+    valid_form: None,
+    prices: None,
+    clock: Clock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The check-in reads the clock just before midnight; anything reading it
+    # again would already see December. The choice must still be November's.
+    clock.now = datetime(2026, 11, 30, 21, 59, 59, 999999, tzinfo=UTC)
+    monkeypatch.setattr(
+        months, "utc_now", lambda: datetime(2026, 11, 30, 22, 0, tzinfo=UTC)
+    )
+
+    result = check_in_by_phone(db, phone, Plan.MONTHLY)
+
+    assert result.plan is not None
+    assert result.plan.start_month == THIS_MONTH
+    assert covering_choice(db, customer, THIS_MONTH) == result.plan

@@ -3,7 +3,7 @@ check-in, and refreshing the gym_device cookie. The rules themselves are
 tested in test_checkins.py. Names, numbers and amounts are made up."""
 
 from collections.abc import Iterator
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -11,8 +11,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import checkins, health_forms, months, phone_links
 from app.core.db import get_engine
-from app.core.health_forms import expires_on, local_today
+from app.core.health_forms import expires_on
 from app.core.models import (
     AgeGroup,
     CheckIn,
@@ -38,6 +39,17 @@ SAME_ORIGIN = {"Origin": ORIGIN, "Sec-Fetch-Site": "same-origin"}
 # Long before any month the tests run in.
 EARLY_MONTH = Month(2020, 1)
 FAKE_PDF = b"%PDF-1.4 made up"
+# Midday on 15 November 2026, UTC (14:00 in Israel): far from any day or
+# month boundary, so a slow run can't cross one.
+NOW = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+TODAY = date(2026, 11, 15)
+THIS_MONTH = Month(2026, 11)
+
+
+@pytest.fixture(autouse=True)
+def fixed_now(monkeypatch: pytest.MonkeyPatch) -> None:
+    for module in (checkins, health_forms, months, phone_links):
+        monkeypatch.setattr(module, "utc_now", lambda: NOW)
 
 
 @pytest.fixture
@@ -104,7 +116,7 @@ def prices(db: Session) -> None:
 
 
 def add_form(db: Session, customer: Customer, *, needs_doctor_note: bool = False):
-    today = local_today()
+    today = TODAY
     db.add(
         HealthForm(
             customer_id=customer.id,
@@ -122,7 +134,7 @@ def add_form(db: Session, customer: Customer, *, needs_doctor_note: bool = False
 
 
 def add_monthly(db: Session, customer: Customer) -> None:
-    month = Month.current()
+    month = THIS_MONTH
     db.add(
         PlanChoice(
             customer_id=customer.id,
@@ -156,7 +168,7 @@ def test_a_covered_month_checks_in(
     assert response.status_code == 200
     answer = response.json()
     assert answer["outcome"] == "checked_in"
-    month = str(Month.current())
+    month = "2026-11"
     assert answer["plan"] == {
         "plan": "monthly",
         "start_month": month,
@@ -265,7 +277,7 @@ def test_no_plan_is_plan_required_with_the_options(
     assert response.status_code == 409
     assert response.json() == {
         "detail": "plan_required",
-        "month": str(Month.current()),
+        "month": "2026-11",
         "options": [
             {"plan": "monthly", "price_agorot": 25000},
             {"plan": "tri_monthly", "price_agorot": None},
@@ -284,7 +296,7 @@ def test_choosing_a_plan_checks_in_with_it(
     answer = response.json()
     assert answer["outcome"] == "checked_in"
     assert answer["plan"]["plan"] == "tri_monthly"
-    assert answer["plan"]["end_month"] == str(Month.current().plus(2))
+    assert answer["plan"]["end_month"] == "2027-01"
     [choice] = db.scalars(select(PlanChoice)).all()
     assert choice.chosen_by is ChosenBy.CUSTOMER
     assert len(visits(db)) == 1

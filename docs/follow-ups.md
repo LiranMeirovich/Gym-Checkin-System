@@ -63,6 +63,8 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two, `plan_choices`' five (append-only, overlap, same customer, same months) and `checkins`' three (append-only, same customer's phone).
 - Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`, now including the customer and price tests), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
 - Setup validates the gym name twice.
+- `MonthText` (the `YYYY-MM` pattern) is in both `app/admin/api/schemas.py` and `app/public/api/schemas.py`, since the public app can't import admin code. Move it to a shared core module (e.g. `app/core/months.py`).
+- `test_a_repeat_comes_before_the_plan_check` (`tests/test_checkins.py`) makes its "no plan" row as the customer; only the manager clears plans. Make it through `correct_plan()` with a manager.
 - Two migration heads give Alembic's raw error at startup instead of `DatabaseNotReadyError`.
 - The naive-datetime checks test `tzinfo is None` rather than `utcoffset() is None`.
 - `app/core/spa.py` answers paths whose last segment has a dot with 404, so a future React route with a dot in a parameter would break on reload.
