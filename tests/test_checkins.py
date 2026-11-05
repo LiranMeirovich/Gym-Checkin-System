@@ -1,7 +1,9 @@
-"""Phone check-ins: the checks in order (health form, repeat window, a plan
-for the month), choosing a plan with the check-in, and what is recorded.
+"""Check-ins by phone and at the desk: the checks in order (health form,
+repeat window, a plan for the month), choosing a plan with the check-in, an
+instructor's single-entry fallback, and what is recorded and logged.
 Names, numbers and amounts are made up."""
 
+import json
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -11,12 +13,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import checkins, months
+from app.core.activity_log import Action, Target
 from app.core.checkins import (
     REPEAT_WINDOW,
     HealthFormRequiredError,
     Outcome,
+    PlanNotAllowedError,
     PlanRequiredError,
     check_in_by_phone,
+    check_in_manually,
 )
 from app.core.customers import CustomerInactiveError
 from app.core.db import get_engine
@@ -33,8 +38,10 @@ from app.core.models import (
     Plan,
     PlanChoice,
     Price,
+    StaffUser,
 )
 from app.core.months import Month
+from app.core.permissions import Role
 from app.core.plans import PriceNotSetError, covering_choice, end_month
 
 # Midday on 15 November 2026, UTC (14:00 in Israel).
@@ -610,3 +617,250 @@ def test_the_plan_is_chosen_for_the_check_ins_own_month(
     assert result.plan is not None
     assert result.plan.start_month == THIS_MONTH
     assert covering_choice(db, customer, THIS_MONTH) == result.plan
+
+
+# Manual check-in at the desk (decision 0017)
+
+FAKE_PIN_HASH = "$argon2id$v=19$m=65536,t=3,p=4$fake"
+
+
+def add_staff(db: Session, name: str, role: Role) -> StaffUser:
+    member = StaffUser(display_name=name, role=role, pin_hash=FAKE_PIN_HASH)
+    db.add(member)
+    db.flush()
+    return member
+
+
+@pytest.fixture
+def manager(db: Session) -> StaffUser:
+    return add_staff(db, "Dana", Role.MANAGER)
+
+
+@pytest.fixture
+def instructor(db: Session) -> StaffUser:
+    return add_staff(db, "Yoni", Role.INSTRUCTOR)
+
+
+def logged(db: Session) -> list[ActivityLogEntry]:
+    return list(db.scalars(select(ActivityLogEntry).order_by(ActivityLogEntry.id)))
+
+
+def test_a_manual_check_in_records_and_logs_the_staff_member(
+    db: Session, customer: Customer, instructor: StaffUser, valid_form: None
+) -> None:
+    plan = add_choice(db, customer, Plan.MONTHLY, THIS_MONTH)
+
+    result = check_in_manually(db, customer, by=instructor)
+
+    assert result.outcome is Outcome.CHECKED_IN
+    assert result.plan == plan
+    [row] = recorded(db)
+    assert row == result.check_in
+    assert row.method is CheckInMethod.MANUAL
+    assert row.staff_user_id == instructor.id
+    assert row.device_session_id is None
+    assert row.checked_in_at == START
+    [entry] = logged(db)
+    assert entry.staff_user_id == instructor.id
+    assert entry.action == Action.CHECKIN_MANUAL
+    assert entry.target_type == Target.CHECKIN
+    assert entry.target_id == row.id
+    assert json.loads(entry.after_json or "null") == {
+        "customer_id": customer.id,
+        "plan_choice_id": plan.id,
+    }
+
+
+def test_an_instructor_with_no_plan_records_single_entry(
+    db: Session,
+    customer: Customer,
+    instructor: StaffUser,
+    valid_form: None,
+    prices: None,
+) -> None:
+    result = check_in_manually(db, customer, by=instructor)
+
+    [choice] = choices(db)
+    assert result.plan == choice
+    assert choice.plan is Plan.SINGLE_ENTRY
+    assert choice.start_month == THIS_MONTH
+    assert choice.chosen_by is ChosenBy.STAFF
+    assert choice.staff_user_id == instructor.id
+    assert choice.unit_price_agorot == 4000
+    assert [entry.action for entry in logged(db)] == [
+        Action.PLAN_CHOOSE,
+        Action.CHECKIN_MANUAL,
+    ]
+
+
+def test_an_instructor_may_not_send_a_plan(
+    db: Session,
+    customer: Customer,
+    instructor: StaffUser,
+    valid_form: None,
+    prices: None,
+) -> None:
+    with pytest.raises(PlanNotAllowedError):
+        check_in_manually(db, customer, by=instructor, plan=Plan.MONTHLY)
+
+    assert recorded(db) == []
+    assert choices(db) == []
+    assert logged(db) == []
+
+
+def test_an_unset_single_entry_price_refuses_an_instructor(
+    db: Session, customer: Customer, instructor: StaffUser, valid_form: None
+) -> None:
+    with pytest.raises(PriceNotSetError):
+        check_in_manually(db, customer, by=instructor)
+
+    assert recorded(db) == []
+    assert logged(db) == []
+
+
+def test_the_manager_with_no_plan_is_asked_for_one(
+    db: Session, customer: Customer, manager: StaffUser, valid_form: None, prices: None
+) -> None:
+    with pytest.raises(PlanRequiredError) as refused:
+        check_in_manually(db, customer, by=manager)
+
+    assert refused.value.month == THIS_MONTH
+    assert [option.plan for option in refused.value.options] == list(Plan)
+    assert recorded(db) == []
+    assert choices(db) == []
+
+
+def test_the_manager_chooses_a_plan_with_the_check_in(
+    db: Session, customer: Customer, manager: StaffUser, valid_form: None, prices: None
+) -> None:
+    result = check_in_manually(db, customer, by=manager, plan=Plan.MONTHLY)
+
+    [choice] = choices(db)
+    assert result.plan == choice
+    assert choice.plan is Plan.MONTHLY
+    assert choice.staff_user_id == manager.id
+    assert [row.method for row in recorded(db)] == [CheckInMethod.MANUAL]
+
+
+def test_a_plan_the_manager_sends_for_a_covered_month_is_ignored(
+    db: Session, customer: Customer, manager: StaffUser, valid_form: None, prices: None
+) -> None:
+    plan = add_choice(db, customer, Plan.SINGLE_ENTRY, THIS_MONTH)
+
+    result = check_in_manually(db, customer, by=manager, plan=Plan.MONTHLY)
+
+    assert result.plan == plan
+    assert choices(db) == [plan]
+
+
+def test_no_form_refuses_a_manual_check_in(
+    db: Session, customer: Customer, manager: StaffUser, prices: None
+) -> None:
+    with pytest.raises(HealthFormRequiredError) as refused:
+        check_in_manually(db, customer, by=manager, plan=Plan.MONTHLY)
+
+    assert refused.value.status.state is FormState.MISSING
+    assert recorded(db) == []
+    assert choices(db) == []
+    assert logged(db) == []
+
+
+def test_a_form_waiting_for_a_doctors_note_refuses_a_manual_check_in(
+    db: Session, customer: Customer, instructor: StaffUser, prices: None
+) -> None:
+    add_form(db, customer, signed_on=date(2026, 3, 1), needs_doctor_note=True)
+
+    with pytest.raises(HealthFormRequiredError) as refused:
+        check_in_manually(db, customer, by=instructor)
+
+    assert refused.value.status.state is FormState.NEEDS_DOCTOR_NOTE
+    assert recorded(db) == []
+
+
+def test_an_inactive_customer_is_refused_at_the_desk(
+    db: Session, customer: Customer, instructor: StaffUser, valid_form: None
+) -> None:
+    add_choice(db, customer, Plan.MONTHLY, THIS_MONTH)
+    customer.active = False
+
+    with pytest.raises(CustomerInactiveError):
+        check_in_manually(db, customer, by=instructor)
+
+    assert recorded(db) == []
+
+
+def test_a_manual_check_in_after_a_phone_one_is_a_repeat(
+    db: Session,
+    customer: Customer,
+    phone: DeviceSession,
+    instructor: StaffUser,
+    valid_form: None,
+    clock: Clock,
+) -> None:
+    plan = add_choice(db, customer, Plan.MONTHLY, THIS_MONTH)
+    first = check_in_by_phone(db, phone).check_in
+    clock.advance(timedelta(minutes=5))
+
+    result = check_in_manually(db, customer, by=instructor)
+
+    assert result.outcome is Outcome.ALREADY_CHECKED_IN
+    assert result.check_in == first
+    assert result.plan == plan
+    assert recorded(db) == [first]
+    assert logged(db) == []
+
+
+def test_a_phone_check_in_after_a_manual_one_is_a_repeat(
+    db: Session,
+    customer: Customer,
+    phone: DeviceSession,
+    instructor: StaffUser,
+    valid_form: None,
+    clock: Clock,
+) -> None:
+    add_choice(db, customer, Plan.MONTHLY, THIS_MONTH)
+    first = check_in_manually(db, customer, by=instructor).check_in
+    clock.advance(timedelta(minutes=5))
+
+    assert check_in_by_phone(db, phone).outcome is Outcome.ALREADY_CHECKED_IN
+    assert recorded(db) == [first]
+
+
+def test_a_repeat_at_the_desk_comes_before_the_plan(
+    db: Session,
+    customer: Customer,
+    instructor: StaffUser,
+    valid_form: None,
+    prices: None,
+    clock: Clock,
+) -> None:
+    first = check_in_manually(db, customer, by=instructor)
+    clock.advance(timedelta(minutes=5))
+
+    again = check_in_manually(db, customer, by=instructor)
+
+    assert again.outcome is Outcome.ALREADY_CHECKED_IN
+    assert len(choices(db)) == 1
+    assert again.plan == first.plan
+
+
+def test_the_single_entry_fallback_is_for_the_check_ins_own_month(
+    db: Session,
+    customer: Customer,
+    instructor: StaffUser,
+    valid_form: None,
+    prices: None,
+    clock: Clock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # As for the phone: the check-in reads the clock just before midnight,
+    # and the fallback choice must still be November's.
+    clock.now = datetime(2026, 11, 30, 21, 59, 59, 999999, tzinfo=UTC)
+    monkeypatch.setattr(
+        months, "utc_now", lambda: datetime(2026, 11, 30, 22, 0, tzinfo=UTC)
+    )
+
+    result = check_in_manually(db, customer, by=instructor)
+
+    assert result.plan is not None
+    assert result.plan.start_month == THIS_MONTH

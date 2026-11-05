@@ -206,6 +206,23 @@ def choose_plan(
         raise CustomerInactiveError("reactivate the customer first")
     if month != Month.current():
         raise MonthNotChoosableError(f"{month} is not the current month")
+    return choose_plan_at_check_in(db, customer, plan, month, by=by)
+
+
+def choose_plan_at_check_in(
+    db: Session, customer: Customer, plan: Plan, month: Month, *, by: StaffUser
+) -> PlanChoice:
+    """Staff member ``by`` chooses ``plan`` for ``customer`` from ``month``,
+    as part of a manual check-in (``app.core.checkins``). Logged like any
+    staff choice.
+
+    ``month`` is the check-in's own month, worked out by the caller from
+    the same "now" as the visit, so it isn't checked against the clock
+    again (as with ``choose_plan_by_customer``).
+
+    Raises ``CustomerInactiveError``, ``MonthCoveredError`` or
+    ``PriceNotSetError``, checked in that order.
+    """
     choice = _new_choice(db, customer, plan, month, by=by)
     record(
         db, by, Action.PLAN_CHOOSE, Target.PLAN_CHOICE, choice.id, after=_logged(choice)

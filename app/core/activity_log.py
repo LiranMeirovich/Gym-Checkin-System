@@ -56,6 +56,10 @@ class Action(StrEnum):
     # The manager opened a health form's contents (its PDF).
     HEALTH_FORM_OPEN = "health_form.open"
 
+    # A staff member checked a customer in at the desk. A repeat within
+    # the 10-minute window records nothing, so it isn't logged.
+    CHECKIN_MANUAL = "checkin.manual"
+
 
 class Target(StrEnum):
     """What kind of thing a change was made to; ``activity_log.target_type``.
@@ -70,6 +74,7 @@ class Target(StrEnum):
     PLAN_CHOICE = "plan_choice"
     DEVICE_SESSION = "device_session"
     HEALTH_FORM = "health_form"
+    CHECKIN = "checkin"
 
 
 def record(
