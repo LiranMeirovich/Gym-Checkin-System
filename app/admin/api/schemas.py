@@ -6,10 +6,11 @@ import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import BaseModel, BeforeValidator, Field, StrictBool, StringConstraints
 
 from app.core.checkins import Outcome
-from app.core.health_forms import FormState
+from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
+from app.core.health_forms import FormField, FormState
 from app.core.http import Answer
 from app.core.models import AgeGroup, ChosenBy, Plan
 from app.core.permissions import Role
@@ -415,6 +416,79 @@ class HealthFormList(Answer):
     """Every form the customer has signed, newest first."""
 
     forms: list[HealthFormSummary]
+
+
+# The form on the admin PC (the customer signs at the desk): the same
+# shapes as the public app's form, which this app must not import, so the
+# shared React form works with both.
+
+
+class HealthFormQuestion(Answer):
+    key: str
+    text: str
+    # The form has a free-text "details" line after this question.
+    has_details: bool
+
+
+class HealthFormPage(Answer):
+    """Everything the form shows, in order. The customer's details come
+    from their record and can't be changed here. ``guardian_consent`` is
+    set when a parent or guardian signs (the customer is under 18 today),
+    else null."""
+
+    version: str
+    title: str
+    customer_name: str
+    date_of_birth: date
+    phone: str
+    wording_note: str
+    part_a_title: str
+    part_a_notes: list[str]
+    questions_intro: str
+    questions: list[HealthFormQuestion]
+    part_b_title: str
+    declaration: list[str]
+    guardian_title: str
+    guardian_consent: str | None
+    # What the signed form's "valid until" will say if signed today.
+    valid_until_if_signed: date
+
+
+# Base64 grows bytes by 4/3, plus the "data:image/png;base64," prefix.
+SIGNATURE_DATA_URL_MAX_LENGTH = SIGNATURE_MAX_BYTES * 4 // 3 + 100
+
+
+class HealthFormRequest(BaseModel):
+    """A filled-in form. ``signature`` is the signature pad's PNG as a
+    data URL (``data:image/png;base64,...``). The caps only keep junk out;
+    ``app.core.health_forms`` has the real rules."""
+
+    version: str = Field(max_length=20)
+    # Strict: "true" or 1 is not an answer.
+    answers: dict[str, StrictBool] = Field(max_length=50)
+    details: dict[
+        Annotated[str, StringConstraints(max_length=50)],
+        Annotated[str, StringConstraints(max_length=1000)],
+    ] = Field(default_factory=dict, max_length=10)
+    gender: str = Field(max_length=20)
+    signer_name: str = Field(max_length=200)
+    confirmed: StrictBool
+    signature: str = Field(max_length=SIGNATURE_DATA_URL_MAX_LENGTH)
+
+
+class HealthFormRefused(Answer):
+    """400: every field that breaks its rule, at once. Nothing was
+    saved."""
+
+    errors: dict[FormField, Literal["invalid"]]
+
+
+class HealthFormConflict(Answer):
+    """409. ``form_version_changed``: the form changed while the page was
+    open; reload it and fill it in again. ``customer_inactive``:
+    reactivate them first. Nothing was saved."""
+
+    error: Literal["form_version_changed", "customer_inactive"]
 
 
 # A shrunk phone photo is far smaller; 12 MB of image is 16 MB of base64.

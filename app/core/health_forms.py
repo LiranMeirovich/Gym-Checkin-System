@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.activity_log import Action, Target, record
 from app.core.clock import to_local, utc_now
-from app.core.customers import CustomerInactiveError
+from app.core.customers import CustomerInactiveError, display_phone
 from app.core.gym_settings import load_gym_settings
 from app.core.health_form_pdf import (
     InvalidSignatureError,
@@ -305,20 +305,61 @@ def check_form(
     )
 
 
+@dataclass(frozen=True)
+class FormPage:
+    """Everything shown when ``customer`` fills in the current form on
+    ``today``: its wording (with the gym's name), their details from their
+    record, and the parent's consent when they're under 18 (else None)."""
+
+    form: FormText
+    customer_name: str
+    date_of_birth: date
+    # As shown, not as stored (``display_phone()``).
+    phone: str
+    part_a_notes: tuple[str, ...]
+    guardian_consent: str | None
+    # What the signed form's "valid until" will say if signed today.
+    valid_until_if_signed: date
+
+
+def form_page(db: Session, customer: Customer, today: date) -> FormPage:
+    """The current form for ``customer``, on the phone or at the desk."""
+    form = FORMS[CURRENT_VERSION]
+    name = f"{customer.first_name} {customer.last_name}"
+    return FormPage(
+        form=form,
+        customer_name=name,
+        date_of_birth=customer.date_of_birth,
+        phone=display_phone(customer.phone),
+        part_a_notes=form.notes(load_gym_settings(db).gym_name),
+        guardian_consent=(
+            form.consent(name) if signed_by_guardian(customer, today) else None
+        ),
+        valid_until_if_signed=expires_on(today),
+    )
+
+
 def local_today() -> date:
     """Today in Israel time: the day a form is signed or checked on."""
     return to_local(utc_now()).date()
 
 
 def save_form(
-    db: Session, customer: Customer, checked: CheckedForm, *, today: date
+    db: Session,
+    customer: Customer,
+    checked: CheckedForm,
+    *,
+    today: date,
+    by: StaffUser | None = None,
 ) -> HealthForm:
     """Sign and store a checked form for ``customer`` on ``today``, with
     its PDF snapshot. Works in the caller's transaction and never commits.
 
-    Not logged: the customer fills it in themselves, on their phone or on
-    a gym device (decision 0031). The PDF is built inside the transaction
-    (decision 0031: moved out only if it proves slow).
+    ``by``: the staff member who opened the form on the admin PC for the
+    customer to sign there; logged as ``health_form.fill_in`` (never the
+    answers). None on the customer's own phone, which isn't logged
+    (decision 0031). The PDF is built inside the transaction (decision
+    0031: moved out only if it proves slow).
     """
     if not customer.active:
         raise CustomerInactiveError("reactivate the customer first")
@@ -350,6 +391,15 @@ def save_form(
     )
     db.add(form)
     db.flush()
+    if by is not None:
+        record(
+            db,
+            by,
+            Action.HEALTH_FORM_FILL_IN,
+            Target.HEALTH_FORM,
+            form.id,
+            after={"customer_id": customer.id},
+        )
     return form
 
 

@@ -57,6 +57,9 @@ class Action(StrEnum):
     HEALTH_FORM_OPEN = "health_form.open"
     # Staff added a doctor's note to a form with a "yes" (never the image).
     HEALTH_FORM_ADD_DOCTOR_NOTE = "health_form.add_doctor_note"
+    # Staff opened the form on the admin PC and the customer signed it
+    # there (never the answers).
+    HEALTH_FORM_FILL_IN = "health_form.fill_in"
     # The manager opened a doctor's note (its image).
     DOCTOR_NOTE_OPEN = "doctor_note.open"
 

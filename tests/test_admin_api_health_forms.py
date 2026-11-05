@@ -1,10 +1,12 @@
 """The health form routes of the admin JSON API, on the real admin app:
 the status every staff member sees, the manager's list, opening a form's
-PDF, adding and opening a doctor's note, who may do what, and what's
-logged. Names and images are made up."""
+PDF, adding and opening a doctor's note, filling in the form on the PC,
+who may do what, and what's logged. Names, answers and images are made
+up."""
 
 import base64
 import io
+import json
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -12,7 +14,7 @@ from pathlib import Path
 import pytest
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,7 +22,7 @@ from app.admin.main import app
 from app.core import health_forms, pins
 from app.core.activity_log import Action, Target
 from app.core.db import get_engine
-from app.core.health_forms import CURRENT_VERSION, expires_on
+from app.core.health_forms import CURRENT_VERSION, FORMS, expires_on
 from app.core.models import (
     ActivityLogEntry,
     Customer,
@@ -471,3 +473,163 @@ def test_another_customers_note_is_404(
     assert open_note(as_manager, customer.id, note.id).status_code == 404
     assert open_note(as_manager, customer.id, 999).status_code == 404
     assert logged(db, Action.DOCTOR_NOTE_OPEN) == []
+
+
+# ── Filling in the form on the PC ──────────────────────────────────────
+
+ALL_NO = {q.key: False for q in FORMS[CURRENT_VERSION].questions}
+
+
+def signature_data_url() -> str:
+    image = Image.new("RGBA", (600, 240), (0, 0, 0, 0))
+    ImageDraw.Draw(image).line([(20, 100), (100, 30), (180, 90)], "black", 5)
+    out = io.BytesIO()
+    image.save(out, "PNG")
+    return "data:image/png;base64," + base64.b64encode(out.getvalue()).decode()
+
+
+SIGNATURE = signature_data_url()
+
+
+def filled_in(**changes: object) -> dict[str, object]:
+    fields: dict[str, object] = {
+        "version": CURRENT_VERSION,
+        "answers": ALL_NO,
+        "details": {},
+        "gender": "female",
+        "signer_name": "Noa Levi",
+        "confirmed": True,
+        "signature": SIGNATURE,
+    }
+    return fields | changes
+
+
+def form_to_fill_in(staff: Staff, customer_id: int):
+    return staff.client.get(f"/api/customers/{customer_id}/health-form/fill-in")
+
+
+def sign(staff: Staff, customer_id: int, *, csrf: bool = True, **changes: object):
+    return staff.client.post(
+        f"/api/customers/{customer_id}/health-form/fill-in",
+        json=filled_in(**changes),
+        headers=staff.headers if csrf else SAME_ORIGIN,
+    )
+
+
+def saved_forms(db: Session) -> list[HealthForm]:
+    db.rollback()
+    return list(db.scalars(select(HealthForm).order_by(HealthForm.id)))
+
+
+def test_not_logged_in_cant_fill_in(client: TestClient, customer: Customer) -> None:
+    url = f"/api/customers/{customer.id}/health-form/fill-in"
+
+    assert client.get(url).status_code == 401
+    assert client.post(url, json=filled_in(), headers=SAME_ORIGIN).status_code == 401
+
+
+def test_an_instructor_gets_the_form_for_a_customer(
+    as_instructor: Staff, customer: Customer
+) -> None:
+    response = form_to_fill_in(as_instructor, customer.id)
+
+    assert response.status_code == 200
+    page = response.json()
+    assert page["version"] == CURRENT_VERSION
+    assert page["customer_name"] == "Noa Levi"
+    assert page["date_of_birth"] == "1990-05-01"
+    assert page["phone"] == "050-1234567"
+    assert [q["key"] for q in page["questions"]] == list(ALL_NO)
+    assert page["guardian_consent"] is None
+    assert page["valid_until_if_signed"] == expires_on(date(2026, 11, 4)).isoformat()
+
+
+def test_an_under_18_gets_the_parents_consent(
+    as_instructor: Staff, db: Session, customer: Customer
+) -> None:
+    customer.date_of_birth = date(2010, 1, 1)
+    db.commit()
+
+    page = form_to_fill_in(as_instructor, customer.id).json()
+
+    assert "Noa Levi" in page["guardian_consent"]
+
+
+def test_signing_on_the_pc_makes_the_form_valid_and_is_logged(
+    as_instructor: Staff, db: Session, instructor: StaffUser, customer: Customer
+) -> None:
+    response = sign(as_instructor, customer.id)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "state": "valid",
+        "valid_until": expires_on(date(2026, 11, 4)).isoformat(),
+    }
+    # The PC never becomes the customer's device.
+    assert "set-cookie" not in response.headers
+    [form] = saved_forms(db)
+    assert form.customer_id == customer.id
+    assert form.signer_name == "Noa Levi"
+    assert form.document.startswith(b"%PDF")
+    [entry] = logged(db, Action.HEALTH_FORM_FILL_IN)
+    assert entry.staff_user_id == instructor.id
+    assert entry.target_type == Target.HEALTH_FORM
+    assert entry.target_id == form.id
+    # Never the answers.
+    assert json.loads(entry.after_json) == {"customer_id": customer.id}
+
+
+def test_a_yes_answer_on_the_pc_needs_a_doctors_note(
+    as_instructor: Staff, customer: Customer
+) -> None:
+    response = sign(as_instructor, customer.id, answers=ALL_NO | {"diabetes": True})
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "needs_doctor_note"
+
+
+def test_bad_fields_are_all_refused_and_nothing_is_saved(
+    as_instructor: Staff, db: Session, customer: Customer
+) -> None:
+    response = sign(
+        as_instructor, customer.id, confirmed=False, signature="not a data url"
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "errors": {"confirmed": "invalid", "signature": "invalid"}
+    }
+    assert saved_forms(db) == []
+    assert logged(db, Action.HEALTH_FORM_FILL_IN) == []
+
+
+def test_an_old_version_is_409(as_instructor: Staff, customer: Customer) -> None:
+    response = sign(as_instructor, customer.id, version="2000-01")
+
+    assert response.status_code == 409
+    assert response.json() == {"error": "form_version_changed"}
+
+
+def test_an_inactive_customer_cant_sign(
+    as_instructor: Staff, db: Session, customer: Customer
+) -> None:
+    customer.active = False
+    db.commit()
+
+    response = sign(as_instructor, customer.id)
+
+    assert response.status_code == 409
+    assert response.json() == {"error": "customer_inactive"}
+    assert saved_forms(db) == []
+
+
+def test_signing_on_the_pc_needs_the_csrf_token(
+    as_instructor: Staff, db: Session, customer: Customer
+) -> None:
+    assert sign(as_instructor, customer.id, csrf=False).status_code == 403
+    assert saved_forms(db) == []
+
+
+def test_filling_in_for_an_unknown_customer_is_404(as_instructor: Staff) -> None:
+    assert form_to_fill_in(as_instructor, 999).status_code == 404
+    assert sign(as_instructor, 999).status_code == 404

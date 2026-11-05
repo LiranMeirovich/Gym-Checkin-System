@@ -13,28 +13,21 @@ Filling in a form doesn't count as using the phone (``last_seen_at``); a
 check-in does (``POST /api/check-in``).
 """
 
-import base64
-import binascii
-
 from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
 
-from app.core.customers import display_phone
 from app.core.db import DbSession
-from app.core.gym_settings import load_gym_settings
 from app.core.health_forms import (
-    CURRENT_VERSION,
-    FORMS,
     FormVersionChangedError,
     InvalidHealthFormError,
     check_form,
-    expires_on,
+    form_page,
     health_form_status,
     local_today,
     save_form,
-    signed_by_guardian,
 )
 from app.core.health_forms import HealthFormStatus as CoreStatus
+from app.core.http import PNG_DATA_URL, data_url_bytes
 from app.public.api.schemas import (
     FormVersionChanged,
     HealthFormPage,
@@ -48,8 +41,6 @@ from app.public.device import refuse_not_linked, this_device
 
 router = APIRouter()
 
-_PNG_DATA_URL = "data:image/png;base64,"
-
 NOT_LINKED = {status.HTTP_401_UNAUTHORIZED: {"model": NotLinked}}
 
 
@@ -62,19 +53,17 @@ def health_form_page(request: Request, db: DbSession) -> HealthFormPage | JSONRe
     device = this_device(request, db)
     if device is None:
         return refuse_not_linked(request)
-    customer = device.customer
-    today = local_today()
-    form = FORMS[CURRENT_VERSION]
-    name = f"{customer.first_name} {customer.last_name}"
+    page = form_page(db, device.customer, local_today())
+    form = page.form
     return HealthFormPage(
         version=form.version,
         title=form.title,
-        customer_name=name,
-        date_of_birth=customer.date_of_birth,
-        phone=display_phone(customer.phone),
+        customer_name=page.customer_name,
+        date_of_birth=page.date_of_birth,
+        phone=page.phone,
         wording_note=form.wording_note,
         part_a_title=form.part_a_title,
-        part_a_notes=list(form.notes(load_gym_settings(db).gym_name)),
+        part_a_notes=list(page.part_a_notes),
         questions_intro=form.questions_intro,
         questions=[
             Question(key=q.key, text=q.text, has_details=q.has_details)
@@ -83,10 +72,8 @@ def health_form_page(request: Request, db: DbSession) -> HealthFormPage | JSONRe
         part_b_title=form.part_b_title,
         declaration=list(form.declaration),
         guardian_title=form.guardian_title,
-        guardian_consent=(
-            form.consent(name) if signed_by_guardian(customer, today) else None
-        ),
-        valid_until_if_signed=expires_on(today),
+        guardian_consent=page.guardian_consent,
+        valid_until_if_signed=page.valid_until_if_signed,
     )
 
 
@@ -113,7 +100,7 @@ def sign_health_form(
             gender=body.gender,
             signer_name=body.signer_name,
             confirmed=body.confirmed,
-            signature_png=_png_bytes(body.signature),
+            signature_png=data_url_bytes(body.signature, PNG_DATA_URL),
         )
     except FormVersionChangedError:
         return JSONResponse(
@@ -127,14 +114,3 @@ def sign_health_form(
     today = local_today()
     save_form(db, device.customer, checked, today=today)
     return status_answer(health_form_status(db, device.customer, today))
-
-
-def _png_bytes(data_url: str) -> bytes:
-    """The PNG inside a data URL; empty (refused as a bad signature) when
-    it isn't one."""
-    if not data_url.startswith(_PNG_DATA_URL):
-        return b""
-    try:
-        return base64.b64decode(data_url.removeprefix(_PNG_DATA_URL), validate=True)
-    except binascii.Error:
-        return b""

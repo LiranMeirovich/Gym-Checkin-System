@@ -332,6 +332,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/{customer_id}/health-form/fill-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health Form To Fill In */
+        get: operations["health_form_to_fill_in_api_customers__customer_id__health_form_fill_in_get"];
+        put?: never;
+        /** Sign Health Form */
+        post: operations["sign_health_form_api_customers__customer_id__health_form_fill_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/customers/{customer_id}/health-form/doctor-note": {
         parameters: {
             query?: never;
@@ -660,6 +678,12 @@ export interface components {
             image: string;
         };
         /**
+         * FormField
+         * @description The fields a refused form can name.
+         * @enum {string}
+         */
+        FormField: "answers" | "details" | "gender" | "signer_name" | "confirmed" | "signature";
+        /**
          * FormState
          * @enum {string}
          */
@@ -670,12 +694,116 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * HealthFormConflict
+         * @description 409. ``form_version_changed``: the form changed while the page was
+         *     open; reload it and fill it in again. ``customer_inactive``:
+         *     reactivate them first. Nothing was saved.
+         */
+        HealthFormConflict: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "form_version_changed" | "customer_inactive";
+        };
+        /**
          * HealthFormList
          * @description Every form the customer has signed, newest first.
          */
         HealthFormList: {
             /** Forms */
             forms: components["schemas"]["HealthFormSummary"][];
+        };
+        /**
+         * HealthFormPage
+         * @description Everything the form shows, in order. The customer's details come
+         *     from their record and can't be changed here. ``guardian_consent`` is
+         *     set when a parent or guardian signs (the customer is under 18 today),
+         *     else null.
+         */
+        HealthFormPage: {
+            /** Version */
+            version: string;
+            /** Title */
+            title: string;
+            /** Customer Name */
+            customer_name: string;
+            /**
+             * Date Of Birth
+             * Format: date
+             */
+            date_of_birth: string;
+            /** Phone */
+            phone: string;
+            /** Wording Note */
+            wording_note: string;
+            /** Part A Title */
+            part_a_title: string;
+            /** Part A Notes */
+            part_a_notes: string[];
+            /** Questions Intro */
+            questions_intro: string;
+            /** Questions */
+            questions: components["schemas"]["HealthFormQuestion"][];
+            /** Part B Title */
+            part_b_title: string;
+            /** Declaration */
+            declaration: string[];
+            /** Guardian Title */
+            guardian_title: string;
+            /** Guardian Consent */
+            guardian_consent: string | null;
+            /**
+             * Valid Until If Signed
+             * Format: date
+             */
+            valid_until_if_signed: string;
+        };
+        /** HealthFormQuestion */
+        HealthFormQuestion: {
+            /** Key */
+            key: string;
+            /** Text */
+            text: string;
+            /** Has Details */
+            has_details: boolean;
+        };
+        /**
+         * HealthFormRefused
+         * @description 400: every field that breaks its rule, at once. Nothing was
+         *     saved.
+         */
+        HealthFormRefused: {
+            /** Errors */
+            errors: {
+                [key: string]: "invalid";
+            };
+        };
+        /**
+         * HealthFormRequest
+         * @description A filled-in form. ``signature`` is the signature pad's PNG as a
+         *     data URL (``data:image/png;base64,...``). The caps only keep junk out;
+         *     ``app.core.health_forms`` has the real rules.
+         */
+        HealthFormRequest: {
+            /** Version */
+            version: string;
+            /** Answers */
+            answers: {
+                [key: string]: boolean;
+            };
+            /** Details */
+            details?: {
+                [key: string]: string;
+            };
+            /** Gender */
+            gender: string;
+            /** Signer Name */
+            signer_name: string;
+            /** Confirmed */
+            confirmed: boolean;
+            /** Signature */
+            signature: string;
         };
         /**
          * HealthFormStatus
@@ -2355,6 +2483,136 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_form_to_fill_in_api_customers__customer_id__health_form_fill_in_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormPage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sign_health_form_api_customers__customer_id__health_form_fill_in_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HealthFormRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormStatus"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormConflict"];
+                };
             };
             /** @description Validation Error */
             422: {
