@@ -53,5 +53,23 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Shared code goes into both builds, so it imports neither app: each
+    // app passes in its own API calls.
+    files: ["src/shared/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/admin", "**/admin/**", "**/public", "**/public/**"],
+              message: "Shared code must not import either app.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   prettier,
 );

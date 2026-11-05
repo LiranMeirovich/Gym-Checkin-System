@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
-import { formatDay } from "../dates";
+import { formatDay } from "../../shared/dates";
 import {
   PLAN_NAMES,
   formatMonth,
