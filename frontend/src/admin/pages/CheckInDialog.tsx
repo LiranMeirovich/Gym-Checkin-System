@@ -54,16 +54,21 @@ function CheckInDialog({
 }: Props & { onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    ref.current?.showModal();
+    // Development runs effects twice (StrictMode); opening an open dialog
+    // throws in some browsers. No cleanup: closing fires onClose, which
+    // would unmount the dialog right after the second run opened it.
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
   }, []);
+  const close = () => ref.current?.close();
 
   return (
     // Escape closes a modal dialog; onClose tells React.
     <dialog ref={ref} onClose={onClose}>
       <h2>רישום כניסה: {name}</h2>
-      <CheckInBody customerId={customerId} />
+      <CheckInBody customerId={customerId} close={close} />
       <p>
-        <button type="button" onClick={() => ref.current?.close()}>
+        <button type="button" onClick={close}>
           סגירה
         </button>
       </p>
@@ -71,7 +76,15 @@ function CheckInDialog({
   );
 }
 
-function CheckInBody({ customerId }: { customerId: number }) {
+/** `close`: the links close the dialog as they go, since one may lead to
+ * the page that's already open (the customer's own page). */
+function CheckInBody({
+  customerId,
+  close,
+}: {
+  customerId: number;
+  close: () => void;
+}) {
   const session = useSession();
   const queryClient = useQueryClient();
   const manager = isManager(session);
@@ -171,11 +184,11 @@ function CheckInBody({ customerId }: { customerId: number }) {
       <p role="alert">
         אין כניסה בלי הצהרת בריאות בתוקף.{" "}
         {health.data.state === "missing" ? (
-          <Link to={`/customers/${customerId}/health-form`}>
+          <Link to={`/customers/${customerId}/health-form`} onClick={close}>
             מילוי ההצהרה כאן, במחשב
           </Link>
         ) : (
-          <Link to={`/customers/${customerId}`}>
+          <Link to={`/customers/${customerId}`} onClick={close}>
             הוספת אישור רפואי בכרטיס הלקוח
           </Link>
         )}

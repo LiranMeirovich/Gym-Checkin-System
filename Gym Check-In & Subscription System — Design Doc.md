@@ -139,7 +139,7 @@ A photo of the wall QR opens the page from anywhere, so a linked phone could che
 
 **Manual check-in**
 
-From the customer list, a staff member finds the customer and clicks "Check in". It records who did it, is logged with method `manual`, and works even when the internet is down. If the customer has no valid health form, the button is disabled and the dialog offers to open the health form on a gym device instead; once the customer has filled it in and signed, the check-in goes ahead (decision 0031).
+From the customer list or the customer's page, a staff member clicks "Check in". The dialog shows only the name, whether the health form is valid, and this month's plan. The check-in records who did it, is logged with method `manual`, and works even when the internet is down. It follows the phone's order: health form, the 10-minute repeat, then a plan. If the customer has no valid health form, there's no check-in button: the dialog links to the health form on the desk PC (or, for a "yes" form, to adding the doctor's note), and the customer is checked in after signing (decisions 0031, 0033). With no plan this month, the manager picks one in the dialog; an instructor's check-in records single entry, and is refused if the single-entry price isn't set.
 
 ## Plans, prices and billing
 
@@ -208,10 +208,16 @@ Every customer needs a valid signed health declaration before they can train. Wi
 - The questions are the gym's official health declaration. Any "yes" answer means the form counts only once staff add a doctor's note (an image); until then check-in is blocked (decision 0031).
 - On submit, the system stores the answers, the form version, and a PDF snapshot of exactly what was signed, so the form stays readable even after the questions change.
 
-**On a gym device (at the desk)**
+**On the desk PC**
 
-- For customers without a smartphone, or who have trouble with it, staff open the same form on a gym tablet or computer, and the customer fills it in and signs there (decision 0031). There are no paper forms.
-- This is also how manual check-in handles a customer with no valid form.
+- For customers without a smartphone, or who have trouble with it, staff open the same form in the admin app on the front-desk PC, and the customer fills it in and signs there (decisions 0031, 0033). There are no paper forms, and for now no gym tablet.
+- Adding a customer with the "no smartphone" box ticked goes straight to the form; while the form is missing, the customer page and the check-in dialog link to it. The form screen has no staff header, and goes back to the customer page once signed.
+- Signing on the PC is written to the activity log with the staff member who opened the form (never the answers). The PC never becomes the customer's device: it gets no `gym_device` cookie.
+
+**Doctor's notes**
+
+- Any staff member can add a doctor's note (a photo or scan) to a form waiting for one; the form then counts. The image is shrunk in the browser, then re-encoded on the server as a JPEG with its metadata removed. Notes are never edited or deleted (decision 0033).
+- Only the manager can open a note, and every opening is logged, as with forms.
 
 **Validity and access**
 
@@ -222,7 +228,7 @@ Every customer needs a valid signed health declaration before they can train. Wi
 
 ## Data model
 
-One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch cards are added). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
+One SQLite file (`gym.db`, WAL mode) with thirteen tables (fourteen once punch cards are added). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
@@ -237,7 +243,8 @@ One SQLite file (`gym.db`, WAL mode) with twelve tables (thirteen once punch car
 | staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
 | staff\_sessions | id, staff\_user\_id, token\_hash (unique), created\_at, last\_seen\_at, ended\_at | One row per staff login; the `gym_staff` cookie holds the token, only its SHA-256 hash is stored. Ends on Lock, a new login, the role's idle time or 12 hours; ended, never deleted |
 | activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change, in the same transaction; append-only (database triggers refuse UPDATE and DELETE). Never holds PINs, hashes or tokens |
-| `health_forms` | id, customer\_id, form\_version, answers\_json, needs\_doctor\_note, signer\_name, signed\_by\_guardian, signed\_on, expires\_on, document (blob: PDF snapshot), created\_at | Never overwritten; the newest unexpired row counts, and one with `needs_doctor_note` counts only with a doctor's note (its own table, milestone 3 feature 4). The document is stored inside the database, not as a loose file, so it gets the same encryption and backups |
+| `doctor_notes` | id, health\_form\_id, image (blob, JPEG), content\_type, staff\_user\_id, created\_at | The note that makes a form with a "yes" answer count (decision 0033). Append-only; re-encoded on upload; opening one is manager-only and logged |
+| `health_forms` | id, customer\_id, form\_version, answers\_json, needs\_doctor\_note, signer\_name, signed\_by\_guardian, signed\_on, expires\_on, document (blob: PDF snapshot), created\_at | Never overwritten; the newest unexpired row counts, and one with `needs_doctor_note` counts only with a doctor's note (`doctor_notes`). The document is stored inside the database, not as a loose file, so it gets the same encryption and backups |
 
 **Rules the code and database enforce**
 
@@ -395,7 +402,7 @@ Build in six milestones, each usable and testable on its own; hand them to Claud
 
 1. **Foundation**: project layout, settings, SQLite schema and migrations, first manager account on first run, staff accounts with roles and server-side permission checks, the activity log, and the two app entry points (admin and public) sharing one core package. It ends with the frontend foundation: the React + TypeScript project with its admin and public builds, served by the two apps, with the first screens (setup, login) moved to React (decision 0020).
 2. **Customers, prices and plans**: customer create/edit/archive with date of birth, the price table with valid-from months, plan choices and corrections, and the monthly plan logic, with unit tests for every rule in Plans, prices and billing. Split into four features (decision 0022): Customers, Prices, Plan choices and monthly status, Plan corrections. Each ships its core logic, admin JSON routes and a plain, unstyled React page; freezes are dropped for now.
-3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, and manual check-in with plan selection and the health form on a gym device. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (the official form's questions, decision 0031), Phone check-in and plan page, Manual check-in and the form on a gym device.
+3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, and manual check-in with plan selection and the health form on the desk PC. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (the official form's questions, decision 0031), Phone check-in and plan page, Manual check-in, doctor's notes and the form on the desk PC (decision 0033).
 4. **Admin screens**: dashboard with live check-ins and expiring health forms, customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role, building on the plain pages from milestones 2 and 3. Style every screen, admin and customer (including the milestone 3 phone pages), using the `frontend-design` skill. Test every manager-only action as an instructor and confirm it's refused.
 5. **Report**: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan, age group and edge case.
 6. **Operations**: encrypted backups and restore, Windows services for both apps and `cloudflared`, the named Cloudflare tunnel on the gym domain, SMTP setup, a printable wall-QR page, and a setup guide for the gym PC. All deployment testing happens here, through the chosen host: proxy headers, https and the login cookie on real phones, and edge rate limiting (decisions 0029, 0030).

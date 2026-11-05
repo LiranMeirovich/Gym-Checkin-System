@@ -50,8 +50,14 @@ export function NewCustomer() {
         const { customer, reactivated } = data;
         queryClient.setQueryData(customerKey(customer.id), customer);
         void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
-        if (formOnPc) navigate(`/customers/${customer.id}/health-form`);
-        else navigate(`/customers/${customer.id}`, { state: { reactivated } });
+        // A returning customer goes to their page first, with the
+        // "reactivated" notice: their saved form may still be valid, and
+        // the page links to the form while it's missing.
+        if (formOnPc && !reactivated) {
+          navigate(`/customers/${customer.id}/health-form`);
+        } else {
+          navigate(`/customers/${customer.id}`, { state: { reactivated } });
+        }
         return;
       }
       setErrors({});
