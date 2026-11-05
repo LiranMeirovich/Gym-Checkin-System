@@ -27,6 +27,17 @@ export function planKey(id: number) {
   return ["customers", id, "plan"] as const;
 }
 
+// The customer's health form status (valid, needs a note, missing). Signing
+// a form or adding a doctor's note answers with the new one.
+export function healthFormKey(id: number) {
+  return ["customers", id, "health-form"] as const;
+}
+
+// The manager's list of the customer's signed forms and their notes.
+export function healthFormsKey(id: number) {
+  return ["customers", id, "health-forms"] as const;
+}
+
 // The customer's linked phones. An unlink answers with the new list, which
 // goes straight into the cache.
 export function phonesKey(id: number) {

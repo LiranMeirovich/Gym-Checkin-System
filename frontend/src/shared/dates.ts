@@ -1,4 +1,4 @@
-// Dates as the customer pages show them.
+// Dates as the customer pages and the shared health form show them.
 
 /** An ISO date from the API ("2026-11-04") as "04/11/2026". */
 export function formatDay(iso: string): string {

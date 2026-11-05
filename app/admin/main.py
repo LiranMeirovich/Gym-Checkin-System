@@ -8,6 +8,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.admin import security
 from app.admin.api import auth as api_auth
+from app.admin.api import checkins as api_checkins
 from app.admin.api import customers as api_customers
 from app.admin.api import health_forms as api_health_forms
 from app.admin.api import phones as api_phones
@@ -40,6 +41,7 @@ app.include_router(api_prices.router, prefix=API_PREFIX)
 app.include_router(api_plans.router, prefix=API_PREFIX)
 app.include_router(api_phones.router, prefix=API_PREFIX)
 app.include_router(api_health_forms.router, prefix=API_PREFIX)
+app.include_router(api_checkins.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

@@ -332,6 +332,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/{customer_id}/health-form/fill-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health Form To Fill In */
+        get: operations["health_form_to_fill_in_api_customers__customer_id__health_form_fill_in_get"];
+        put?: never;
+        /** Sign Health Form */
+        post: operations["sign_health_form_api_customers__customer_id__health_form_fill_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{customer_id}/health-form/doctor-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Doctor Note */
+        post: operations["add_doctor_note_api_customers__customer_id__health_form_doctor_note_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{customer_id}/doctor-notes/{note_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open Doctor Note */
+        post: operations["open_doctor_note_api_customers__customer_id__doctor_notes__note_id__open_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/{customer_id}/check-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check In */
+        post: operations["check_in_api_customers__customer_id__check_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -343,6 +412,77 @@ export interface components {
          * @enum {string}
          */
         AgeGroup: "adult" | "under_18";
+        /**
+         * CheckInForbidden
+         * @description 403: a plan was sent by staff who may not choose plans.
+         */
+        CheckInForbidden: {
+            /**
+             * Error
+             * @default plan_not_allowed
+             * @constant
+             */
+            error: "plan_not_allowed";
+        };
+        /**
+         * CheckInHealthFormRequired
+         * @description 409: no valid health form today (``missing``, or
+         *     ``needs_doctor_note``); nothing was recorded.
+         */
+        CheckInHealthFormRequired: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            error: "health_form_required";
+            health_form: components["schemas"]["HealthFormStatus"];
+        };
+        /**
+         * CheckInPlanRequired
+         * @description 409: no plan covers ``month`` and the manager didn't pick one;
+         *     nothing was recorded. Ask for one from ``options`` and send it.
+         */
+        CheckInPlanRequired: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            error: "plan_required";
+            /** Month */
+            month: string;
+            /** Options */
+            options: components["schemas"]["PlanOption"][];
+        };
+        /**
+         * CheckInRefusedOther
+         * @description 409. ``price_not_set``: the plan (or an instructor's single entry)
+         *     has no price for the customer's age group. ``customer_inactive``:
+         *     reactivate them first. Nothing was recorded.
+         */
+        CheckInRefusedOther: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            error: "price_not_set" | "customer_inactive";
+        };
+        /**
+         * CheckedIn
+         * @description ``checked_in``: a visit was recorded. ``already_checked_in``: the
+         *     customer checked in less than 10 minutes ago, by any method, and
+         *     ``checked_in_at`` (the gym's local time) is that visit; nothing new was
+         *     recorded. ``plan`` is null only for a repeat whose month has since
+         *     lost its plan.
+         */
+        CheckedIn: {
+            outcome: components["schemas"]["Outcome"];
+            /**
+             * Checked In At
+             * Format: date-time
+             */
+            checked_in_at: string;
+            plan: components["schemas"]["CoveringPlan"] | null;
+        };
         /**
          * ChosenBy
          * @description Who made a choice. The values are what the database stores.
@@ -377,6 +517,18 @@ export interface components {
              * @enum {string}
              */
             error: "not_correctable" | "price_not_set" | "no_change";
+        };
+        /**
+         * CoveringPlan
+         * @description The plan covering this month: one month, or three for tri-monthly
+         *     (``end_month`` is the last).
+         */
+        CoveringPlan: {
+            plan: components["schemas"]["Plan"];
+            /** Start Month */
+            start_month: string;
+            /** End Month */
+            end_month: string;
         };
         /**
          * CustomerAdded
@@ -490,6 +642,48 @@ export interface components {
             date_of_birth: string;
         };
         /**
+         * DoctorNoteConflict
+         * @description 409. ``no_note_needed``: the form that counts today isn't waiting
+         *     for a note (``state``: ``valid``, or ``missing`` when there is none).
+         *     ``customer_inactive``: reactivate them first. Nothing was saved.
+         */
+        DoctorNoteConflict: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "no_note_needed" | "customer_inactive";
+            state: components["schemas"]["FormState"] | null;
+        };
+        /**
+         * DoctorNoteRefused
+         * @description 400. ``invalid_image``: not a JPEG or PNG, too large or too small.
+         *     Nothing was saved.
+         */
+        DoctorNoteRefused: {
+            /**
+             * Error
+             * @default invalid_image
+             * @constant
+             */
+            error: "invalid_image";
+        };
+        /**
+         * DoctorNoteRequest
+         * @description The note as a data URL (``data:image/jpeg;base64,...`` or PNG), as
+         *     the browser reads a file.
+         */
+        DoctorNoteRequest: {
+            /** Image */
+            image: string;
+        };
+        /**
+         * FormField
+         * @description The fields a refused form can name.
+         * @enum {string}
+         */
+        FormField: "answers" | "details" | "gender" | "signer_name" | "confirmed" | "signature";
+        /**
          * FormState
          * @enum {string}
          */
@@ -500,12 +694,116 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * HealthFormConflict
+         * @description 409. ``form_version_changed``: the form changed while the page was
+         *     open; reload it and fill it in again. ``customer_inactive``:
+         *     reactivate them first. Nothing was saved.
+         */
+        HealthFormConflict: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "form_version_changed" | "customer_inactive";
+        };
+        /**
          * HealthFormList
          * @description Every form the customer has signed, newest first.
          */
         HealthFormList: {
             /** Forms */
             forms: components["schemas"]["HealthFormSummary"][];
+        };
+        /**
+         * HealthFormPage
+         * @description Everything the form shows, in order. The customer's details come
+         *     from their record and can't be changed here. ``guardian_consent`` is
+         *     set when a parent or guardian signs (the customer is under 18 today),
+         *     else null.
+         */
+        HealthFormPage: {
+            /** Version */
+            version: string;
+            /** Title */
+            title: string;
+            /** Customer Name */
+            customer_name: string;
+            /**
+             * Date Of Birth
+             * Format: date
+             */
+            date_of_birth: string;
+            /** Phone */
+            phone: string;
+            /** Wording Note */
+            wording_note: string;
+            /** Part A Title */
+            part_a_title: string;
+            /** Part A Notes */
+            part_a_notes: string[];
+            /** Questions Intro */
+            questions_intro: string;
+            /** Questions */
+            questions: components["schemas"]["HealthFormQuestion"][];
+            /** Part B Title */
+            part_b_title: string;
+            /** Declaration */
+            declaration: string[];
+            /** Guardian Title */
+            guardian_title: string;
+            /** Guardian Consent */
+            guardian_consent: string | null;
+            /**
+             * Valid Until If Signed
+             * Format: date
+             */
+            valid_until_if_signed: string;
+        };
+        /** HealthFormQuestion */
+        HealthFormQuestion: {
+            /** Key */
+            key: string;
+            /** Text */
+            text: string;
+            /** Has Details */
+            has_details: boolean;
+        };
+        /**
+         * HealthFormRefused
+         * @description 400: every field that breaks its rule, at once. Nothing was
+         *     saved.
+         */
+        HealthFormRefused: {
+            /** Errors */
+            errors: {
+                [key: string]: "invalid";
+            };
+        };
+        /**
+         * HealthFormRequest
+         * @description A filled-in form. ``signature`` is the signature pad's PNG as a
+         *     data URL (``data:image/png;base64,...``). The caps only keep junk out;
+         *     ``app.core.health_forms`` has the real rules.
+         */
+        HealthFormRequest: {
+            /** Version */
+            version: string;
+            /** Answers */
+            answers: {
+                [key: string]: boolean;
+            };
+            /** Details */
+            details?: {
+                [key: string]: string;
+            };
+            /** Gender */
+            gender: string;
+            /** Signer Name */
+            signer_name: string;
+            /** Confirmed */
+            confirmed: boolean;
+            /** Signature */
+            signature: string;
         };
         /**
          * HealthFormStatus
@@ -545,6 +843,8 @@ export interface components {
             signed_by_guardian: boolean;
             /** Needs Doctor Note */
             needs_doctor_note: boolean;
+            /** Doctor Note Ids */
+            doctor_note_ids: number[];
         };
         /**
          * LinkCodeIssued
@@ -616,6 +916,16 @@ export interface components {
             /** Pin */
             pin: string;
         };
+        /**
+         * ManualCheckInRequest
+         * @description ``plan``: the plan the manager picked, chosen first if no plan
+         *     covers this month (ignored if one does). Only staff with
+         *     ``plans.choose`` may send one; an instructor leaves it out and gets
+         *     single entry when the month has no plan (decision 0017).
+         */
+        ManualCheckInRequest: {
+            plan?: components["schemas"]["Plan"] | null;
+        };
         /** NewCustomer */
         NewCustomer: {
             /** First Name */
@@ -651,6 +961,11 @@ export interface components {
             /** Setup Needed */
             setup_needed: boolean;
         };
+        /**
+         * Outcome
+         * @enum {string}
+         */
+        Outcome: "checked_in" | "already_checked_in";
         /**
          * Plan
          * @description What a customer can choose for a month. The values are what the
@@ -2168,6 +2483,337 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_form_to_fill_in_api_customers__customer_id__health_form_fill_in_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormPage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sign_health_form_api_customers__customer_id__health_form_fill_in_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HealthFormRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormStatus"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_doctor_note_api_customers__customer_id__health_form_doctor_note_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DoctorNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormStatus"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorNoteRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorNoteConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_doctor_note_api_customers__customer_id__doctor_notes__note_id__open_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+                note_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_in_api_customers__customer_id__check_in_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualCheckInRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckedIn"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckInForbidden"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckInHealthFormRequired"] | components["schemas"]["CheckInPlanRequired"] | components["schemas"]["CheckInRefusedOther"];
+                };
             };
             /** @description Validation Error */
             422: {

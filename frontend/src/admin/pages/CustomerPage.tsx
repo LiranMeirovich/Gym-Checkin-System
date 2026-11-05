@@ -19,6 +19,7 @@ import {
   type CustomerField,
 } from "../customers";
 import { useSession } from "../session";
+import { CheckInButton } from "./CheckInDialog";
 import { CustomerHealthForm } from "./CustomerHealthForm";
 import { CustomerPhones } from "./CustomerPhones";
 import { CustomerPlan } from "./CustomerPlan";
@@ -151,6 +152,10 @@ function CustomerDetails({ customer }: { customer: Customer }) {
 
       {customer.active && !editing && (
         <p>
+          <CheckInButton
+            customerId={customer.id}
+            name={`${customer.first_name} ${customer.last_name}`}
+          />{" "}
           <button type="button" onClick={() => setEditing(true)}>
             עריכת פרטים
           </button>

@@ -6,9 +6,11 @@ import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import BaseModel, BeforeValidator, Field, StrictBool, StringConstraints
 
-from app.core.health_forms import FormState
+from app.core.checkins import Outcome
+from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
+from app.core.health_forms import FormField, FormState
 from app.core.http import Answer
 from app.core.models import AgeGroup, ChosenBy, Plan
 from app.core.permissions import Role
@@ -405,9 +407,182 @@ class HealthFormSummary(Answer):
     signer_name: str
     signed_by_guardian: bool
     needs_doctor_note: bool
+    # The doctor's notes added for this form, oldest first; each image is
+    # opened (and logged) on its own.
+    doctor_note_ids: list[int]
 
 
 class HealthFormList(Answer):
     """Every form the customer has signed, newest first."""
 
     forms: list[HealthFormSummary]
+
+
+# The form on the admin PC (the customer signs at the desk): the same
+# shapes as the public app's form, which this app must not import, so the
+# shared React form works with both.
+
+
+class HealthFormQuestion(Answer):
+    key: str
+    text: str
+    # The form has a free-text "details" line after this question.
+    has_details: bool
+
+
+class HealthFormPage(Answer):
+    """Everything the form shows, in order. The customer's details come
+    from their record and can't be changed here. ``guardian_consent`` is
+    set when a parent or guardian signs (the customer is under 18 today),
+    else null."""
+
+    version: str
+    title: str
+    customer_name: str
+    date_of_birth: date
+    phone: str
+    wording_note: str
+    part_a_title: str
+    part_a_notes: list[str]
+    questions_intro: str
+    questions: list[HealthFormQuestion]
+    part_b_title: str
+    declaration: list[str]
+    guardian_title: str
+    guardian_consent: str | None
+    # What the signed form's "valid until" will say if signed today.
+    valid_until_if_signed: date
+
+
+# Base64 grows bytes by 4/3, plus the "data:image/png;base64," prefix.
+SIGNATURE_DATA_URL_MAX_LENGTH = SIGNATURE_MAX_BYTES * 4 // 3 + 100
+
+
+class HealthFormRequest(BaseModel):
+    """A filled-in form. ``signature`` is the signature pad's PNG as a
+    data URL (``data:image/png;base64,...``). The caps only keep junk out;
+    ``app.core.health_forms`` has the real rules."""
+
+    version: str = Field(max_length=20)
+    # Strict: "true" or 1 is not an answer.
+    answers: dict[str, StrictBool] = Field(max_length=50)
+    details: dict[
+        Annotated[str, StringConstraints(max_length=50)],
+        Annotated[str, StringConstraints(max_length=1000)],
+    ] = Field(default_factory=dict, max_length=10)
+    gender: str = Field(max_length=20)
+    signer_name: str = Field(max_length=200)
+    confirmed: StrictBool
+    signature: str = Field(max_length=SIGNATURE_DATA_URL_MAX_LENGTH)
+
+
+class HealthFormRefused(Answer):
+    """400: every field that breaks its rule, at once. Nothing was
+    saved."""
+
+    errors: dict[FormField, Literal["invalid"]]
+
+
+class HealthFormConflict(Answer):
+    """409. ``form_version_changed``: the form changed while the page was
+    open; reload it and fill it in again. ``customer_inactive``:
+    reactivate them first. Nothing was saved."""
+
+    error: Literal["form_version_changed", "customer_inactive"]
+
+
+# A shrunk phone photo is far smaller; 12 MB of image is 16 MB of base64.
+DOCTOR_NOTE_MAX_CHARS = 16 * 1024 * 1024 + 100
+
+
+class DoctorNoteRequest(BaseModel):
+    """The note as a data URL (``data:image/jpeg;base64,...`` or PNG), as
+    the browser reads a file."""
+
+    image: str = Field(max_length=DOCTOR_NOTE_MAX_CHARS)
+
+
+class DoctorNoteRefused(Answer):
+    """400. ``invalid_image``: not a JPEG or PNG, too large or too small.
+    Nothing was saved."""
+
+    error: Literal["invalid_image"] = "invalid_image"
+
+
+class DoctorNoteConflict(Answer):
+    """409. ``no_note_needed``: the form that counts today isn't waiting
+    for a note (``state``: ``valid``, or ``missing`` when there is none).
+    ``customer_inactive``: reactivate them first. Nothing was saved."""
+
+    error: Literal["no_note_needed", "customer_inactive"]
+    state: FormState | None = None
+
+
+# ── Manual check-in ─────────────────────────────────────────────────────
+
+
+class ManualCheckInRequest(BaseModel):
+    """``plan``: the plan the manager picked, chosen first if no plan
+    covers this month (ignored if one does). Only staff with
+    ``plans.choose`` may send one; an instructor leaves it out and gets
+    single entry when the month has no plan (decision 0017)."""
+
+    plan: Plan | None = None
+
+
+class CoveringPlan(Answer):
+    """The plan covering this month: one month, or three for tri-monthly
+    (``end_month`` is the last)."""
+
+    plan: Plan
+    start_month: MonthText
+    end_month: MonthText
+
+
+class CheckedIn(Answer):
+    """``checked_in``: a visit was recorded. ``already_checked_in``: the
+    customer checked in less than 10 minutes ago, by any method, and
+    ``checked_in_at`` (the gym's local time) is that visit; nothing new was
+    recorded. ``plan`` is null only for a repeat whose month has since
+    lost its plan."""
+
+    outcome: Outcome
+    checked_in_at: datetime
+    plan: CoveringPlan | None
+
+
+class CheckInHealthFormRequired(Answer):
+    """409: no valid health form today (``missing``, or
+    ``needs_doctor_note``); nothing was recorded."""
+
+    error: Literal["health_form_required"] = "health_form_required"
+    health_form: HealthFormStatus
+
+
+class CheckInPlanRequired(Answer):
+    """409: no plan covers ``month`` and the manager didn't pick one;
+    nothing was recorded. Ask for one from ``options`` and send it."""
+
+    error: Literal["plan_required"] = "plan_required"
+    month: MonthText
+    options: list[PlanOption]
+
+
+class CheckInRefusedOther(Answer):
+    """409. ``price_not_set``: the plan (or an instructor's single entry)
+    has no price for the customer's age group. ``customer_inactive``:
+    reactivate them first. Nothing was recorded."""
+
+    error: Literal["price_not_set", "customer_inactive"]
+
+
+CheckInRefused = Annotated[
+    CheckInHealthFormRequired | CheckInPlanRequired | CheckInRefusedOther,
+    Field(discriminator="error"),
+]
+
+
+class CheckInForbidden(Answer):
+    """403: a plan was sent by staff who may not choose plans."""
+
+    error: Literal["plan_not_allowed"] = "plan_not_allowed"

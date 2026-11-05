@@ -86,7 +86,9 @@ export function useSession(): Session {
   return session;
 }
 
-export function RequireSession() {
+/** `bare`: no staff header, for a screen the customer uses at the desk
+ * (the health form on the PC). The auto-lock timer runs all the same. */
+export function RequireSession({ bare = false }: { bare?: boolean }) {
   const { data, isPending, isError } = useQuery({
     queryKey: SESSION_KEY,
     queryFn: fetchSession,
@@ -100,7 +102,7 @@ export function RequireSession() {
     return <Navigate to={data.setupNeeded ? "/setup" : "/login"} replace />;
   }
   return (
-    <LoggedIn session={data.session}>
+    <LoggedIn session={data.session} bare={bare}>
       <Outlet />
     </LoggedIn>
   );
@@ -108,9 +110,11 @@ export function RequireSession() {
 
 function LoggedIn({
   session,
+  bare,
   children,
 }: {
   session: Session;
+  bare: boolean;
   children: ReactNode;
 }) {
   const navigate = useNavigate();
@@ -154,14 +158,16 @@ function LoggedIn({
 
   return (
     <SessionContext.Provider value={session}>
-      <header>
-        <span>
-          {session.staff.display_name} · {ROLE_NAMES[session.staff.role]}
-        </span>{" "}
-        <button type="button" onClick={lock}>
-          נעילה
-        </button>
-      </header>
+      {bare ? null : (
+        <header>
+          <span>
+            {session.staff.display_name} · {ROLE_NAMES[session.staff.role]}
+          </span>{" "}
+          <button type="button" onClick={lock}>
+            נעילה
+          </button>
+        </header>
+      )}
       <main>{children}</main>
     </SessionContext.Provider>
   );

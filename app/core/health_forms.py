@@ -17,12 +17,12 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import StrEnum
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.core.activity_log import Action, Target, record
 from app.core.clock import to_local, utc_now
-from app.core.customers import CustomerInactiveError
+from app.core.customers import CustomerInactiveError, display_phone
 from app.core.gym_settings import load_gym_settings
 from app.core.health_form_pdf import (
     InvalidSignatureError,
@@ -31,7 +31,7 @@ from app.core.health_form_pdf import (
     is_printable,
     render_snapshot,
 )
-from app.core.models import Customer, HealthForm, StaffUser
+from app.core.models import Customer, DoctorNote, HealthForm, StaffUser
 from app.core.plans import ADULT_AGE
 
 # How long a form lasts, counted from the day it's signed. Each form keeps
@@ -305,20 +305,61 @@ def check_form(
     )
 
 
+@dataclass(frozen=True)
+class FormPage:
+    """Everything shown when ``customer`` fills in the current form on
+    ``today``: its wording (with the gym's name), their details from their
+    record, and the parent's consent when they're under 18 (else None)."""
+
+    form: FormText
+    customer_name: str
+    date_of_birth: date
+    # As shown, not as stored (``display_phone()``).
+    phone: str
+    part_a_notes: tuple[str, ...]
+    guardian_consent: str | None
+    # What the signed form's "valid until" will say if signed today.
+    valid_until_if_signed: date
+
+
+def form_page(db: Session, customer: Customer, today: date) -> FormPage:
+    """The current form for ``customer``, on the phone or at the desk."""
+    form = FORMS[CURRENT_VERSION]
+    name = f"{customer.first_name} {customer.last_name}"
+    return FormPage(
+        form=form,
+        customer_name=name,
+        date_of_birth=customer.date_of_birth,
+        phone=display_phone(customer.phone),
+        part_a_notes=form.notes(load_gym_settings(db).gym_name),
+        guardian_consent=(
+            form.consent(name) if signed_by_guardian(customer, today) else None
+        ),
+        valid_until_if_signed=expires_on(today),
+    )
+
+
 def local_today() -> date:
     """Today in Israel time: the day a form is signed or checked on."""
     return to_local(utc_now()).date()
 
 
 def save_form(
-    db: Session, customer: Customer, checked: CheckedForm, *, today: date
+    db: Session,
+    customer: Customer,
+    checked: CheckedForm,
+    *,
+    today: date,
+    by: StaffUser | None = None,
 ) -> HealthForm:
     """Sign and store a checked form for ``customer`` on ``today``, with
     its PDF snapshot. Works in the caller's transaction and never commits.
 
-    Not logged: the customer fills it in themselves, on their phone or on
-    a gym device (decision 0031). The PDF is built inside the transaction
-    (decision 0031: moved out only if it proves slow).
+    ``by``: the staff member who opened the form on the admin PC for the
+    customer to sign there; logged as ``health_form.fill_in`` (never the
+    answers). None on the customer's own phone, which isn't logged
+    (decision 0031). The PDF is built inside the transaction (decision
+    0031: moved out only if it proves slow).
     """
     if not customer.active:
         raise CustomerInactiveError("reactivate the customer first")
@@ -350,6 +391,15 @@ def save_form(
     )
     db.add(form)
     db.flush()
+    if by is not None:
+        record(
+            db,
+            by,
+            Action.HEALTH_FORM_FILL_IN,
+            Target.HEALTH_FORM,
+            form.id,
+            after={"customer_id": customer.id},
+        )
     return form
 
 
@@ -382,16 +432,33 @@ def open_form_document(db: Session, form: HealthForm, *, by: StaffUser) -> bytes
 def health_form_status(
     db: Session, customer: Customer, today: date
 ) -> HealthFormStatus:
-    """The customer's health form on ``today`` (an Israel-local date). The
-    newest form that hasn't expired counts, even if an older one has no
-    "yes": a newer "yes" means their health changed."""
-    form = db.scalars(
+    """The customer's health form on ``today`` (an Israel-local date): the
+    status of ``counting_form()``."""
+    return status_of(db, counting_form(db, customer, today))
+
+
+def counting_form(db: Session, customer: Customer, today: date) -> HealthForm | None:
+    """The form that counts for ``customer`` on ``today``: the newest one
+    that hasn't expired, even if an older one has no "yes" (a newer "yes"
+    means their health changed). ``None`` when there is none."""
+    return db.scalars(
         select(HealthForm)
         .where(HealthForm.customer_id == customer.id, HealthForm.expires_on >= today)
         .order_by(HealthForm.signed_on.desc(), HealthForm.id.desc())
         .limit(1)
     ).first()
+
+
+def status_of(db: Session, form: HealthForm | None) -> HealthFormStatus:
+    """The status of the form that counts (``None``: missing). A form with
+    a "yes" is valid once a doctor's note has been added for it."""
     if form is None:
         return HealthFormStatus(FormState.MISSING, None)
-    state = FormState.NEEDS_DOCTOR_NOTE if form.needs_doctor_note else FormState.VALID
-    return HealthFormStatus(state, form.expires_on)
+    if form.needs_doctor_note and not has_doctor_note(db, form):
+        return HealthFormStatus(FormState.NEEDS_DOCTOR_NOTE, form.expires_on)
+    return HealthFormStatus(FormState.VALID, form.expires_on)
+
+
+def has_doctor_note(db: Session, form: HealthForm) -> bool:
+    """Whether staff have added a doctor's note for ``form``."""
+    return bool(db.scalar(select(exists().where(DoctorNote.health_form_id == form.id))))

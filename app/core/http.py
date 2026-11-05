@@ -1,10 +1,13 @@
 """HTTP plumbing both apps share: the ``/api`` prefix, the base of every API
-answer, ``no-store`` on every API answer, and the same-origin check on
-every unsafe request.
+answer, ``no-store`` on every API answer, the same-origin check on every
+unsafe request, and reading an image sent as a data URL.
 
 Here rather than in ``app.admin`` so the public app, the one reachable
 from the internet, never imports admin code.
 """
+
+import base64
+import binascii
 
 from pydantic import BaseModel, ConfigDict
 from starlette.datastructures import MutableHeaders
@@ -16,6 +19,25 @@ API_PREFIX = "/api"
 
 # Methods that change something. GET and HEAD must never change anything.
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+# What a browser sends for an image: a canvas's ``toDataURL()`` or a
+# FileReader's ``readAsDataURL()``.
+PNG_DATA_URL = "data:image/png;base64,"
+JPEG_DATA_URL = "data:image/jpeg;base64,"
+
+
+def data_url_bytes(data_url: str, *prefixes: str) -> bytes:
+    """The bytes inside a base64 data URL starting with one of
+    ``prefixes``; empty when it isn't one, which the caller's image check
+    then refuses. The bytes' real format is checked by that caller."""
+    for prefix in prefixes:
+        if data_url.startswith(prefix):
+            try:
+                return base64.b64decode(data_url.removeprefix(prefix), validate=True)
+            except binascii.Error:
+                return b""
+    return b""
 
 
 class Answer(BaseModel):

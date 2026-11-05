@@ -42,7 +42,7 @@ const CORRECTION_REFUSALS: Record<string, string> = {
 // Refusals after which the page was out of date: show what's there now.
 const STALE = new Set(["month_covered", "choice_replaced"]);
 
-async function fetchPlan(id: number): Promise<PlanStatus> {
+export async function fetchPlan(id: number): Promise<PlanStatus> {
   const { data, response } = await api.GET(
     "/api/customers/{customer_id}/plan",
     {
@@ -110,7 +110,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
 }
 
 /** "שלושה חודשים, ₪650, עד 01/2027". */
-function describe(choice: PlanChoice): string {
+export function describe(choice: PlanChoice): string {
   if (choice.plan === null || choice.unit_price_agorot === null) {
     return "ללא מסלול";
   }
