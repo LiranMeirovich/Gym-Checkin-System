@@ -12,15 +12,12 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Refactor (planned, protected area: staff auth): move first-run setup's rules (`create_manager()` in `app/admin/api/setup.py`: PIN check, PIN match, gym-name check, save order) into `app/core` (e.g. a `first_run_setup()` returning field errors), so the route stays thin as CLAUDE.md requires. Carried over from the old Jinja route; behaviour must not change (the `test_admin_api_setup.py` tests pin it).
 
 ## Milestone 3: phone linking & check-in
-- Plan page: customers see their own prices. Decide whether they also see the whole price table (a new public route; the developer sees no reason to hide it).
-- Check-in: a price that isn't set must not stop a customer training; decide what an instructor's single-entry fallback records then (`choose_plan()` refuses with `PriceNotSetError`, decision 0025).
-- Plan page: the customer's own choice needs its own path in `app/core/plans.py` (`chosen_by = customer`, no staff member); `choose_plan()` is staff-only. `plan_options()` gives the page its prices.
-- Check-in: allowed only when `health_form_status(...).allows_check_in` (valid; `needs_doctor_note` and `missing` block), by phone and manually (decision 0004).
+- Check-in: a price that isn't set must not stop a customer training; decide what an instructor's single-entry fallback records then (`choose_plan()` refuses with `PriceNotSetError`, decision 0025). On the phone, a plan with no price can't be tapped, and with none priced the page sends the customer to the desk (decision 0032).
+- Manual check-in (feature 4): reuse `app/core/checkins.py` and its order (health form → 10-minute repeat → plan → record; decision 0032), with `method = manual` and `staff_user_id`. The `checkins` table already allows it, so no migration. The repeat window already counts check-ins by any method.
 - Feature 4, doctor's note: a form with a "yes" (`needs_doctor_note`) counts once staff add the doctor's note as an image (decision 0031). It needs its own append-only table (the form row can't change), an upload route and permission, and `health_form_status()` to accept a form with a note. The official text says the note must be at most 3 months old (confirm with the manager). Requests hold the write lock for their whole transaction (0027), so receive and check the image before the database work.
 - Feature 4, the form on a gym device: staff open the form for a customer without a linked phone (decision 0031). Reuse the `HealthForm` React page and `save_form()`; decide how the device is tied to the customer and that it doesn't stay logged in as them. The permission `health_forms.upload_paper` (`app/core/permissions.py`) predates decision 0031; rename it for the doctor's note or the gym-device form.
 - Check-in: an instructor's manual check-in with no plan for the month records single entry; only the manager picks or changes plans (decision 0017). The change-plan route decides whether a single-entry → monthly correction covers the visits already made.
 - The instructor's check-in screen shows only what check-in needs (name, health form valid or not, plan status), never date of birth, notes or activity-log entries (decision 0023).
-- Phone check-in: linking a phone should also check the customer in straight away (design doc "Check-in flow", step 3); the link page only says "linked" for now. A check-in counts as using the phone (`last_seen_at`) and refreshes the cookie's year.
 
 ## Milestone 4: admin screens (from Customers)
 - Customer list: search, and sorting / filtering by recent check-ins (e.g. who came in the past month), as queries.
@@ -32,6 +29,8 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Lock screen: style it, add the role-filtered menus in React. A polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
 - Customer page, Phones: the list doesn't refresh itself while a code is on screen, because every React request counts as activity for the auto-lock. Once background refreshes skip the idle timer (the server already allows a request that doesn't `touch`), poll the list and hide the code once a phone links. The device name is a rough guess from the user agent (iPhone / Android / iPad); iPadOS sends a Mac user agent, so iPads show as "other device".
 - Dashboard: show the instructor the customers whose form needs a doctor's note, and the forms expiring in the next 30 days (design doc "Validity and access").
+- The public build's `src/public/plans.ts` copies the admin build's plan names, `formatShekels()` and `formatMonth()` (`src/admin/prices.ts`), because the two builds never import each other. Give them one shared module (e.g. `src/shared/`) with the styling pass.
+- Dashboard: today's check-ins live, from `checkins` (the instructor's answer to fake check-ins, design doc "Fake check-ins").
 - The "אין חיבור לשרת" error markup is copied in six screens (setup, lock screen, the three customer pages); make it a shared component.
 
 ## Milestone 5: report (from Plan corrections)
@@ -46,6 +45,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Deployment checks (decision 0030), through the chosen host or tunnel: `X-Forwarded-Proto: https` reaches the public app so the same-origin check passes (otherwise compare against a configured public hostname, `app/core/http.py`); linking and the `Secure` `gym_device` cookie work on a real iPhone and Android phone and survive a reload; `CF-Connecting-IP` (or the host's equivalent) carries the client IP.
 - Rate limiting (decision 0029): the app has none and no wrong-code lockout. Before launch, add an edge (Cloudflare) rate-limit rule for `POST /api/link` by IP, and consider one for the whole public hostname. Until then, an unknown number is refused slightly faster than a known one with a wrong code (no code lookup), a timing hint of which numbers are customers'; the edge limit makes it impractical, or always run the lookup.
 - Request size: the public app has no body-size limit, and the health form's signature is up to ~400 KB. Add an edge limit for the public hostname (e.g. 1 MB), with the rate limits.
+- On real phones: the wall QR opening `/c` in the main browser and checking in at once, and the `gym_device` cookie's year being refreshed by a check-in (decision 0032).
 - On real phones: drawing the signature with a finger, the keyboard and toolbar not clearing it, and the PDF it produces.
 - Security headers: the design doc asks the public app for HTTPS-only and no-framing headers; add a content security policy for both React builds too.
 - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config.
@@ -60,7 +60,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Health form: 12 months from signing (the paper form says "valid for <year>"), the confirmation checkbox's wording, whether the doctor's note must be at most 3 months old, and that names on the form must be in Hebrew or Latin letters (decision 0031).
 
 ## Code review leftovers (low priority)
-- The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two and `plan_choices`' five (append-only, overlap, same customer, same months).
+- The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two, `plan_choices`' five (append-only, overlap, same customer, same months) and `checkins`' three (append-only, same customer's phone).
 - Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`, now including the customer and price tests), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
 - Setup validates the gym name twice.
 - Two migration heads give Alembic's raw error at startup instead of `DatabaseNotReadyError`.
