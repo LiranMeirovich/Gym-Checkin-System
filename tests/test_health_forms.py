@@ -32,7 +32,14 @@ from app.core.health_forms import (
     save_form,
     signed_by_guardian,
 )
-from app.core.models import ActivityLogEntry, Customer, HealthForm, StaffUser
+from app.core.models import (
+    ActivityLogEntry,
+    Customer,
+    DoctorNote,
+    HealthForm,
+    ImageType,
+    StaffUser,
+)
 from app.core.permissions import Role
 
 FORM = FORMS[CURRENT_VERSION]
@@ -348,6 +355,50 @@ def test_a_new_form_replaces_one_that_needed_a_note(
 
     assert status.state is FormState.VALID
     assert status.valid_until == date(2027, 5, 31)
+
+
+def add_note(db: Session, form: HealthForm) -> None:
+    staff = StaffUser(
+        display_name="Yoni",
+        role=Role.INSTRUCTOR,
+        pin_hash="$argon2id$v=19$m=65536,t=3,p=4$fake",
+    )
+    db.add(staff)
+    db.flush()
+    db.add(
+        DoctorNote(
+            health_form_id=form.id,
+            image=b"\xff\xd8\xff made up",
+            content_type=ImageType.JPEG,
+            staff_user_id=staff.id,
+        )
+    )
+    db.commit()
+
+
+def test_a_doctors_note_makes_a_form_with_a_yes_valid(
+    db: Session, customer: Customer
+) -> None:
+    form = add_form(db, customer, date(2026, 11, 4), yes=True)
+    add_note(db, form)
+
+    status = health_form_status(db, customer, date(2026, 11, 4))
+
+    assert status.state is FormState.VALID
+    assert status.valid_until == date(2027, 11, 3)
+    assert status.allows_check_in is True
+
+
+def test_a_note_on_an_older_form_doesnt_clear_a_newer_yes(
+    db: Session, customer: Customer
+) -> None:
+    older = add_form(db, customer, date(2026, 1, 10), yes=True)
+    add_note(db, older)
+    add_form(db, customer, date(2026, 6, 1), yes=True)
+
+    status = health_form_status(db, customer, date(2026, 7, 1))
+
+    assert status.state is FormState.NEEDS_DOCTOR_NOTE
 
 
 def test_another_customers_form_doesnt_count(db: Session, customer: Customer) -> None:

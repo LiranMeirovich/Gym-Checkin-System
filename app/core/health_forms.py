@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import StrEnum
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.core.activity_log import Action, Target, record
@@ -31,7 +31,7 @@ from app.core.health_form_pdf import (
     is_printable,
     render_snapshot,
 )
-from app.core.models import Customer, HealthForm, StaffUser
+from app.core.models import Customer, DoctorNote, HealthForm, StaffUser
 from app.core.plans import ADULT_AGE
 
 # How long a form lasts, counted from the day it's signed. Each form keeps
@@ -384,7 +384,8 @@ def health_form_status(
 ) -> HealthFormStatus:
     """The customer's health form on ``today`` (an Israel-local date). The
     newest form that hasn't expired counts, even if an older one has no
-    "yes": a newer "yes" means their health changed."""
+    "yes": a newer "yes" means their health changed. A form with a "yes"
+    is valid once a doctor's note has been added for it."""
     form = db.scalars(
         select(HealthForm)
         .where(HealthForm.customer_id == customer.id, HealthForm.expires_on >= today)
@@ -393,5 +394,11 @@ def health_form_status(
     ).first()
     if form is None:
         return HealthFormStatus(FormState.MISSING, None)
-    state = FormState.NEEDS_DOCTOR_NOTE if form.needs_doctor_note else FormState.VALID
-    return HealthFormStatus(state, form.expires_on)
+    if form.needs_doctor_note and not has_doctor_note(db, form):
+        return HealthFormStatus(FormState.NEEDS_DOCTOR_NOTE, form.expires_on)
+    return HealthFormStatus(FormState.VALID, form.expires_on)
+
+
+def has_doctor_note(db: Session, form: HealthForm) -> bool:
+    """Whether staff have added a doctor's note for ``form``."""
+    return bool(db.scalar(select(exists().where(DoctorNote.health_form_id == form.id))))
