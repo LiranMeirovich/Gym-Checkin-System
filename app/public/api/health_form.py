@@ -10,7 +10,7 @@ decisions 0004, 0031). Only a linked phone gets it; anything else is 401
   field; 409 means the form changed while the page was open.
 
 Filling in a form doesn't count as using the phone (``last_seen_at``); a
-check-in does (feature 3).
+check-in does (``POST /api/check-in``).
 """
 
 import base64

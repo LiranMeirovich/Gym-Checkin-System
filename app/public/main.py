@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from app.core.http import API_PREFIX, NoStoreMiddleware, SameOriginMiddleware
 from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
+from app.public.api import checkin as api_checkin
 from app.public.api import health_form as api_health_form
 from app.public.api import link as api_link
 
@@ -28,6 +29,7 @@ app.add_middleware(NoStoreMiddleware)
 app.add_middleware(SameOriginMiddleware)
 app.include_router(api_link.router, prefix=API_PREFIX)
 app.include_router(api_health_form.router, prefix=API_PREFIX)
+app.include_router(api_checkin.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

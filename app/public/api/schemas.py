@@ -1,14 +1,16 @@
 """Request and response shapes of the public API. The public React app's
 TypeScript types are generated from these (through the OpenAPI spec)."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StrictBool, StringConstraints
 
+from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
 from app.core.http import Answer
+from app.core.models import Plan
 
 # Base64 grows bytes by 4/3, plus the "data:image/png;base64," prefix.
 SIGNATURE_DATA_URL_MAX_LENGTH = SIGNATURE_MAX_BYTES * 4 // 3 + 100
@@ -116,3 +118,75 @@ class FormVersionChanged(Answer):
     and fill it in again."""
 
     detail: Literal["form_version_changed"] = "form_version_changed"
+
+
+# ── Check-in ────────────────────────────────────────────────────────────
+# Four digits from 1000 on, then 01-12 (as in the admin API's schemas,
+# which this app must not import).
+MonthText = Annotated[str, Field(pattern=r"^[1-9][0-9]{3}-(0[1-9]|1[0-2])$")]
+
+
+class CheckInRequest(BaseModel):
+    """``plan``: the plan the customer tapped on the plan page, chosen
+    first if no plan covers this month (ignored if one does). Leave it out
+    for a plain check-in."""
+
+    plan: Plan | None = None
+
+
+class CoveringPlan(Answer):
+    """The plan covering this month: one month, or three for tri-monthly
+    (``end_month`` is the last)."""
+
+    plan: Plan
+    start_month: MonthText
+    end_month: MonthText
+
+
+class CheckedIn(Answer):
+    """``checked_in``: a visit was recorded. ``already_checked_in``: the
+    customer checked in less than 10 minutes ago, and ``checked_in_at`` is
+    that visit; nothing new was recorded. ``plan`` is null only for a
+    repeat whose month has since lost its plan."""
+
+    outcome: Outcome
+    checked_in_at: datetime
+    plan: CoveringPlan | None
+
+
+class HealthFormRequired(Answer):
+    """409: no valid health form today; nothing was recorded. Show the
+    form (``missing``) or send the customer to the desk
+    (``needs_doctor_note``)."""
+
+    detail: Literal["health_form_required"] = "health_form_required"
+    health_form: HealthFormStatus
+
+
+class PlanOffer(Answer):
+    """One plan at this customer's price this month (adult or under 18).
+    ``price_agorot`` null: the price isn't set, so it can't be chosen."""
+
+    plan: Plan
+    price_agorot: int | None
+
+
+class PlanRequired(Answer):
+    """409: no plan covers ``month``; nothing was recorded. Show the plan
+    page and send the tapped plan with the next check-in."""
+
+    detail: Literal["plan_required"] = "plan_required"
+    month: MonthText
+    options: list[PlanOffer]
+
+
+class PriceNotSet(Answer):
+    """409: the chosen plan's price isn't set (it changed while the page
+    was open); nothing was recorded. Check in again for fresh options."""
+
+    detail: Literal["price_not_set"] = "price_not_set"
+
+
+CheckInRefused = Annotated[
+    HealthFormRequired | PlanRequired | PriceNotSet, Field(discriminator="detail")
+]
