@@ -17,10 +17,16 @@ earlier is already in a past month's report.
 The age group comes from the customer's age on the 1st of the month, so
 someone who turns 18 mid-month keeps the under-18 price until the next one.
 
+A customer chooses their own plan on their phone, for the current month
+(``choose_plan_by_customer``), under the same rules as staff; the row
+names no staff member.
+
 Every function works inside the caller's transaction and never commits.
-Each choice is written to the activity log in the same transaction, with
-``by``, the staff member making it, as the actor. Whether ``by`` may make
-it is the route's check (``require_permission``), not this module's.
+Each staff choice is written to the activity log in the same transaction,
+with ``by``, the staff member making it, as the actor; a customer's own
+choice is not logged (decision 0021: the log is for staff changes).
+Whether ``by`` may make it is the route's check (``require_permission``),
+not this module's.
 """
 
 from dataclasses import dataclass
@@ -196,6 +202,32 @@ def choose_plan(
     Raises ``CustomerInactiveError``, ``MonthNotChoosableError``,
     ``MonthCoveredError`` or ``PriceNotSetError``, checked in that order.
     """
+    choice = _new_choice(db, customer, plan, month, by=by)
+    record(
+        db, by, Action.PLAN_CHOOSE, Target.PLAN_CHOICE, choice.id, after=_logged(choice)
+    )
+    return choice
+
+
+def choose_plan_by_customer(db: Session, customer: Customer, plan: Plan) -> PlanChoice:
+    """``customer`` chooses ``plan`` themselves, on their phone, from the
+    current month (design doc: "The monthly choice"). The same rules as a
+    staff choice; the row names no staff member.
+
+    Not written to the activity log: the log is for staff changes, and the
+    customer acting for themselves is not one (as with linking a phone).
+
+    Raises ``CustomerInactiveError``, ``MonthCoveredError`` or
+    ``PriceNotSetError``, checked in that order.
+    """
+    return _new_choice(db, customer, plan, Month.current(), by=None)
+
+
+def _new_choice(
+    db: Session, customer: Customer, plan: Plan, month: Month, *, by: StaffUser | None
+) -> PlanChoice:
+    """Check and add a new choice of ``plan`` from ``month``: by staff
+    member ``by``, or by the customer when ``by`` is ``None``."""
     if not customer.active:
         raise CustomerInactiveError("reactivate the customer first")
     if month != Month.current():
@@ -215,14 +247,11 @@ def choose_plan(
         end_month=last,
         age_group=age_group,
         unit_price_agorot=price.amount_agorot,
-        chosen_by=ChosenBy.STAFF,
-        staff_user_id=by.id,
+        chosen_by=ChosenBy.STAFF if by is not None else ChosenBy.CUSTOMER,
+        staff_user_id=None if by is None else by.id,
     )
     db.add(choice)
     db.flush()
-    record(
-        db, by, Action.PLAN_CHOOSE, Target.PLAN_CHOICE, choice.id, after=_logged(choice)
-    )
     return choice
 
 
