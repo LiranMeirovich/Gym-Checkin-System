@@ -13,6 +13,7 @@ import {
   NoConnection,
   NO_CONNECTION_TRY_AGAIN,
 } from "../../shared/NoConnection";
+import styles from "./Phone.module.css";
 
 type Me = Schemas["Me"];
 
@@ -54,7 +55,7 @@ function Linked({ me }: { me: Me }) {
   if (form.state === "needs_doctor_note") {
     return (
       <>
-        <h1>שלום, {me.first_name}</h1>
+        <h1 className={styles.heading}>שלום, {me.first_name}</h1>
         <p role="alert">
           הצהרת הבריאות התקבלה. מכיוון שסימנת &quot;כן&quot; באחת השאלות, יש
           להביא לדלפק אישור רפואי מרופא לפני האימון.
@@ -111,15 +112,15 @@ function LinkForm() {
 
   return (
     <>
-      <h1>קישור הטלפון</h1>
-      <p>
+      <h1 className={styles.heading}>קישור הטלפון</h1>
+      <p className={styles.lead}>
         בפעם הראשונה צריך לקשר את הטלפון. בקשו קוד בדלפק והזינו אותו כאן עם מספר
         הטלפון שלכם.
       </p>
-      <form onSubmit={submit}>
+      <form onSubmit={submit} className={styles.panel}>
         {message && <p role="alert">{message}</p>}
-        <p>
-          <label htmlFor="phone">מספר טלפון</label>{" "}
+        <p className={styles.field}>
+          <label htmlFor="phone">מספר טלפון</label>
           <input
             id="phone"
             type="tel"
@@ -131,10 +132,11 @@ function LinkForm() {
             required
           />
         </p>
-        <p>
-          <label htmlFor="code">קוד מהדלפק</label>{" "}
+        <p className={styles.field}>
+          <label htmlFor="code">קוד מהדלפק</label>
           <input
             id="code"
+            className={styles.code}
             dir="ltr"
             inputMode="numeric"
             autoComplete="one-time-code"
@@ -144,11 +146,9 @@ function LinkForm() {
             required
           />
         </p>
-        <p>
-          <button type="submit" disabled={sending}>
-            קישור
-          </button>
-        </p>
+        <button type="submit" className={styles.wide} disabled={sending}>
+          קישור
+        </button>
       </form>
     </>
   );

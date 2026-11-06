@@ -17,6 +17,8 @@ import {
   type Plan,
 } from "../../shared/plans";
 import { formatTime, lastDayOf } from "../times";
+import { StatusBadge } from "../../shared/Status";
+import styles from "./Phone.module.css";
 
 type CheckedIn = Schemas["CheckedIn"];
 type PlanRequired = Schemas["PlanRequired"];
@@ -93,9 +95,13 @@ export function CheckInStep({
   if (checkIn.isError) {
     return (
       <>
-        <h1>שלום, {firstName}</h1>
+        <h1 className={styles.heading}>שלום, {firstName}</h1>
         <p role="alert">אין חיבור לשרת.</p>
-        <button type="button" onClick={() => checkIn.mutate(null)}>
+        <button
+          type="button"
+          className={styles.wide}
+          onClick={() => checkIn.mutate(null)}
+        >
           לנסות שוב
         </button>
       </>
@@ -103,7 +109,7 @@ export function CheckInStep({
   }
   const result = checkIn.data;
   if (checkIn.isPending || result === undefined) {
-    return <p>רושמים כניסה…</p>;
+    return <p className={styles.waiting}>רושמים כניסה…</p>;
   }
   if (result.kind === "checked_in") {
     return (
@@ -143,22 +149,37 @@ function CheckedInPage({
   const time = formatTime(answer.checked_in_at);
   return (
     <>
-      <h1>שלום, {firstName}</h1>
       {answer.outcome === "checked_in" ? (
-        <p role="status">
-          הכניסה נרשמה בשעה <bdi>{time}</bdi>. אימון טוב!
-        </p>
+        <div role="status" className={styles.bell}>
+          <h1 className={styles.bellGreeting}>שלום, {firstName}</h1>
+          <p className={styles.bellWord}>אימון טוב!</p>
+          <p className={styles.bellTime}>
+            הכניסה נרשמה בשעה <bdi>{time}</bdi>
+          </p>
+        </div>
       ) : (
-        <p role="status">
-          כבר נרשמת בשעה <bdi>{time}</bdi>. אין צורך להירשם שוב.
-        </p>
+        <div role="status" className={styles.bellRepeat}>
+          <h1 className={styles.bellGreeting}>שלום, {firstName}</h1>
+          <p className={styles.bellWord}>כבר נרשמת</p>
+          <p className={styles.bellTime}>
+            בשעה <bdi>{time}</bdi>. אין צורך להירשם שוב.
+          </p>
+        </div>
       )}
-      {answer.plan && <p>{planLine(answer.plan)}</p>}
-      {formValidUntil && (
-        <p>
-          הצהרת הבריאות בתוקף עד <bdi>{formatDay(formValidUntil)}</bdi>.
-        </p>
-      )}
+      <ul className={styles.facts}>
+        {answer.plan && (
+          <li>
+            <StatusBadge tone="ok">מסלול</StatusBadge>
+            {planLine(answer.plan)}
+          </li>
+        )}
+        {formValidUntil && (
+          <li>
+            <StatusBadge tone="ok">הצהרת בריאות</StatusBadge>
+            בתוקף עד <bdi>{formatDay(formValidUntil)}</bdi>
+          </li>
+        )}
+      </ul>
     </>
   );
 }
@@ -190,8 +211,8 @@ function PlanPage({
   const anyPrice = answer.options.some((o) => o.price_agorot !== null);
   return (
     <>
-      <h1>שלום, {firstName}</h1>
-      <h2>בחירת מסלול ל־{month}</h2>
+      <p className={styles.lead}>שלום, {firstName}</p>
+      <h1 className={styles.heading}>בחירת מסלול ל־{month}</h1>
       {priceGone && <p role="alert">המחיר של המסלול שנבחר השתנה. בחרו שוב.</p>}
       {anyPrice ? (
         <p>
@@ -203,19 +224,22 @@ function PlanPage({
           אי אפשר לבחור מסלול כרגע. פנו לצוות בדלפק, והם ירשמו את הכניסה.
         </p>
       )}
-      <ul>
+      <ul className={styles.plans}>
         {answer.options.map((option) => (
           <li key={option.plan}>
             <button
               type="button"
+              className={styles.plan}
               disabled={option.price_agorot === null}
               onClick={() => onChoose(option.plan)}
             >
-              {PLAN_NAMES[option.plan]}
-            </button>{" "}
-            {option.price_agorot === null
-              ? "(המחיר עדיין לא נקבע)"
-              : priceText(option.plan, option.price_agorot, answer.month)}
+              <span className={styles.planName}>{PLAN_NAMES[option.plan]}</span>
+              <span className={styles.planPrice}>
+                {option.price_agorot === null
+                  ? "המחיר עדיין לא נקבע"
+                  : priceText(option.plan, option.price_agorot, answer.month)}
+              </span>
+            </button>
           </li>
         ))}
       </ul>
