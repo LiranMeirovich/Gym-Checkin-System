@@ -82,7 +82,9 @@ function CheckInDialog({
         רישום כניסה
         <span className={styles.who}>{name}</span>
       </h2>
-      <CheckInBody customerId={customerId} close={close} />
+      <div className={styles.body}>
+        <CheckInBody customerId={customerId} close={close} />
+      </div>
       <div className={styles.footer}>
         <button type="button" onClick={close}>
           סגירה

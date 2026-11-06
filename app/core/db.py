@@ -102,3 +102,30 @@ def get_db() -> Iterator[Session]:
 # after the client already got its response: it could see "saved" for a
 # change that then fails to commit, or reload a page before the change lands.
 DbSession = Annotated[Session, Depends(get_db, scope="function")]
+
+
+def get_read_only_db() -> Iterator[Session]:
+    """A session for a route that only reads and needs no login: a plain
+    ``BEGIN``, so it never takes the write lock and never waits behind a
+    write (WAL lets it read the last committed state). Always rolled back.
+
+    SQLite's ``query_only`` is on for the session's connection, so any
+    write (ORM or raw SQL) fails at once with "attempt to write a readonly
+    database" (a 500) instead of being lost in the rollback. A route that
+    touches a staff or device session writes, so it can't use this. Routes
+    don't use this directly; they declare a ``ReadOnlyDbSession`` parameter.
+    """
+    # No IMMEDIATE option on this engine: its transaction is a plain BEGIN.
+    with Session(get_engine()) as session:
+        session.connection().exec_driver_sql("PRAGMA query_only=ON")
+        try:
+            yield session
+        finally:
+            session.rollback()
+            # Connections are pooled: hand this one back writable.
+            session.connection().exec_driver_sql("PRAGMA query_only=OFF")
+
+
+# For the few routes that only read the gym's public facts on every page
+# load (``GET /api/branding``), so a page load doesn't queue behind a save.
+ReadOnlyDbSession = Annotated[Session, Depends(get_read_only_db, scope="function")]

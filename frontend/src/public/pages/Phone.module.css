@@ -29,14 +29,14 @@
 /* The code from the desk: six digits, spaced to read back at a glance. */
 .code {
   letter-spacing: 0.3em;
-  font-size: var(--text-l) !important;
+  font-size: var(--text-l);
   font-weight: 700;
   text-align: center;
 }
 
 .wide {
   width: 100%;
-  min-height: 3.25rem !important;
+  min-height: 3.25rem;
   font-size: var(--text-l);
 }
 
@@ -83,7 +83,9 @@
 .bellRepeat {
   composes: bell;
   color: var(--navy-deep);
-  /* Quieter than a new check-in, but the handle still shows. */
+  /* Quieter than a new check-in, but the handle still shows. The first
+     line is for browsers without color-mix() (Safari before 16.2). */
+  background: var(--line);
   background: color-mix(in srgb, var(--steel) 32%, var(--paper));
   animation: none;
 }
@@ -152,7 +154,7 @@
 
 .plan {
   width: 100%;
-  min-height: 5rem !important;
+  min-height: 5rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;

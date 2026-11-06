@@ -1,11 +1,10 @@
-// The gym's name and whether there is a logo (GET /api/branding), for the
-// header, the lock screen and setup. Fetched once per page load.
-import { useQuery } from "@tanstack/react-query";
+// The admin app's call for the gym's name and logo, for the header, the
+// lock screen and setup (the hook itself is src/shared/useBranding.ts).
 import type { Branding } from "../shared/Brand";
+import { useBranding as useSharedBranding } from "../shared/useBranding";
 import { api } from "./backend/client";
 
-// First-run setup saves the gym name, so it refreshes this.
-export const BRANDING_KEY = ["branding"] as const;
+export { BRANDING_KEY } from "../shared/useBranding";
 
 async function fetchBranding(): Promise<Branding> {
   const { data, response } = await api.GET("/api/branding");
@@ -13,12 +12,6 @@ async function fetchBranding(): Promise<Branding> {
   return data;
 }
 
-/** Undefined while loading or if it failed: the brand then stays empty,
- * and the screen's own request shows any connection error. */
 export function useBranding(): Branding | undefined {
-  return useQuery({
-    queryKey: BRANDING_KEY,
-    queryFn: fetchBranding,
-    staleTime: Infinity,
-  }).data;
+  return useSharedBranding(fetchBranding);
 }

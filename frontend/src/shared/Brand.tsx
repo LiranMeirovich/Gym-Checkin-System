@@ -20,12 +20,17 @@ export function Brand({
   if (!branding) return <span className={styles[size]} aria-hidden="true" />;
   const name = branding.gym_name ?? "";
   if (branding.has_logo) {
+    // The name is read once: from the text beside the logo when it's
+    // there, otherwise from the logo (a generic name before setup).
+    const nameBeside = size === "header" && name !== "";
     return (
       <span className={`${styles.brand} ${styles[size]}`}>
-        <img className={styles.logo} src={LOGO_ADDRESS} alt={name} />
-        {size === "header" && name && (
-          <span className={styles.name}>{name}</span>
-        )}
+        <img
+          className={styles.logo}
+          src={LOGO_ADDRESS}
+          alt={nameBeside ? "" : name || "הלוגו של המכון"}
+        />
+        {nameBeside && <span className={styles.name}>{name}</span>}
       </span>
     );
   }

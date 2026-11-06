@@ -37,6 +37,7 @@ from app.core.gym_settings import update_gym_settings
 from app.core.health_forms import (
     CURRENT_VERSION,
     FORMS,
+    Gender,
     check_form,
     local_today,
     save_form,
@@ -52,6 +53,9 @@ from app.core.startup import check_database_is_current
 GYM_NAME = "מכון הדוגמה"
 MANAGER = ("נועה", "246810")
 INSTRUCTOR = ("איתי", "135790")
+
+# The form's gender question, given for each demo customer.
+FEMALE, MALE = Gender.FEMALE, Gender.MALE
 
 # The design doc's sample prices, in agorot.
 PRICES = {
@@ -93,6 +97,7 @@ def _doctor_note() -> bytes:
 def _sign_form(
     db: Session,
     customer: Customer,
+    gender: Gender,
     *,
     yes: tuple[str, ...] = (),
     signer: str | None = None,
@@ -104,7 +109,7 @@ def _sign_form(
         version=CURRENT_VERSION,
         answers={q.key: q.key in yes for q in form.questions},
         details={},
-        gender="female" if customer.first_name.endswith("ה") else "male",
+        gender=gender,
         signer_name=signer or f"{customer.first_name} {customer.last_name}",
         confirmed=True,
         signature_png=_signature(),
@@ -145,40 +150,40 @@ def fill(db: Session) -> None:
         return _customer(db, first, last, phone, born, manager)
 
     # Valid form, a plan, in today.
-    for first, last, phone, born, plan in [
-        ("דנה", "לוי", "050-555-0101", date(1990, 4, 12), Plan.MONTHLY),
-        ("יוסי", "כהן", "050-555-0102", date(1985, 9, 3), Plan.TRI_MONTHLY),
-        ("עדי", "פרידמן", "050-555-0103", date(1996, 1, 22), Plan.MONTHLY),
+    for first, last, phone, born, gender, plan in [
+        ("דנה", "לוי", "050-555-0101", date(1990, 4, 12), FEMALE, Plan.MONTHLY),
+        ("יוסי", "כהן", "050-555-0102", date(1985, 9, 3), MALE, Plan.TRI_MONTHLY),
+        ("עדי", "פרידמן", "050-555-0103", date(1996, 1, 22), FEMALE, Plan.MONTHLY),
     ]:
         customer = add(first, last, phone, born)
-        _sign_form(db, customer)
+        _sign_form(db, customer, gender)
         choose_plan(db, customer, plan, month, by=manager)
         check_in_manually(db, customer, by=instructor)
 
     # Valid form, checked in by an instructor with no plan: single entry.
     maya = add("מאיה", "פרץ", "050-555-0104", date(2001, 6, 30))
-    _sign_form(db, maya)
+    _sign_form(db, maya, FEMALE)
     check_in_manually(db, maya, by=instructor)
 
     # Under 18: the form is signed by a parent, the under-18 price.
     eitan = add("איתן", "גולן", "050-555-0105", date(2011, 2, 14))
-    _sign_form(db, eitan, signer="אבי גולן")
+    _sign_form(db, eitan, MALE, signer="אבי גולן")
     choose_plan(db, eitan, Plan.MONTHLY, month, by=manager)
 
     # Valid form, no plan yet: the phone's plan page.
-    for first, last, phone, born in [
-        ("אורי", "מזרחי", "050-555-0106", date(1993, 11, 8)),
-        ("ליאור", "שפירא", "050-555-0107", date(1988, 3, 17)),
+    for first, last, phone, born, gender in [
+        ("אורי", "מזרחי", "050-555-0106", date(1993, 11, 8), MALE),
+        ("ליאור", "שפירא", "050-555-0107", date(1988, 3, 17), FEMALE),
     ]:
-        _sign_form(db, add(first, last, phone, born))
+        _sign_form(db, add(first, last, phone, born), gender)
 
     # "Yes" to a question: waiting for a doctor's note.
     noam = add("נועם", "ביטון", "050-555-0108", date(1979, 7, 5))
-    _sign_form(db, noam, yes=(first_question,))
+    _sign_form(db, noam, MALE, yes=(first_question,))
 
     # "Yes", and the doctor's note is in: the form counts.
     shira = add("שירה", "אברהם", "050-555-0109", date(1982, 12, 1))
-    _sign_form(db, shira, yes=(first_question,))
+    _sign_form(db, shira, FEMALE, yes=(first_question,))
     add_doctor_note(
         db, shira, check_note_image(_doctor_note()), by=manager, today=local_today()
     )

@@ -331,6 +331,8 @@ The only thing reachable from outside is the public app's check-in pages; everyt
 
 Five views cover the whole system: the customer's phone pages, the admin dashboard, the customer page, the prices screen, and the report preview. Names and numbers below are sample data.
 
+The built screens share one look (decision 0034): the gym's logo (kept outside the repo, in each install's `branding/` folder, served at `/branding/logo`; the gym's name from settings stands in when it's missing, via `GET /api/branding`), colours taken from it as theme tokens, the Heebo font, Hebrew right-to-left, and mobile-first phone pages. The demos below show content and layout, not the final look.
+
 ### Customer: phone pages
 
 &#91;embedded content: customer phone pages · link, choose a plan, status, sample prices\]

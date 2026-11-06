@@ -11,19 +11,9 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Add branch protection on `main` requiring the "Lint and test", "Frontend checks" and "Scan for secrets" checks (each can be selected once it has run on a PR). Remove this line once it's set up.
 - Refactor (planned, protected area: staff auth): move first-run setup's rules (`create_manager()` in `app/admin/api/setup.py`: PIN check, PIN match, gym-name check, save order) into `app/core` (e.g. a `first_run_setup()` returning field errors), so the route stays thin as CLAUDE.md requires. Carried over from the old Jinja route; behaviour must not change (the `test_admin_api_setup.py` tests pin it).
 
-## Next feature: styling pass (decision 0034, pulled forward from milestone 4)
-- Design the look once with the `frontend-design` skill (shared layout and navigation, styling approach, Hebrew font, colours, shared components) and apply it to every existing screen, admin and public. Hebrew RTL; customer pages mobile-first. No new screens, backend, API or schema changes, and no change to the phone flows.
-- Base the design on the gym's logo, `branding/logo.jpg` (git-ignored, never committed or copied into `frontend/`, decision 0034): a blue textured kettlebell over a Hebrew wordmark. Colours as theme tokens in one place: navy about `#1F4F73`, steel blue about `#437AA2`, on white and light grey. Serve the logo from both apps at one fixed address, with the gym's name from settings as the fallback when the file is missing (tests cover both). Decide in the plan how the path is configured (a fixed folder next to the app or a `GYM_*` setting).
-- The public build's `src/public/plans.ts` copies the admin build's plan names, `formatShekels()` and `formatMonth()` (`src/admin/prices.ts`), because the two builds never import each other. Give them one shared module in `src/shared/`.
-- The "אין חיבור לשרת" error markup is copied in six screens (setup, lock screen, the three customer pages); make it a shared component.
-- The Prices page hides its form with `isManager()` from `customers.ts`, a role check in a customer module. Give the screens one helper for role checks (the role-filtered menus themselves stay in milestone 4).
-- Style the lock screen.
-- Decide in the plan whether the demo needs made-up sample data, and how to create it (never real customer data).
-- Check every page in the browser on `127.0.0.1`, the customer pages at phone size (decision 0030).
-
 ## Milestone 3: phone linking & check-in
 - Doctor's notes: the official text says a note must be at most 3 months old. Not enforced (the developer's call, for now); confirm with the manager. A note added by mistake can't be removed (append-only); a "withdrawn" row would be new.
-- **After the styling pass: self sign-up on the phone** (the developer's call, split from feature 4). An unlinked phone at `/c` offers "New here? Sign up" next to linking with a desk code: name, phone and date of birth (the `add_customer()` rules), then the customer, a device session and the `gym_device` cookie are created in one transaction, then the health form, plan page and check-in. A phone number that is already a customer (active or not) is refused with "go to the desk", or anyone could take over a customer. Needs a `customers.self_registered` column (migration) so the milestone 4 dashboard can list new sign-ups; not logged (no staff). Accepted risks: anyone with a photo of the QR can sign up, and the phone number isn't verified. Protected area (customer login and linking): needs a decision record and design doc updates (who adds customers, the linking flow, decision 0029).
+- **Next feature: self sign-up on the phone** (the developer's call, split from feature 4; its screens use the shared look, CLAUDE.md "Styling"). An unlinked phone at `/c` offers "New here? Sign up" next to linking with a desk code: name, phone and date of birth (the `add_customer()` rules), then the customer, a device session and the `gym_device` cookie are created in one transaction, then the health form, plan page and check-in. A phone number that is already a customer (active or not) is refused with "go to the desk", or anyone could take over a customer. Needs a `customers.self_registered` column (migration) so the milestone 4 dashboard can list new sign-ups; not logged (no staff). Accepted risks: anyone with a photo of the QR can sign up, and the phone number isn't verified. Protected area (customer login and linking): needs a decision record and design doc updates (who adds customers, the linking flow, decision 0029).
 - Health form renewal for customers without a phone (an expired form blocks their manual check-in): left for later by the developer. The PC form screen from feature 4 can serve it.
 - **The customer at the desk PC uses a logged-in staff session** (code review of feature 4, decision 0033). (1) The form screen hides the staff header, but its cancel link, the browser's Back button and the redirect after signing all lead into the admin app, so a customer left alone can browse other customers. (2) The auto-lock counts only API requests, and filling in the form sends none, so a manager's 5-minute lock can wipe a slow customer's form. One fix for both: a "customer mode" for the form screen that keeps the session alive while it's open and asks for the staff PIN to leave. Protected area (staff auth): the developer decides, before production.
 
@@ -31,13 +21,14 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Customer list: search, and sorting / filtering by recent check-ins (e.g. who came in the past month), as queries.
 
 ## Milestone 4: admin screens
-- Role-filtered menus in React, using the role helper from the styling pass.
+- Role-filtered menus in React, using `isManager()` in `frontend/src/admin/roles.ts` (add more helpers there), in `AppHeader`'s `SCREENS` list.
 - Settings screen: load with `load_gym_settings_for_editing()`, convert form fields to their types before `update_gym_settings()`, and require a manager-only permission on the server. Email addresses are ASCII-only for now (decision 0016).
 - Activity log screen (`activity_log.view`) must cope with older before/after shapes.
 - Lock screen: a polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
 - Customer page, Phones: the list doesn't refresh itself while a code is on screen, because every React request counts as activity for the auto-lock. Once background refreshes skip the idle timer (the server already allows a request that doesn't `touch`), poll the list and hide the code once a phone links. The device name is a rough guess from the user agent (iPhone / Android / iPad); iPadOS sends a Mac user agent, so iPads show as "other device".
 - Dashboard: show the instructor the customers whose form needs a doctor's note, and the forms expiring in the next 30 days (design doc "Validity and access").
 - Dashboard: today's check-ins live, from `checkins` (the instructor's answer to fake check-ins, design doc "Fake check-ins").
+- Styling pass leftovers (decision 0034): the phone's "needs a doctor's note" message was styled only by `base.css` and not checked in the browser; the health form's yes/no answers hide their radio buttons visually (the labels are the controls), so check them with a real screen reader (NVDA on the desk PC, VoiceOver on a phone).
 
 ## Milestone 5: report (from Plan corrections)
 - The report reads plan choices with the same rule as `_first_active()` in `app/core/plans.py`: active means no row replaces it, and a "no plan" row (`plan IS NULL`) covers nothing (decision 0026).
@@ -53,7 +44,9 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Request size: the public app has no body-size limit, and the health form's signature is up to ~400 KB. Add an edge limit for the public hostname (e.g. 1 MB), with the rate limits.
 - On real phones: the wall QR opening `/c` in the main browser and checking in at once, and the `gym_device` cookie's year being refreshed by a check-in (decision 0032).
 - On real phones: drawing the signature with a finger, the keyboard and toolbar not clearing it, and the PDF it produces.
-- Security headers: the design doc asks the public app for HTTPS-only and no-framing headers; add a content security policy for both React builds too.
+- Security headers: the design doc asks the public app for HTTPS-only and no-framing headers; add a content security policy for both React builds too. The logo (`/branding/logo`) and the bundled Heebo font are same-origin, so `img-src`/`font-src 'self'` covers them.
+- On real phones (styling pass): the check-in result's entrance animation and kettlebell shape, the repeat result's `color-mix()` colour (with its plain fallback on Safari before 16.2), and the 16px inputs not zooming on iOS.
+- Page weight: both builds bundle the whole Heebo TTF (122 KB). If the phone's first load is slow on mobile data, ship a Hebrew + Latin WOFF2 subset instead.
 - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config.
 - Dependabot for the SHA-pinned GitHub Actions.
 - Staff sessions (decision 0019): if the admin app moves behind HTTPS on a real hostname, change `ALLOWED_HOSTS` in `app/admin/main.py` and add `Secure` to the `gym_staff` cookie. Prod needs `GYM_SECRET_KEY` (both apps and `alembic`).
@@ -79,4 +72,6 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - The Plan section's history loads each staff name lazily (`PlanChoice.staff`); `selectinload` would make it one query.
 - `age_group_for()` (`app/core/plans.py`), `_years_before()` (`app/core/customers.py`) and `signed_by_guardian()` (`app/core/health_forms.py`) all do birthday date maths; share one helper.
 - Customer names entered by staff may use letters Heebo lacks (Cyrillic, Arabic), which print blank in the health form PDF. The form itself refuses such a signer name; decide whether customer names get the same rule.
-- `frontend/` has no test runner, so `shekelsToAgorot()` was only checked by hand. Test it if one is added.
+- `frontend/` has no test runner, so `shekelsToAgorot()` was only checked by hand, and the styling pass was checked only in the browser. Test them if one is added.
+- `app/demo_data.py` holds the demo staff PINs in code (public repo). They only open a throwaway dev database, and the script refuses prod and any database with data; generate them instead if that ever matters.
+- `ReadOnlyDbSession` (`app/core/db.py`) is used only by `/api/branding`. If more login-free, read-only routes appear, they can use it too; a route that touches a staff or device session writes and can't.

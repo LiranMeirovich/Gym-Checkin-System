@@ -3,8 +3,9 @@
   overflow: hidden;
 }
 
-.dialog > * {
-  margin-inline: var(--space-5);
+/* Between the title and the footer, which run edge to edge. */
+.body {
+  padding-inline: var(--space-5);
 }
 
 .title {
@@ -13,7 +14,6 @@
   gap: var(--space-1);
   margin: 0 0 var(--space-4);
   padding: var(--space-5) var(--space-5) var(--space-4);
-  margin-inline: 0;
   background: var(--mist);
   border-block-end: 1px solid var(--line);
   font-size: var(--text-s);
@@ -33,8 +33,7 @@
 }
 
 .confirm {
-  /* Full width inside the dialog's side margins (.dialog > *). */
-  width: calc(100% - 2 * var(--space-5));
+  width: 100%;
   min-height: 3.25rem;
   font-size: var(--text-l);
 }
@@ -56,7 +55,6 @@
   display: flex;
   justify-content: flex-end;
   margin-block: var(--space-4) 0;
-  margin-inline: 0;
   padding: var(--space-3) var(--space-5);
   border-block-start: 1px solid var(--line);
 }

@@ -1,7 +1,7 @@
-// The gym's name and whether there is a logo (GET /api/branding), for the
-// top of every phone page. Fetched once per page load.
-import { useQuery } from "@tanstack/react-query";
+// The customer app's call for the gym's name and logo, for the top of
+// every phone page (the hook itself is src/shared/useBranding.ts).
 import type { Branding } from "../shared/Brand";
+import { useBranding as useSharedBranding } from "../shared/useBranding";
 import { api } from "./backend/client";
 
 async function fetchBranding(): Promise<Branding> {
@@ -10,12 +10,6 @@ async function fetchBranding(): Promise<Branding> {
   return data;
 }
 
-/** Undefined while loading or if it failed: the brand then stays empty,
- * and the page's own request shows any connection error. */
 export function useBranding(): Branding | undefined {
-  return useQuery({
-    queryKey: ["branding"],
-    queryFn: fetchBranding,
-    staleTime: Infinity,
-  }).data;
+  return useSharedBranding(fetchBranding);
 }

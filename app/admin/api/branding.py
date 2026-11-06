@@ -10,12 +10,12 @@ from fastapi import APIRouter, Request
 
 from app.admin.api.schemas import Branding
 from app.core.branding import load_branding
-from app.core.db import DbSession
+from app.core.db import ReadOnlyDbSession
 
 router = APIRouter()
 
 
 @router.get("/branding")
-def branding(request: Request, db: DbSession) -> Branding:
+def branding(request: Request, db: ReadOnlyDbSession) -> Branding:
     found = load_branding(db, request.app.state.branding_dir)
     return Branding(gym_name=found.gym_name, has_logo=found.has_logo)
