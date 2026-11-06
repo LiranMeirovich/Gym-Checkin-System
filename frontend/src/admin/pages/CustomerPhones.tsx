@@ -13,6 +13,8 @@ import {
   NoConnection,
   NO_CONNECTION_TRY_AGAIN,
 } from "../../shared/NoConnection";
+import ui from "../layout/ui.module.css";
+import styles from "./CustomerPhones.module.css";
 
 type LinkedPhone = Schemas["LinkedPhone"];
 type IssuedCode = Schemas["LinkCodeIssued"];
@@ -81,26 +83,32 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
   }
 
   return (
-    <section>
+    <section className={ui.panel}>
       <h2>טלפונים מקושרים</h2>
       {message && <p role="alert">{message}</p>}
 
       {customer.active && (
         <>
           {issued && (
-            <p role="status">
-              קוד קישור:{" "}
-              <strong dir="ltr" style={{ fontSize: "2em" }}>
+            <div role="status" className={styles.code}>
+              <span className={styles.codeLabel}>קוד קישור</span>
+              <strong className={styles.codeDigits} dir="ltr">
                 {issued.code}
               </strong>
-              <br />
-              הלקוח מזין בטלפון את מספר הטלפון שלו ואת הקוד. הקוד תקף עד{" "}
-              {formatTime(issued.expires_at)}, לשימוש אחד. קוד חדש מבטל את
-              הקודם.
-            </p>
+              <span className={styles.codeHelp}>
+                הלקוח מזין בטלפון את מספר הטלפון שלו ואת הקוד. הקוד תקף עד{" "}
+                {formatTime(issued.expires_at)}, לשימוש אחד. קוד חדש מבטל את
+                הקודם.
+              </span>
+            </div>
           )}
           <p>
-            <button type="button" onClick={issue} disabled={sending}>
+            <button
+              type="button"
+              className={issued ? undefined : ui.primary}
+              onClick={issue}
+              disabled={sending}
+            >
               {issued ? "קוד חדש" : "קישור טלפון"}
             </button>
           </p>
@@ -110,41 +118,48 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
       {isPending ? null : isError ? (
         <NoConnection />
       ) : data.length === 0 ? (
-        <p>אין טלפון מקושר.</p>
+        <p className={ui.muted}>אין טלפון מקושר.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>מכשיר</th>
-              <th>קושר</th>
-              <th>שימוש אחרון</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((phone) => (
-              <tr key={phone.id}>
-                <td title={phone.user_agent}>{deviceName(phone.user_agent)}</td>
-                <td>{formatDate(phone.linked_at)}</td>
-                <td>{formatDate(phone.last_used_at)}</td>
-                <td>
-                  <button
-                    type="button"
-                    onClick={() => void unlink(phone)}
-                    disabled={sending}
-                  >
-                    ניתוק
-                  </button>
-                </td>
+        <div className={ui.flushTable}>
+          <table>
+            <thead>
+              <tr>
+                <th>מכשיר</th>
+                <th>קושר</th>
+                <th>שימוש אחרון</th>
+                <th className={ui.rowAction}>
+                  <span className="visually-hidden">ניתוק</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.map((phone) => (
+                <tr key={phone.id}>
+                  <td title={phone.user_agent}>
+                    {deviceName(phone.user_agent)}
+                  </td>
+                  <td>{formatDate(phone.linked_at)}</td>
+                  <td>{formatDate(phone.last_used_at)}</td>
+                  <td className={ui.rowAction}>
+                    <button
+                      type="button"
+                      onClick={() => void unlink(phone)}
+                      disabled={sending}
+                    >
+                      ניתוק
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {!isPending && (
-        <p>
+        <p className={ui.note}>
           <button
             type="button"
+            className={styles.refresh}
             onClick={() => void refetch()}
             disabled={isFetching}
           >

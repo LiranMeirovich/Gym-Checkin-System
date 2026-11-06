@@ -1,0 +1,158 @@
+/* The health form, on the phone and on the desk PC. Mobile first: one
+   column, big answers to tap; it only gets roomier on a wide screen. */
+
+.form {
+  max-width: 44rem;
+}
+
+.title {
+  font-size: var(--text-xl);
+  margin-block-end: var(--space-4);
+}
+
+.person {
+  padding: var(--space-4);
+  border-radius: var(--radius-panel);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  margin-block-end: var(--space-5);
+}
+
+.small {
+  font-size: var(--text-s);
+  color: var(--muted);
+}
+
+/* "Part A", "Part B": the form's own sections. */
+.part {
+  margin-block: var(--space-6) var(--space-3);
+  padding-block-start: var(--space-4);
+  border-block-start: 2px solid var(--navy);
+}
+
+.questions {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-5);
+  counter-reset: question;
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* The questions are numbered on the official form, so they are here. */
+.question {
+  counter-increment: question;
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+
+.question:has(input[type="radio"]:checked) {
+  border-color: var(--line-strong);
+}
+
+.question fieldset {
+  margin: 0;
+}
+
+.question legend {
+  font-weight: 600;
+  color: var(--ink);
+  margin-block-end: var(--space-3);
+}
+
+.question legend::before {
+  content: counter(question) ". ";
+  font-weight: 800;
+  color: var(--steel);
+}
+
+/* Yes / No, and male / female: two big halves of one control. */
+.answers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  max-width: 20rem;
+}
+
+.answers label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 3rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  font-weight: 700;
+  color: var(--navy-deep);
+}
+
+.answers label:has(input:checked) {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--paper);
+}
+
+.answers label:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+
+/* The radio itself stays for keyboards and screen readers; the label is
+   the visible control. */
+.answers input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.gender {
+  margin-block-end: var(--space-2);
+}
+
+.details {
+  margin-block: var(--space-3) 0;
+}
+
+.details label {
+  display: grid;
+  gap: var(--space-1);
+  font-weight: 600;
+}
+
+.validUntil {
+  font-weight: 700;
+  color: var(--navy-deep);
+}
+
+/* Confirm, name, signature: the end of the form, set apart. */
+.signing {
+  margin-block-start: var(--space-6);
+  padding: var(--space-5) var(--space-4);
+  border-radius: var(--radius-panel);
+  background: var(--steel-tint);
+}
+
+.signing input:not([type="checkbox"]) {
+  max-width: 100%;
+}
+
+.errors {
+  list-style: none;
+  padding: var(--space-3) var(--space-4);
+  margin-block: var(--space-4);
+  border-inline-start: 4px solid var(--stop);
+  border-radius: var(--radius-control);
+  background: var(--stop-tint);
+}
+
+.send {
+  width: 100%;
+  max-width: 24rem;
+  min-height: 3.25rem;
+  margin-block-start: var(--space-4);
+  font-size: var(--text-l);
+}

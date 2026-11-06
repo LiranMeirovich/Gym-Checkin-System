@@ -131,3 +131,104 @@
   color: var(--steel);
   text-decoration: underline;
 }
+
+/* A button that is the screen's main action without submitting a form. */
+.primary {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.primary:hover {
+  background: var(--navy-deep);
+}
+
+/* A row of buttons. */
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block: var(--space-4) 0;
+}
+
+/* The status line at the top of a section: a badge and what it means. */
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-block-end: var(--space-4);
+}
+
+/* A part of a section, under a thin line. */
+.subsection {
+  margin-block-start: var(--space-5);
+  padding-block-start: var(--space-5);
+  border-block-start: 1px solid var(--line);
+}
+
+/* A small note under a section. */
+.note {
+  font-size: var(--text-s);
+  color: var(--muted);
+  margin-block: var(--space-3) 0;
+}
+
+/* Plan choices as large rows to tap or click. */
+.choices {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-end: var(--space-3);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--navy);
+  background: var(--steel-tint);
+}
+
+.choice:has(input:disabled) {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.choice input {
+  margin: 0;
+}
+
+.choicePrice {
+  margin-inline-start: auto;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.choice:has(input:disabled) .choicePrice {
+  font-weight: 500;
+  color: var(--warn);
+}
+
+/* A table inside a panel, running to its edges. */
+.flushTable {
+  margin-inline: calc(-1 * var(--space-5));
+  width: calc(100% + 2 * var(--space-5));
+  overflow-x: auto;
+}
+
+.flushTable table {
+  background: transparent;
+}
+
+.flushTable tr:last-child > td {
+  border-block-end: none;
+}

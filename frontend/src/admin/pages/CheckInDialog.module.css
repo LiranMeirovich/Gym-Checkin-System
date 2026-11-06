@@ -1,0 +1,62 @@
+.dialog {
+  padding: 0;
+  overflow: hidden;
+}
+
+.dialog > * {
+  margin-inline: var(--space-5);
+}
+
+.title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  margin-inline: 0;
+  background: var(--mist);
+  border-block-end: 1px solid var(--line);
+  font-size: var(--text-s);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.who {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--navy-deep);
+}
+
+.summary {
+  margin-block-end: var(--space-4);
+  align-items: center;
+}
+
+.confirm {
+  /* Full width inside the dialog's side margins (.dialog > *). */
+  width: calc(100% - 2 * var(--space-5));
+  min-height: 3.25rem;
+  font-size: var(--text-l);
+}
+
+/* The answer: the time, big, then what happened. */
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.resultTime {
+  font-size: var(--text-xxl);
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-block: var(--space-4) 0;
+  margin-inline: 0;
+  padding: var(--space-3) var(--space-5);
+  border-block-start: 1px solid var(--line);
+}

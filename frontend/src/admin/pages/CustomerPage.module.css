@@ -1,0 +1,45 @@
+/* The desk PC is wide: the month's plan and the health form, which decide
+   a check-in, get the wide column; details and phones the side. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.main,
+.side {
+  min-width: 0;
+}
+
+.details {
+  margin: 0;
+}
+
+.notes {
+  white-space: pre-line;
+}
+
+/* A field and its button on one line. */
+.inline {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.inline input {
+  max-width: 12rem;
+}
+
+/* Deactivating is rare and reversible: a quieter button. */
+.quiet {
+  border-color: var(--line-strong);
+  color: var(--muted);
+  font-weight: 500;
+}

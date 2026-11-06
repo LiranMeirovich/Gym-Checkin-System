@@ -3,6 +3,7 @@
 // is empty; the server checks the image and puts it in the PDF snapshot.
 import { useEffect, useRef } from "react";
 import SignaturePadLib from "signature_pad";
+import styles from "./SignaturePad.module.css";
 
 type Props = {
   onChange: (png: string | null) => void;
@@ -62,21 +63,10 @@ export function SignaturePad({ onChange, label }: Props) {
   }
 
   return (
-    <div>
-      <p>{label}</p>
-      <canvas
-        ref={canvasRef}
-        aria-label={label}
-        style={{
-          width: "100%",
-          maxWidth: "500px",
-          height: "180px",
-          border: "1px solid",
-          touchAction: "none",
-          display: "block",
-        }}
-      />
-      <button type="button" onClick={clear}>
+    <div className={styles.pad}>
+      <p className={styles.label}>{label}</p>
+      <canvas ref={canvasRef} aria-label={label} className={styles.canvas} />
+      <button type="button" className={styles.clear} onClick={clear}>
         ניקוי החתימה
       </button>
     </div>
