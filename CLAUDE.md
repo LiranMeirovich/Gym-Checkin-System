@@ -103,6 +103,7 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - New migration (follow the `/migration` skill): `uv run alembic revision --autogenerate -m "<what changes>"`
 - Admin: `uv run uvicorn app.admin.main:app --host 127.0.0.1 --port 8000`
 - Public: `uv run uvicorn app.public.main:app --host 127.0.0.1 --port 8001`
+- Demo data (dev only, made-up, never `gym.db`): with `.env.demo` (git-ignored) holding `GYM_DATABASE_PATH=demo.db`, delete `demo.db`, run `uv run --env-file .env.demo alembic upgrade head`, then `uv run --env-file .env.demo python -m app.demo_data` (it prints the demo PINs). The `admin-demo` / `public-demo` launch configurations serve it on 8010 / 8011.
 - Test: `uv run pytest`
 - Lint / format: `uv run ruff check .` / `uv run ruff format .`
 - All hooks on every file: `pre-commit run --all-files`
