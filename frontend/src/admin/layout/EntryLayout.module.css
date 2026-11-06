@@ -17,7 +17,8 @@
 .brand {
   margin-block-end: var(--space-5);
   padding: var(--space-2);
-  border-radius: 50%;
+  /* A circle around the square logo; a pill around the name without it. */
+  border-radius: 999px;
   background: var(--paper);
 }
 
@@ -45,7 +46,8 @@
   padding: 0;
   margin: 0 0 var(--space-5);
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 12rem));
+  justify-content: center;
   gap: var(--space-3);
 }
 

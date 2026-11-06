@@ -46,4 +46,5 @@
 .hero .wordmark {
   font-size: 3rem;
   text-align: center;
+  padding-inline: var(--space-5);
 }
