@@ -2,14 +2,17 @@
 // "First run"). Exists only on a fresh install; afterwards the API answers
 // 404 and this page goes to the lock screen.
 import { useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router";
 import { api, type Schemas } from "../backend/client";
+import { BRANDING_KEY } from "../branding";
 import { useStartSession } from "../session";
 import {
   NoConnection,
   NO_CONNECTION_TRY_AGAIN,
 } from "../../shared/NoConnection";
+import { EntryLayout } from "../layout/EntryLayout";
+import styles from "../layout/EntryLayout.module.css";
 
 type Field = keyof Schemas["SetupRequest"];
 
@@ -55,6 +58,7 @@ export function Setup() {
 function SetupForm() {
   const navigate = useNavigate();
   const startSession = useStartSession();
+  const queryClient = useQueryClient();
   const [values, setValues] = useState(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -70,6 +74,8 @@ function SetupForm() {
       });
       if (data) {
         startSession(data);
+        // The header shows the gym name that was just saved.
+        void queryClient.invalidateQueries({ queryKey: BRANDING_KEY });
         navigate("/", { replace: true });
         return;
       }
@@ -117,13 +123,13 @@ function SetupForm() {
   }
 
   return (
-    <main>
-      <h1>הגדרה ראשונה</h1>
-      <p>
+    <EntryLayout>
+      <h1 className={styles.heading}>הגדרה ראשונה</h1>
+      <p className={styles.lead}>
         פרטי המכון וחשבון המנהל הראשון. את חשבונות המדריכים מוסיפים אחר כך, מתוך
         המערכת.
       </p>
-      <form onSubmit={submit} autoComplete="off">
+      <form className={styles.panel} onSubmit={submit} autoComplete="off">
         {formError && <p role="alert">{formError}</p>}
         {field("gym_name", "שם המכון")}
         {field("display_name", "השם שלך (יופיע במסך הנעילה)")}
@@ -135,6 +141,6 @@ function SetupForm() {
           </button>
         </p>
       </form>
-    </main>
+    </EntryLayout>
   );
 }

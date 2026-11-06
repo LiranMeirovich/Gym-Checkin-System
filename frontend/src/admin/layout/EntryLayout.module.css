@@ -1,0 +1,109 @@
+.screen {
+  min-height: 100vh;
+  padding: var(--space-7) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* The logo's white disc sits on a band of the page's own grey, cut by
+     the column's white panel below it. */
+  background: linear-gradient(
+    to bottom,
+    var(--steel-tint) 0,
+    var(--steel-tint) 11rem,
+    var(--mist) 11rem
+  );
+}
+
+.brand {
+  margin-block-end: var(--space-5);
+  padding: var(--space-2);
+  border-radius: 50%;
+  background: var(--paper);
+}
+
+.column {
+  width: min(36rem, 100%);
+  text-align: center;
+}
+
+.heading {
+  font-size: var(--text-xxl);
+  font-weight: 800;
+  margin-block-end: var(--space-5);
+}
+
+.lead {
+  color: var(--muted);
+  max-width: 30rem;
+  margin-inline: auto;
+  margin-block-end: var(--space-5);
+}
+
+/* The staff names: big targets, tapped on a touch screen at the desk. */
+.names {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--space-3);
+}
+
+.name {
+  width: 100%;
+  min-height: 5rem;
+  font-size: var(--text-l);
+  font-weight: 700;
+  border-radius: var(--radius-panel);
+  border-color: var(--line);
+  color: var(--navy-deep);
+}
+
+.name:hover {
+  border-color: var(--steel);
+  background: var(--paper);
+}
+
+.name[aria-pressed="true"] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--paper);
+}
+
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: var(--space-5);
+  text-align: start;
+}
+
+.pinPanel {
+  composes: panel;
+  text-align: center;
+}
+
+.pinPanel label {
+  display: block;
+  margin-block-end: var(--space-2);
+}
+
+.pin {
+  max-width: 14rem;
+  margin-inline: auto;
+  display: block;
+  text-align: center;
+  font-size: var(--text-xl);
+  letter-spacing: 0.4em;
+  min-height: 3.25rem;
+}
+
+.pinPanel button[type="submit"] {
+  width: 100%;
+  max-width: 14rem;
+  min-height: 3rem;
+}
+
+.panel button[type="submit"] {
+  min-height: 3rem;
+}
