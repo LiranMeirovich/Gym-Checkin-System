@@ -14,10 +14,9 @@ import {
   PLAN_NAMES,
   formatMonth,
   formatShekels,
-  formatTime,
-  lastDayOf,
   type Plan,
-} from "../plans";
+} from "../../shared/plans";
+import { formatTime, lastDayOf } from "../times";
 
 type CheckedIn = Schemas["CheckedIn"];
 type PlanRequired = Schemas["PlanRequired"];

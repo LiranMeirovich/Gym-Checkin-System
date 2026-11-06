@@ -6,6 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router";
 import { api, type Schemas } from "../backend/client";
 import { useStartSession } from "../session";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 type Field = keyof Schemas["SetupRequest"];
 
@@ -43,7 +47,7 @@ export function Setup() {
   });
 
   if (isPending) return null;
-  if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+  if (isError) return <NoConnection />;
   if (!needed) return <Navigate to="/login" replace />;
   return <SetupForm />;
 }
@@ -86,7 +90,7 @@ function SetupForm() {
     } catch {
       // The request never got an answer (server down, network error);
       // everything typed stays, so it can simply be sent again.
-      setFormError("אין חיבור לשרת. נסו שוב.");
+      setFormError(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }

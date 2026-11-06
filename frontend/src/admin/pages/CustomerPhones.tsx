@@ -9,11 +9,13 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { formatDate, formatTime, phonesKey, type Customer } from "../customers";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 type LinkedPhone = Schemas["LinkedPhone"];
 type IssuedCode = Schemas["LinkCodeIssued"];
-
-const NO_CONNECTION = "אין חיבור לשרת. נסו שוב.";
 
 async function fetchPhones(id: number): Promise<LinkedPhone[]> {
   const { data, response } = await api.GET(
@@ -47,7 +49,7 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
         setMessage("הלקוח לא פעיל. יש להפעיל אותו מחדש קודם.");
       } else setMessage("הפקת הקוד נכשלה. נסו שוב.");
     } catch {
-      setMessage(NO_CONNECTION);
+      setMessage(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }
@@ -72,7 +74,7 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
         void refetch();
       }
     } catch {
-      setMessage(NO_CONNECTION);
+      setMessage(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }
@@ -106,7 +108,7 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
       )}
 
       {isPending ? null : isError ? (
-        <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>
+        <NoConnection />
       ) : data.length === 0 ? (
         <p>אין טלפון מקושר.</p>
       ) : (

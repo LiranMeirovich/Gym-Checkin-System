@@ -9,6 +9,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router";
 import { api, type Schemas } from "../backend/client";
 import { useForgetSession, useStartSession } from "../session";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 type StaffName = Schemas["StaffName"];
 
@@ -17,7 +21,6 @@ const REFUSALS: Record<Schemas["LoginRefused"]["error"], string> = {
   locked: "יותר מדי ניסיונות שגויים.",
   no_such_staff: "המשתמש לא נמצא. בחרו שם מהרשימה.",
 };
-const NO_CONNECTION = "אין חיבור לשרת. נסו שוב.";
 
 async function fetchLockScreen() {
   const { data, response } = await api.GET("/api/lock-screen");
@@ -43,7 +46,7 @@ export function LockScreen() {
   useEffect(() => forgetSession(), [forgetSession]);
 
   if (isPending) return null;
-  if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+  if (isError) return <NoConnection />;
   if (data.setup_needed) return <Navigate to="/setup" replace />;
 
   return (
@@ -100,7 +103,7 @@ function PinForm({ staff }: { staff: StaffName }) {
       }
     } catch {
       // The request never got an answer (server down, network error).
-      setError(NO_CONNECTION);
+      setError(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
       setPin("");

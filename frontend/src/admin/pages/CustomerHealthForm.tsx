@@ -13,15 +13,18 @@ import {
   formatDate,
   healthFormKey,
   healthFormsKey,
-  isManager,
   type Customer,
 } from "../customers";
+import { isManager } from "../roles";
 import { useSession } from "../session";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+  NO_CONNECTION_RELOAD,
+} from "../../shared/NoConnection";
 
 type Status = Schemas["HealthFormStatus"];
 type FormSummary = Schemas["HealthFormSummary"];
-
-const NO_CONNECTION = "אין חיבור לשרת. נסו לרענן את הדף.";
 
 // The server keeps a note at most this size on its longer side
 // (`NOTE_MAX_SIDE`); shrinking first keeps the upload small and quick.
@@ -68,7 +71,7 @@ export function CustomerHealthForm({ customer }: { customer: Customer }) {
     <section>
       <h2>הצהרת בריאות</h2>
       {isPending ? null : isError ? (
-        <p role="alert">{NO_CONNECTION}</p>
+        <NoConnection />
       ) : (
         <>
           <p>{statusText(data)}</p>
@@ -138,7 +141,7 @@ function DoctorNoteUpload({ customer }: { customer: Customer }) {
         setMessage("השמירה נכשלה. נסו שוב.");
       }
     } catch {
-      setMessage("אין חיבור לשרת. נסו שוב.");
+      setMessage(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
       // The same file can be chosen again after a failure.
@@ -214,7 +217,9 @@ function SignedForms({ customer }: { customer: Customer }) {
       if (!file) {
         tab?.close();
         setMessage(
-          response.status === 403 ? "אין הרשאה לפתוח את הקובץ." : NO_CONNECTION,
+          response.status === 403
+            ? "אין הרשאה לפתוח את הקובץ."
+            : NO_CONNECTION_RELOAD,
         );
         return;
       }
@@ -230,7 +235,7 @@ function SignedForms({ customer }: { customer: Customer }) {
       }, 60_000);
     } catch {
       tab?.close();
-      setMessage(NO_CONNECTION);
+      setMessage(NO_CONNECTION_RELOAD);
     }
   }
 
@@ -253,7 +258,7 @@ function SignedForms({ customer }: { customer: Customer }) {
   }
 
   if (isPending) return null;
-  if (isError) return <p role="alert">{NO_CONNECTION}</p>;
+  if (isError) return <NoConnection />;
   if (data.length === 0) return <p>הלקוח עוד לא מילא טופס.</p>;
   return (
     <>

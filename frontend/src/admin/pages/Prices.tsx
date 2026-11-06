@@ -5,7 +5,8 @@ import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, type Schemas } from "../backend/client";
-import { formatDate, isManager } from "../customers";
+import { formatDate } from "../customers";
+import { isManager } from "../roles";
 import {
   AGE_GROUPS,
   AGE_GROUP_NAMES,
@@ -17,6 +18,10 @@ import {
   shekelsToAgorot,
 } from "../prices";
 import { useSession } from "../session";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 const PRICES_KEY = ["prices"] as const;
 
@@ -42,7 +47,7 @@ export function Prices() {
         <Link to="/">חזרה</Link>
       </p>
       {isPending ? null : isError ? (
-        <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>
+        <NoConnection />
       ) : (
         <>
           <Current overview={data} />
@@ -202,7 +207,7 @@ function ChangeForm({ overview }: { overview: Overview }) {
       }
     } catch {
       // No answer at all; everything typed stays, to send again.
-      setFormError("אין חיבור לשרת. נסו שוב.");
+      setFormError(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }

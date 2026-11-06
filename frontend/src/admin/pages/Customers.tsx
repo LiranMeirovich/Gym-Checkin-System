@@ -7,6 +7,7 @@ import { Link } from "react-router";
 import { api } from "../backend/client";
 import { CUSTOMER_LIST_KEY, formatPhone } from "../customers";
 import { CheckInButton } from "./CheckInDialog";
+import { NoConnection } from "../../shared/NoConnection";
 
 async function fetchCustomers(active: boolean) {
   const { data, response } = await api.GET("/api/customers", {
@@ -38,7 +39,7 @@ export function Customers() {
         </label>
       </p>
       {isPending ? null : isError ? (
-        <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>
+        <NoConnection />
       ) : data.length === 0 ? (
         <p>אין לקוחות להצגה.</p>
       ) : (

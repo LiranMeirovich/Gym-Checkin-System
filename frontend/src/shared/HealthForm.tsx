@@ -12,6 +12,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SignaturePad } from "./SignaturePad";
 import { formatDay } from "./dates";
+import { NoConnection, NO_CONNECTION_TRY_AGAIN } from "./NoConnection";
 
 export type HealthFormPage = {
   version: string;
@@ -98,7 +99,7 @@ export function HealthForm<Status>({
   } = useQuery({ queryKey, queryFn: load });
 
   if (isPending) return null;
-  if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+  if (isError) return <NoConnection />;
   return (
     <>
       {versionChanged && <p role="alert">{VERSION_CHANGED}</p>}
@@ -181,7 +182,7 @@ function FilledForm<Status>({
           return;
       }
     } catch {
-      setErrors(["אין חיבור לשרת. נסו שוב."]);
+      setErrors([NO_CONNECTION_TRY_AGAIN]);
     } finally {
       setSending(false);
     }

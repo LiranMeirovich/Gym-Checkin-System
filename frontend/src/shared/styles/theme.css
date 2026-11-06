@@ -1,0 +1,55 @@
+/* The look's tokens (decision 0034): the one file another gym edits to
+   change the colours. Taken from the logo: the navy of the wordmark and the
+   steel blue of the kettlebell, on white and a cool light grey. The logo's
+   texture is part of the image and isn't copied here. */
+
+:root {
+  /* Brand */
+  --navy: #1f4f73;
+  --navy-deep: #163a56;
+  --steel: #437aa2;
+  --steel-tint: #dce8f1;
+
+  /* Surfaces and text */
+  --paper: #ffffff;
+  --mist: #eef2f5;
+  --line: #c9d5df;
+  --line-strong: #9fb2c2;
+  --ink: #17304a;
+  --muted: #566a7c;
+
+  /* Status: the health form, the plan, refusals */
+  --ok: #2b6e47;
+  --ok-tint: #e2f0e7;
+  --stop: #a8261d;
+  --stop-tint: #f9e5e3;
+  --warn: #7f5300;
+  --warn-tint: #f8eed6;
+
+  /* Type: Heebo throughout, heavy headings after the wordmark */
+  --font: "Heebo", "Arial Hebrew", Arial, sans-serif;
+  --text-s: 0.875rem;
+  --text-m: 1rem;
+  --text-l: 1.25rem;
+  --text-xl: 1.625rem;
+  --text-xxl: 2.25rem;
+
+  /* Space */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  /* Corners grow with the element: controls, panels, the check-in arch */
+  --radius-control: 8px;
+  --radius-panel: 14px;
+
+  /* One shadow, for what floats above the page (the dialog) */
+  --shadow-float: 0 18px 48px rgb(22 58 86 / 0.22);
+
+  --focus-ring: 0 0 0 3px var(--paper), 0 0 0 5px var(--steel);
+  --control-height: 2.75rem;
+}

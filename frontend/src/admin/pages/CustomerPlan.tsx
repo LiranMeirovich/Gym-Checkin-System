@@ -6,7 +6,8 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
-import { formatDate, isManager, planKey, type Customer } from "../customers";
+import { formatDate, planKey, type Customer } from "../customers";
+import { isManager } from "../roles";
 import {
   AGE_GROUP_NAMES,
   PLAN_NAMES,
@@ -15,6 +16,10 @@ import {
   type Plan,
 } from "../prices";
 import { useSession } from "../session";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 type PlanStatus = Schemas["PlanStatus"];
 type PlanChoice = Schemas["PlanChoiceRow"];
@@ -68,7 +73,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
     return (
       <section>
         <h2>מסלול</h2>
-        <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>
+        <NoConnection />
       </section>
     );
   }
@@ -159,7 +164,7 @@ function useSave(
         void queryClient.invalidateQueries({ queryKey: planKey(customerId) });
       }
     } catch {
-      onMessage("אין חיבור לשרת. נסו שוב.");
+      onMessage(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }

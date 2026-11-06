@@ -27,6 +27,7 @@ import {
   setCsrfToken,
   type Schemas,
 } from "./backend/client";
+import { NoConnection } from "../shared/NoConnection";
 
 export type Session = Schemas["SessionInfo"];
 
@@ -97,7 +98,7 @@ export function RequireSession({ bare = false }: { bare?: boolean }) {
   });
 
   if (isPending) return null;
-  if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+  if (isError) return <NoConnection />;
   if (!data.loggedIn) {
     return <Navigate to={data.setupNeeded ? "/setup" : "/login"} replace />;
   }

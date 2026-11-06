@@ -11,16 +11,20 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, type Schemas } from "../backend/client";
-import { formatTime, healthFormKey, isManager, planKey } from "../customers";
+import { formatTime, healthFormKey, planKey } from "../customers";
+import { isManager } from "../roles";
 import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
 import { useSession } from "../session";
 import { fetchStatus } from "./CustomerHealthForm";
 import { describe, fetchPlan } from "./CustomerPlan";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 type CheckedIn = Schemas["CheckedIn"];
 type PlanOption = Schemas["PlanOption"];
 
-const NO_CONNECTION = "אין חיבור לשרת. נסו שוב.";
 const PRICE_NOT_SET = "המחיר לא נקבע. יש להזין אותו במסך המחירים.";
 
 type Props = {
@@ -103,7 +107,7 @@ function CheckInBody({
 
   if (health.isPending || plan.isPending) return null;
   if (health.isError || plan.isError) {
-    return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+    return <NoConnection />;
   }
 
   async function checkIn() {
@@ -154,7 +158,7 @@ function CheckInBody({
           : "הרישום נכשל. נסו שוב.",
       );
     } catch {
-      setMessage(NO_CONNECTION);
+      setMessage(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }

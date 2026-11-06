@@ -13,16 +13,20 @@ import {
   customerKey,
   formatDate,
   formatPhone,
-  isManager,
   planKey,
   type Customer,
   type CustomerField,
 } from "../customers";
+import { isManager } from "../roles";
 import { useSession } from "../session";
 import { CheckInButton } from "./CheckInDialog";
 import { CustomerHealthForm } from "./CustomerHealthForm";
 import { CustomerPhones } from "./CustomerPhones";
 import { CustomerPlan } from "./CustomerPlan";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 type Errors = Partial<Record<CustomerField, string>>;
 
@@ -52,7 +56,7 @@ export function CustomerPage() {
   });
 
   if (isPending) return null;
-  if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+  if (isError) return <NoConnection />;
   if (!customer) {
     return (
       <>
@@ -105,7 +109,7 @@ function CustomerDetails({ customer }: { customer: Customer }) {
       }
       return refusal(response.status, error);
     } catch {
-      return { saved: false, message: "אין חיבור לשרת. נסו שוב." };
+      return { saved: false, message: NO_CONNECTION_TRY_AGAIN };
     }
   }
 

@@ -9,6 +9,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { CheckInStep } from "./CheckInStep";
 import { HealthForm } from "./HealthForm";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 type Me = Schemas["Me"];
 
@@ -33,7 +37,7 @@ export function CheckIn() {
   });
 
   if (isPending) return null;
-  if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+  if (isError) return <NoConnection />;
   if (!me) return <LinkForm />;
   return <Linked me={me} />;
 }
@@ -99,7 +103,7 @@ function LinkForm() {
         "מספר הטלפון או הקוד לא נכונים, או שהקוד כבר לא בתוקף. אפשר לבקש קוד חדש בדלפק.",
       );
     } catch {
-      setMessage("אין חיבור לשרת. נסו שוב.");
+      setMessage(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }

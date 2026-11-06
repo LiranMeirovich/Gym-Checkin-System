@@ -16,6 +16,7 @@ import {
   customerKey,
   type CustomerField,
 } from "../customers";
+import { NO_CONNECTION_TRY_AGAIN } from "../../shared/NoConnection";
 
 const EMPTY: Schemas["NewCustomer"] = {
   first_name: "",
@@ -76,7 +77,7 @@ export function NewCustomer() {
       }
     } catch {
       // No answer at all; everything typed stays, to send again.
-      setFormError("אין חיבור לשרת. נסו שוב.");
+      setFormError(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }
