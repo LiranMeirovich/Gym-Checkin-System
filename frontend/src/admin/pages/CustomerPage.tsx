@@ -13,16 +13,24 @@ import {
   customerKey,
   formatDate,
   formatPhone,
-  isManager,
   planKey,
   type Customer,
   type CustomerField,
 } from "../customers";
+import { isManager } from "../roles";
 import { useSession } from "../session";
 import { CheckInButton } from "./CheckInDialog";
+import { Field, PageHead } from "../layout/ui";
+import ui from "../layout/ui.module.css";
+import { StatusBadge } from "../../shared/Status";
+import styles from "./CustomerPage.module.css";
 import { CustomerHealthForm } from "./CustomerHealthForm";
 import { CustomerPhones } from "./CustomerPhones";
 import { CustomerPlan } from "./CustomerPlan";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 type Errors = Partial<Record<CustomerField, string>>;
 
@@ -52,15 +60,13 @@ export function CustomerPage() {
   });
 
   if (isPending) return null;
-  if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+  if (isError) return <NoConnection />;
   if (!customer) {
     return (
-      <>
-        <p>הלקוח לא נמצא.</p>
-        <p>
-          <Link to="/customers">חזרה לרשימה</Link>
-        </p>
-      </>
+      <PageHead
+        title="הלקוח לא נמצא"
+        back={{ to: "/customers", label: "חזרה לרשימה" }}
+      />
     );
   }
   return <CustomerDetails customer={customer} />;
@@ -105,21 +111,41 @@ function CustomerDetails({ customer }: { customer: Customer }) {
       }
       return refusal(response.status, error);
     } catch {
-      return { saved: false, message: "אין חיבור לשרת. נסו שוב." };
+      return { saved: false, message: NO_CONNECTION_TRY_AGAIN };
     }
   }
 
   const path = { params: { path: { customer_id: customer.id } } };
 
+  const name = `${customer.first_name} ${customer.last_name}`;
+
   return (
     <>
-      <h1>
-        {customer.first_name} {customer.last_name}
-        {!customer.active && " (לא פעיל/ה)"}
-      </h1>
-      <p>
-        <Link to="/customers">חזרה לרשימה</Link>
-      </p>
+      <PageHead
+        back={{ to: "/customers", label: "חזרה לרשימה" }}
+        title={
+          <>
+            {name}
+            {!customer.active && (
+              <>
+                {" "}
+                <StatusBadge tone="warn">לא פעיל/ה</StatusBadge>
+              </>
+            )}
+          </>
+        }
+        actions={
+          customer.active &&
+          !editing && (
+            <>
+              <button type="button" onClick={() => setEditing(true)}>
+                עריכת פרטים
+              </button>
+              <CheckInButton customerId={customer.id} name={name} primary />
+            </>
+          )
+        }
+      />
       {reactivated && (
         <p role="status">
           המספר היה שייך ללקוח לא פעיל, והוא הופעל מחדש עם הפרטים השמורים שלו.
@@ -128,73 +154,85 @@ function CustomerDetails({ customer }: { customer: Customer }) {
       )}
 
       {editing ? (
-        <EditForm
-          customer={customer}
-          onSave={(body) =>
-            save(() =>
-              api.PATCH("/api/customers/{customer_id}", { ...path, body }),
-            )
-          }
-          onDone={() => setEditing(false)}
-        />
+        <section className={`${ui.panel} ${ui.form}`}>
+          <h2>עריכת פרטים</h2>
+          <EditForm
+            customer={customer}
+            onSave={(body) =>
+              save(() =>
+                api.PATCH("/api/customers/{customer_id}", { ...path, body }),
+              )
+            }
+            onDone={() => setEditing(false)}
+          />
+        </section>
       ) : (
-        <dl>
-          <dt>טלפון</dt>
-          <dd dir="ltr">{formatPhone(customer.phone)}</dd>
-          <dt>תאריך לידה</dt>
-          <dd>{formatDate(customer.date_of_birth)}</dd>
-          <dt>הערות</dt>
-          <dd style={{ whiteSpace: "pre-line" }}>{customer.notes || "—"}</dd>
-          <dt>נוסף/ה</dt>
-          <dd>{formatDate(customer.created_at)}</dd>
-        </dl>
-      )}
+        <div className={styles.layout}>
+          <div className={styles.main}>
+            {/* Keyed so another customer starts with a fresh section (no
+                old refusal message). */}
+            <CustomerPlan key={customer.id} customer={customer} />
+            {/* Keyed so another customer's page never shows this one's
+                code. */}
+            <CustomerHealthForm key={customer.id} customer={customer} />
+          </div>
+          <div className={styles.side}>
+            <section className={ui.panel}>
+              <h2>פרטים</h2>
+              <dl className={styles.details}>
+                <dt>טלפון</dt>
+                <dd>
+                  <span dir="ltr">{formatPhone(customer.phone)}</span>
+                </dd>
+                <dt>תאריך לידה</dt>
+                <dd>{formatDate(customer.date_of_birth)}</dd>
+                <dt>הערות</dt>
+                <dd className={styles.notes}>{customer.notes || "—"}</dd>
+                <dt>נוסף/ה</dt>
+                <dd>{formatDate(customer.created_at)}</dd>
+              </dl>
 
-      {customer.active && !editing && (
-        <p>
-          <CheckInButton
-            customerId={customer.id}
-            name={`${customer.first_name} ${customer.last_name}`}
-          />{" "}
-          <button type="button" onClick={() => setEditing(true)}>
-            עריכת פרטים
-          </button>
-        </p>
-      )}
+              {customer.active && manager && (
+                <div className={ui.subsection}>
+                  <DateOfBirthForm
+                    customer={customer}
+                    onSave={(date_of_birth) =>
+                      save(() =>
+                        api.PUT("/api/customers/{customer_id}/date-of-birth", {
+                          ...path,
+                          body: { date_of_birth },
+                        }),
+                      )
+                    }
+                  />
+                </div>
+              )}
 
-      {customer.active && manager && !editing && (
-        <DateOfBirthForm
-          customer={customer}
-          onSave={(date_of_birth) =>
-            save(() =>
-              api.PUT("/api/customers/{customer_id}/date-of-birth", {
-                ...path,
-                body: { date_of_birth },
-              }),
-            )
-          }
-        />
+              {(customer.active ? manager : true) && (
+                <div className={ui.subsection}>
+                  <ActiveToggle
+                    active={customer.active}
+                    onToggle={() =>
+                      save(() =>
+                        customer.active
+                          ? api.POST(
+                              "/api/customers/{customer_id}/deactivate",
+                              path,
+                            )
+                          : api.POST(
+                              "/api/customers/{customer_id}/reactivate",
+                              path,
+                            ),
+                      )
+                    }
+                  />
+                </div>
+              )}
+            </section>
+            <CustomerPhones key={customer.id} customer={customer} />
+          </div>
+        </div>
       )}
-
-      {!editing && (customer.active ? manager : true) && (
-        <ActiveToggle
-          active={customer.active}
-          onToggle={() =>
-            save(() =>
-              customer.active
-                ? api.POST("/api/customers/{customer_id}/deactivate", path)
-                : api.POST("/api/customers/{customer_id}/reactivate", path),
-            )
-          }
-        />
-      )}
-
-      {/* Keyed so another customer starts with a fresh section (no old
-          refusal message). */}
-      {!editing && <CustomerPlan key={customer.id} customer={customer} />}
-      {/* Keyed so another customer's page never shows this one's code. */}
-      {!editing && <CustomerHealthForm key={customer.id} customer={customer} />}
-      {!editing && <CustomerPhones key={customer.id} customer={customer} />}
     </>
   );
 }
@@ -281,8 +319,7 @@ function EditForm({
     input: object = {},
   ) {
     return (
-      <p>
-        <label htmlFor={name}>{label}</label>{" "}
+      <Field id={name} label={label} error={errors[name]}>
         <input
           id={name}
           value={values[name]}
@@ -291,20 +328,20 @@ function EditForm({
           }
           required
           {...input}
-        />{" "}
-        {errors[name] && <span role="alert">{errors[name]}</span>}
-      </p>
+        />
+      </Field>
     );
   }
 
   return (
     <form onSubmit={submit} autoComplete="off">
       <OutcomeMessage outcome={outcome} />
-      {field("first_name", "שם פרטי", { maxLength: 50 })}
-      {field("last_name", "שם משפחה", { maxLength: 50 })}
+      <div className={ui.pair}>
+        {field("first_name", "שם פרטי", { maxLength: 50 })}
+        {field("last_name", "שם משפחה", { maxLength: 50 })}
+      </div>
       {field("phone", "טלפון", { type: "tel", dir: "ltr" })}
-      <p>
-        <label htmlFor="notes">הערות (בלי פרטים רפואיים)</label>{" "}
+      <Field id="notes" label="הערות (בלי פרטים רפואיים)" error={errors.notes}>
         <textarea
           id="notes"
           value={values.notes}
@@ -312,17 +349,16 @@ function EditForm({
           onChange={(event) =>
             setValues({ ...values, notes: event.target.value })
           }
-        />{" "}
-        {errors.notes && <span role="alert">{errors.notes}</span>}
-      </p>
-      <p>
+        />
+      </Field>
+      <div className={ui.buttons}>
         <button type="submit" disabled={sending}>
           שמירה
-        </button>{" "}
+        </button>
         <button type="button" onClick={onDone} disabled={sending}>
           ביטול
         </button>
-      </p>
+      </div>
     </form>
   );
 }
@@ -349,25 +385,27 @@ function DateOfBirthForm({
   return (
     <form onSubmit={submit}>
       <OutcomeMessage outcome={outcome} />
-      <p>
-        <label htmlFor="date_of_birth">
-          תיקון תאריך לידה (קובע את מחיר עד גיל 18)
-        </label>{" "}
-        <input
-          id="date_of_birth"
-          type="date"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          required
-        />{" "}
-        <button
-          type="submit"
-          disabled={sending || value === customer.date_of_birth}
-        >
-          שמירה
-        </button>{" "}
-        {error && <span role="alert">{error}</span>}
-      </p>
+      <Field
+        id="date_of_birth"
+        label="תיקון תאריך לידה (קובע את מחיר עד גיל 18)"
+        error={error}
+      >
+        <div className={styles.inline}>
+          <input
+            id="date_of_birth"
+            type="date"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            required
+          />
+          <button
+            type="submit"
+            disabled={sending || value === customer.date_of_birth}
+          >
+            שמירה
+          </button>
+        </div>
+      </Field>
     </form>
   );
 }
@@ -397,11 +435,14 @@ function ActiveToggle({
   return (
     <>
       <OutcomeMessage outcome={outcome} />
-      <p>
-        <button type="button" onClick={toggle} disabled={sending}>
-          {active ? "העברה ללא פעיל" : "הפעלה מחדש"}
-        </button>
-      </p>
+      <button
+        type="button"
+        className={active ? styles.quiet : ui.primary}
+        onClick={toggle}
+        disabled={sending}
+      >
+        {active ? "העברה ללא פעיל" : "הפעלה מחדש"}
+      </button>
     </>
   );
 }

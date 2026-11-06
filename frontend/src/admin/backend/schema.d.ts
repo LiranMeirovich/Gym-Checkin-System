@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Branding */
+        get: operations["branding_api_branding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/setup": {
         parameters: {
             query?: never;
@@ -412,6 +429,17 @@ export interface components {
          * @enum {string}
          */
         AgeGroup: "adult" | "under_18";
+        /**
+         * Branding
+         * @description The gym's name (null before first-run setup) and whether
+         *     ``/branding/logo`` has a logo to show.
+         */
+        Branding: {
+            /** Gym Name */
+            gym_name: string | null;
+            /** Has Logo */
+            has_logo: boolean;
+        };
         /**
          * CheckInForbidden
          * @description 403: a plan was sent by staff who may not choose plans.
@@ -1238,6 +1266,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    branding_api_branding_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Branding"];
+                };
+            };
+        };
+    };
     setup_status_api_setup_get: {
         parameters: {
             query?: never;

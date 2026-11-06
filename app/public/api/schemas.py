@@ -16,6 +16,14 @@ from app.core.models import Plan
 SIGNATURE_DATA_URL_MAX_LENGTH = SIGNATURE_MAX_BYTES * 4 // 3 + 100
 
 
+class Branding(Answer):
+    """The gym's name (null before first-run setup) and whether
+    ``/branding/logo`` has a logo to show."""
+
+    gym_name: str | None
+    has_logo: bool
+
+
 class Me(Answer):
     """The customer this phone is linked to: only what the page shows."""
 

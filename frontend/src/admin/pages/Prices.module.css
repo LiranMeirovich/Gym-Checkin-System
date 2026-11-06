@@ -1,0 +1,48 @@
+/* This month's prices: the figures are what staff come here for. */
+.current th[scope="row"],
+.changes th[scope="row"] {
+  font-size: var(--text-m);
+  font-weight: 700;
+  color: var(--navy-deep);
+  white-space: normal;
+}
+
+.amount {
+  display: block;
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--navy);
+  line-height: 1.2;
+}
+
+.since {
+  font-size: var(--text-s);
+  color: var(--muted);
+}
+
+.notSet {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.month {
+  max-width: 12rem;
+}
+
+.changes {
+  margin-block-end: var(--space-4);
+}
+
+.changes th,
+.changes td {
+  padding-inline: 0 var(--space-4);
+}
+
+.amountInput {
+  max-width: 8rem;
+}
+
+.changes [role="alert"] {
+  font-size: var(--text-s);
+  max-width: 14rem;
+}

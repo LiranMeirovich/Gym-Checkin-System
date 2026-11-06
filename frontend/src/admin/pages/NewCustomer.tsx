@@ -16,6 +16,9 @@ import {
   customerKey,
   type CustomerField,
 } from "../customers";
+import { Field, PageHead } from "../layout/ui";
+import ui from "../layout/ui.module.css";
+import { NO_CONNECTION_TRY_AGAIN } from "../../shared/NoConnection";
 
 const EMPTY: Schemas["NewCustomer"] = {
   first_name: "",
@@ -76,7 +79,7 @@ export function NewCustomer() {
       }
     } catch {
       // No answer at all; everything typed stays, to send again.
-      setFormError("אין חיבור לשרת. נסו שוב.");
+      setFormError(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }
@@ -88,8 +91,7 @@ export function NewCustomer() {
     input: object = {},
   ) {
     return (
-      <p>
-        <label htmlFor={name}>{label}</label>{" "}
+      <Field id={name} label={label} error={errors[name]}>
         <input
           id={name}
           value={values[name]}
@@ -98,19 +100,22 @@ export function NewCustomer() {
           }
           required
           {...input}
-        />{" "}
-        {errors[name] && <span role="alert">{errors[name]}</span>}
-      </p>
+        />
+      </Field>
     );
   }
 
   return (
     <>
-      <h1>לקוח חדש</h1>
-      <p>
-        <Link to="/customers">חזרה לרשימה</Link>
-      </p>
-      <form onSubmit={submit} autoComplete="off">
+      <PageHead
+        title="לקוח חדש"
+        back={{ to: "/customers", label: "חזרה לרשימה" }}
+      />
+      <form
+        className={`${ui.panel} ${ui.form}`}
+        onSubmit={submit}
+        autoComplete="off"
+      >
         {formError && <p role="alert">{formError}</p>}
         {takenBy !== null && (
           <p role="alert">
@@ -118,12 +123,17 @@ export function NewCustomer() {
             <Link to={`/customers/${takenBy}`}>לכרטיס הלקוח</Link>
           </p>
         )}
-        {field("first_name", "שם פרטי", { maxLength: 50 })}
-        {field("last_name", "שם משפחה", { maxLength: 50 })}
+        <div className={ui.pair}>
+          {field("first_name", "שם פרטי", { maxLength: 50 })}
+          {field("last_name", "שם משפחה", { maxLength: 50 })}
+        </div>
         {field("phone", "טלפון", { type: "tel", dir: "ltr" })}
         {field("date_of_birth", "תאריך לידה", { type: "date" })}
-        <p>
-          <label htmlFor="notes">הערות (בלי פרטים רפואיים)</label>{" "}
+        <Field
+          id="notes"
+          label="הערות (בלי פרטים רפואיים)"
+          error={errors.notes}
+        >
           <textarea
             id="notes"
             value={values.notes}
@@ -131,10 +141,9 @@ export function NewCustomer() {
             onChange={(event) =>
               setValues({ ...values, notes: event.target.value })
             }
-          />{" "}
-          {errors.notes && <span role="alert">{errors.notes}</span>}
-        </p>
-        <p>
+          />
+        </Field>
+        <p className={ui.field}>
           <label>
             <input
               type="checkbox"

@@ -8,7 +8,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router";
 import { api, type Schemas } from "../backend/client";
+import { EntryLayout } from "../layout/EntryLayout";
+import styles from "../layout/EntryLayout.module.css";
 import { useForgetSession, useStartSession } from "../session";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
 
 type StaffName = Schemas["StaffName"];
 
@@ -17,7 +23,6 @@ const REFUSALS: Record<Schemas["LoginRefused"]["error"], string> = {
   locked: "יותר מדי ניסיונות שגויים.",
   no_such_staff: "המשתמש לא נמצא. בחרו שם מהרשימה.",
 };
-const NO_CONNECTION = "אין חיבור לשרת. נסו שוב.";
 
 async function fetchLockScreen() {
   const { data, response } = await api.GET("/api/lock-screen");
@@ -43,18 +48,19 @@ export function LockScreen() {
   useEffect(() => forgetSession(), [forgetSession]);
 
   if (isPending) return null;
-  if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+  if (isError) return <NoConnection />;
   if (data.setup_needed) return <Navigate to="/setup" replace />;
 
   return (
-    <main>
-      <h1>מי נכנס/ת?</h1>
+    <EntryLayout>
+      <h1 className={styles.heading}>מי נכנס/ת?</h1>
       <nav aria-label="צוות">
-        <ul>
+        <ul className={styles.names}>
           {data.staff.map((person) => (
             <li key={person.id}>
               <button
                 type="button"
+                className={styles.name}
                 aria-pressed={chosen?.id === person.id}
                 onClick={() => setChosen(person)}
               >
@@ -65,7 +71,7 @@ export function LockScreen() {
         </ul>
       </nav>
       {chosen && <PinForm key={chosen.id} staff={chosen} />}
-    </main>
+    </EntryLayout>
   );
 }
 
@@ -100,7 +106,7 @@ function PinForm({ staff }: { staff: StaffName }) {
       }
     } catch {
       // The request never got an answer (server down, network error).
-      setError(NO_CONNECTION);
+      setError(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
       setPin("");
@@ -109,12 +115,13 @@ function PinForm({ staff }: { staff: StaffName }) {
 
   const fieldId = `pin-${staff.id}`;
   return (
-    <form onSubmit={submit} autoComplete="off">
+    <form className={styles.pinPanel} onSubmit={submit} autoComplete="off">
       {error && <p role="alert">{error}</p>}
       <p>
         <label htmlFor={fieldId}>הקוד של {staff.display_name}</label>{" "}
         <input
           id={fieldId}
+          className={styles.pin}
           type="password"
           inputMode="numeric"
           pattern="[0-9]{6,12}"

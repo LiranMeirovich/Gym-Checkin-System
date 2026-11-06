@@ -1,0 +1,42 @@
+/* The link code: read aloud or shown to the customer across the desk. */
+.code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  margin-block-end: var(--space-4);
+  border: none;
+  border-radius: var(--radius-panel);
+  background: var(--navy);
+  color: var(--paper);
+  text-align: center;
+}
+
+.codeLabel {
+  font-size: var(--text-s);
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.codeDigits {
+  font-size: 2.75rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.codeHelp {
+  font-size: var(--text-s);
+  max-width: 22rem;
+  opacity: 0.9;
+}
+
+.refresh {
+  min-height: 2rem;
+  padding-inline: var(--space-3);
+  font-size: var(--text-s);
+  border-color: var(--line-strong);
+  color: var(--muted);
+}

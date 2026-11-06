@@ -14,6 +14,9 @@ reports/
 backups/
 *.zip
 
+# The gym's own branding (logo): one per install, never in the public repo (decision 0034)
+branding/
+
 # Uploaded files (health forms, photos), in case any end up on disk
 uploads/
 media/

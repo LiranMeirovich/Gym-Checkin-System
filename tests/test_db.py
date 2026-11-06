@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from starlette.types import Receive, Scope, Send
 
 from app.core.db import (
@@ -20,6 +20,7 @@ from app.core.db import (
     create_db_engine,
     get_db,
     get_engine,
+    get_read_only_db,
 )
 
 
@@ -214,3 +215,75 @@ def test_a_second_request_waits_and_sees_what_the_first_saved(notes: None) -> No
 
     assert seen == [1]
     assert saved_notes() == ["first", "second"]
+
+
+# ── Read-only sessions ──────────────────────────────────────────────────
+
+
+def test_a_read_only_session_takes_no_write_lock(notes: None) -> None:
+    session = get_read_only_db()
+    db = next(session)
+    db.execute(text("SELECT count(*) FROM note"))
+
+    writer = other_writer()
+    try:
+        # A save elsewhere goes ahead while this session reads.
+        writer.execute("BEGIN IMMEDIATE")
+        writer.execute("ROLLBACK")
+    finally:
+        writer.close()
+        session.close()
+
+
+def test_a_read_only_session_refuses_any_write(notes: None) -> None:
+    session = get_read_only_db()
+    db = next(session)
+    try:
+        with pytest.raises(OperationalError, match="readonly"):
+            db.execute(text("INSERT INTO note (body) VALUES ('lost')"))
+    finally:
+        with contextlib.suppress(StopIteration):
+            next(session)
+
+    assert saved_notes() == []
+
+
+def test_a_read_only_session_hands_its_connection_back_writable(
+    notes: None,
+) -> None:
+    session = get_read_only_db()
+    next(session)
+    with contextlib.suppress(StopIteration):
+        next(session)
+
+    # The pool hands out the same connection next; it must write normally.
+    with get_engine().begin() as connection:
+        connection.exec_driver_sql("INSERT INTO note (body) VALUES ('kept')")
+        assert connection.exec_driver_sql("PRAGMA query_only").scalar() == 0
+
+    assert saved_notes() == ["kept"]
+
+
+def test_a_read_only_session_leaves_no_pooled_connection_read_only(
+    notes: None,
+) -> None:
+    # Two idle connections in the pool, as when requests run at once. The
+    # session must switch query_only off on the connection it switched it
+    # on for, not on whichever one the pool hands out next.
+    engine = get_engine()
+    first, second = engine.connect(), engine.connect()
+    first.close()
+    second.close()
+
+    session = get_read_only_db()
+    next(session)
+    with contextlib.suppress(StopIteration):
+        next(session)
+
+    held = [engine.connect(), engine.connect()]
+    try:
+        for connection in held:
+            assert connection.exec_driver_sql("PRAGMA query_only").scalar() == 0
+    finally:
+        for connection in held:
+            connection.close()

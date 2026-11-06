@@ -13,15 +13,22 @@ import {
   formatDate,
   healthFormKey,
   healthFormsKey,
-  isManager,
   type Customer,
 } from "../customers";
+import { isManager } from "../roles";
 import { useSession } from "../session";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+  NO_CONNECTION_RELOAD,
+} from "../../shared/NoConnection";
+import ui from "../layout/ui.module.css";
+import { StatusBadge } from "../../shared/Status";
+import { type Tone } from "../../shared/Status";
+import styles from "./CustomerHealthForm.module.css";
 
 type Status = Schemas["HealthFormStatus"];
 type FormSummary = Schemas["HealthFormSummary"];
-
-const NO_CONNECTION = "אין חיבור לשרת. נסו לרענן את הדף.";
 
 // The server keeps a note at most this size on its longer side
 // (`NOTE_MAX_SIDE`); shrinking first keeps the upload small and quick.
@@ -45,6 +52,12 @@ async function fetchForms(id: number): Promise<FormSummary[]> {
   throw new Error(`GET health-forms failed: ${response.status}`);
 }
 
+const STATE_BADGES: Record<Status["state"], { tone: Tone; text: string }> = {
+  valid: { tone: "ok", text: "בתוקף" },
+  needs_doctor_note: { tone: "warn", text: "חסר אישור רפואי" },
+  missing: { tone: "stop", text: "אין הצהרה בתוקף" },
+};
+
 function statusText(status: Status): string {
   const until = status.valid_until ? formatDate(status.valid_until) : "";
   switch (status.state) {
@@ -65,19 +78,27 @@ export function CustomerHealthForm({ customer }: { customer: Customer }) {
   });
 
   return (
-    <section>
+    <section className={ui.panel}>
       <h2>הצהרת בריאות</h2>
       {isPending ? null : isError ? (
-        <p role="alert">{NO_CONNECTION}</p>
+        <NoConnection />
       ) : (
         <>
-          <p>{statusText(data)}</p>
+          <div className={ui.statusLine}>
+            <StatusBadge tone={STATE_BADGES[data.state].tone}>
+              {STATE_BADGES[data.state].text}
+            </StatusBadge>
+            <span>{statusText(data)}</span>
+          </div>
           {customer.active && data.state === "missing" && (
             <p>
-              <Link to={`/customers/${customer.id}/health-form`}>
+              <Link
+                className={ui.primaryLink}
+                to={`/customers/${customer.id}/health-form`}
+              >
                 מילוי הצהרת הבריאות כאן, במחשב
               </Link>{" "}
-              <small>(ללקוח בלי סמארטפון)</small>
+              <span className={ui.muted}>(ללקוח בלי סמארטפון)</span>
             </p>
           )}
           {customer.active && data.state === "needs_doctor_note" && (
@@ -85,7 +106,12 @@ export function CustomerHealthForm({ customer }: { customer: Customer }) {
           )}
         </>
       )}
-      {isManager(session) && <SignedForms customer={customer} />}
+      {isManager(session) && (
+        <div className={ui.subsection}>
+          <h3>טפסים חתומים</h3>
+          <SignedForms customer={customer} />
+        </div>
+      )}
     </section>
   );
 }
@@ -138,7 +164,7 @@ function DoctorNoteUpload({ customer }: { customer: Customer }) {
         setMessage("השמירה נכשלה. נסו שוב.");
       }
     } catch {
-      setMessage("אין חיבור לשרת. נסו שוב.");
+      setMessage(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
       // The same file can be chosen again after a failure.
@@ -149,18 +175,19 @@ function DoctorNoteUpload({ customer }: { customer: Customer }) {
   return (
     <>
       {message && <p role="alert">{message}</p>}
-      <p>
-        <label>
-          הוספת אישור רפואי (צילום או סריקה):{" "}
-          <input
-            type="file"
-            accept="image/jpeg,image/png"
-            disabled={sending}
-            onChange={(event) => void upload(event)}
-          />
+      <div className={styles.upload}>
+        <label htmlFor={`doctor-note-${customer.id}`}>
+          הוספת אישור רפואי (צילום או סריקה)
         </label>
-        {sending && " שולח…"}
-      </p>
+        <input
+          id={`doctor-note-${customer.id}`}
+          type="file"
+          accept="image/jpeg,image/png"
+          disabled={sending}
+          onChange={(event) => void upload(event)}
+        />
+        {sending && <span className={ui.muted}>שולח…</span>}
+      </div>
     </>
   );
 }
@@ -214,7 +241,9 @@ function SignedForms({ customer }: { customer: Customer }) {
       if (!file) {
         tab?.close();
         setMessage(
-          response.status === 403 ? "אין הרשאה לפתוח את הקובץ." : NO_CONNECTION,
+          response.status === 403
+            ? "אין הרשאה לפתוח את הקובץ."
+            : NO_CONNECTION_RELOAD,
         );
         return;
       }
@@ -230,7 +259,7 @@ function SignedForms({ customer }: { customer: Customer }) {
       }, 60_000);
     } catch {
       tab?.close();
-      setMessage(NO_CONNECTION);
+      setMessage(NO_CONNECTION_RELOAD);
     }
   }
 
@@ -253,8 +282,10 @@ function SignedForms({ customer }: { customer: Customer }) {
   }
 
   if (isPending) return null;
-  if (isError) return <p role="alert">{NO_CONNECTION}</p>;
-  if (data.length === 0) return <p>הלקוח עוד לא מילא טופס.</p>;
+  if (isError) return <NoConnection />;
+  if (data.length === 0) {
+    return <p className={ui.muted}>הלקוח עוד לא מילא טופס.</p>;
+  }
   return (
     <>
       {message && <p role="alert">{message}</p>}
@@ -266,54 +297,58 @@ function SignedForms({ customer }: { customer: Customer }) {
           </a>
         </p>
       )}
-      <table>
-        <thead>
-          <tr>
-            <th>נחתם</th>
-            <th>בתוקף עד</th>
-            <th>חותם</th>
-            <th>אישור רפואי</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((form) => (
-            <tr key={form.id}>
-              <td>{formatDate(form.signed_on)}</td>
-              <td>{formatDate(form.expires_on)}</td>
-              <td>
-                {form.signer_name}
-                {form.signed_by_guardian && " (הורה)"}
-              </td>
-              <td>
-                {!form.needs_doctor_note
-                  ? "לא נדרש"
-                  : form.doctor_note_ids.length === 0
-                    ? "נדרש, חסר"
-                    : form.doctor_note_ids.map((noteId, index) => (
-                        <button
-                          key={noteId}
-                          type="button"
-                          onClick={() => void openNote(noteId)}
-                        >
-                          {form.doctor_note_ids.length === 1
-                            ? "פתיחת האישור"
-                            : `פתיחת אישור ${index + 1}`}
-                        </button>
-                      ))}
-              </td>
-              <td>
-                <button type="button" onClick={() => void openForm(form)}>
-                  פתיחת הטופס
-                </button>
-              </td>
+      <div className={ui.flushTable}>
+        <table>
+          <thead>
+            <tr>
+              <th>נחתם</th>
+              <th>בתוקף עד</th>
+              <th>חותם</th>
+              <th>אישור רפואי</th>
+              <th className={ui.rowAction}>
+                <span className="visually-hidden">טופס</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>
-        <small>כל פתיחה של טופס או אישור נרשמת ביומן הפעילות.</small>
-      </p>
+          </thead>
+          <tbody>
+            {data.map((form) => (
+              <tr key={form.id}>
+                <td>{formatDate(form.signed_on)}</td>
+                <td>{formatDate(form.expires_on)}</td>
+                <td>
+                  {form.signer_name}
+                  {form.signed_by_guardian && " (הורה)"}
+                </td>
+                <td>
+                  {!form.needs_doctor_note ? (
+                    "לא נדרש"
+                  ) : form.doctor_note_ids.length === 0 ? (
+                    <StatusBadge tone="warn">נדרש, חסר</StatusBadge>
+                  ) : (
+                    form.doctor_note_ids.map((noteId, index) => (
+                      <button
+                        key={noteId}
+                        type="button"
+                        onClick={() => void openNote(noteId)}
+                      >
+                        {form.doctor_note_ids.length === 1
+                          ? "פתיחת האישור"
+                          : `פתיחת אישור ${index + 1}`}
+                      </button>
+                    ))
+                  )}
+                </td>
+                <td className={ui.rowAction}>
+                  <button type="button" onClick={() => void openForm(form)}>
+                    פתיחת הטופס
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className={ui.note}>כל פתיחה של טופס או אישור נרשמת ביומן הפעילות.</p>
     </>
   );
 }

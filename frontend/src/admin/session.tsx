@@ -27,6 +27,9 @@ import {
   setCsrfToken,
   type Schemas,
 } from "./backend/client";
+import { AppHeader } from "./layout/AppHeader";
+import pageStyles from "./layout/Page.module.css";
+import { NoConnection } from "../shared/NoConnection";
 
 export type Session = Schemas["SessionInfo"];
 
@@ -97,7 +100,7 @@ export function RequireSession({ bare = false }: { bare?: boolean }) {
   });
 
   if (isPending) return null;
-  if (isError) return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+  if (isError) return <NoConnection />;
   if (!data.loggedIn) {
     return <Navigate to={data.setupNeeded ? "/setup" : "/login"} replace />;
   }
@@ -158,17 +161,10 @@ function LoggedIn({
 
   return (
     <SessionContext.Provider value={session}>
-      {bare ? null : (
-        <header>
-          <span>
-            {session.staff.display_name} · {ROLE_NAMES[session.staff.role]}
-          </span>{" "}
-          <button type="button" onClick={lock}>
-            נעילה
-          </button>
-        </header>
-      )}
-      <main>{children}</main>
+      {bare ? null : <AppHeader session={session} onLock={lock} />}
+      <main className={bare ? pageStyles.bare : pageStyles.page}>
+        {children}
+      </main>
     </SessionContext.Provider>
   );
 }

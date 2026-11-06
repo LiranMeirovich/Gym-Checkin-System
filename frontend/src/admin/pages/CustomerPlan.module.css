@@ -1,0 +1,9 @@
+/* Clearing a plan, once confirmed. */
+.danger {
+  border-color: var(--stop);
+  color: var(--stop);
+}
+
+.danger:hover {
+  background: var(--stop-tint);
+}

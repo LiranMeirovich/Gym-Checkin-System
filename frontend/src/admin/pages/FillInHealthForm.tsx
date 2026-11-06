@@ -16,6 +16,7 @@ import {
 } from "../../shared/HealthForm";
 import { api, type Schemas } from "../backend/client";
 import { healthFormKey, healthFormsKey } from "../customers";
+import ui from "../layout/ui.module.css";
 
 type Status = Schemas["HealthFormStatus"];
 
@@ -64,7 +65,9 @@ export function FillInHealthForm() {
   return (
     <>
       <p>
-        <Link to={back}>ביטול וחזרה לכרטיס הלקוח</Link>
+        <Link className={ui.back} to={back}>
+          ביטול וחזרה לכרטיס הלקוח
+        </Link>
       </p>
       <HealthForm
         queryKey={["customers", id, "health-form-to-fill-in"]}

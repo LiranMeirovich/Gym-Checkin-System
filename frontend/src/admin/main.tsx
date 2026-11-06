@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router";
+import "../shared/styles/base.css";
 import { App } from "./App";
 
 // The server is on the same PC: a failed request won't succeed on a

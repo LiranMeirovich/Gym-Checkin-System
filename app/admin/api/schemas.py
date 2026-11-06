@@ -81,6 +81,17 @@ class SessionInfo(Answer):
     lock_after_seconds: int
 
 
+# ── Branding ────────────────────────────────────────────────────────────
+
+
+class Branding(Answer):
+    """The gym's name (null before first-run setup) and whether
+    ``/branding/logo`` has a logo to show."""
+
+    gym_name: str | None
+    has_logo: bool
+
+
 # ── First-run setup ─────────────────────────────────────────────────────
 
 

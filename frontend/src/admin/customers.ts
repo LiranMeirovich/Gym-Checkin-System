@@ -1,11 +1,6 @@
-// What the customer screens share: display formats, the Hebrew text for
-// the API's error codes, and which buttons a role sees.
-//
-// Hiding a button is never the protection: every customer route checks its
-// own permission on the server (decision 0023). This only keeps the
-// screen from offering what the server would refuse.
+// What the customer screens share: display formats and the Hebrew text
+// for the API's error codes. Which buttons a role sees is in roles.ts.
 import type { Schemas } from "./backend/client";
-import type { Session } from "./session";
 
 export type Customer = Schemas["CustomerDetails"];
 // The fields a 400 can name. (The generated type of `errors` is keyed by
@@ -54,12 +49,6 @@ export const FIELD_ERRORS: Record<CustomerField, string> = {
 };
 
 export const NOTES_MAX_LENGTH = 256;
-
-/** The manager-only customer actions: changing a date of birth
- * (`customers.edit_birth_date`) and deactivating (`customers.archive`). */
-export function isManager(session: Session): boolean {
-  return session.staff.role === "manager";
-}
 
 /** "+972501234567" → "050-123-4567", "+97231234567" → "03-123-4567". */
 export function formatPhone(stored: string): string {

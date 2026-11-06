@@ -1,0 +1,32 @@
+.screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* A touch bigger than the desk: read at arm's length, often walking. */
+  font-size: 1.0625rem;
+}
+
+.top {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) var(--space-4);
+  background: var(--paper);
+  border-block-end: 1px solid var(--line);
+}
+
+.column {
+  max-width: 30rem;
+  margin-inline: auto;
+  padding: var(--space-5) var(--space-4) var(--space-7);
+}
+
+/* The phone's minimum sizes. Inside :where() they weigh nothing, like
+   base.css, so a page's own class always wins without !important.
+   Inputs never smaller than 16px, or iOS zooms in on them. */
+:where(.column input, .column textarea, .column select) {
+  font-size: max(1rem, 16px);
+  max-width: 100%;
+}
+
+:where(.column button) {
+  min-height: 3rem;
+}
