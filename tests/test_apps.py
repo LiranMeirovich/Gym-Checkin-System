@@ -56,6 +56,8 @@ def test_public_app_registers_only_expected_routes() -> None:
     # /assets and the catch-all serve the public React build (app.core.spa).
     assert paths == {
         "/health",
+        "/api/branding",
+        "/branding/logo",
         "/api/check-in",
         "/api/health-form",
         "/api/link",

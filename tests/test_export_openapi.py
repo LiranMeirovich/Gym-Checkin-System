@@ -64,6 +64,7 @@ def test_the_public_export_works_with_its_docs_switched_off(tmp_path: Path) -> N
 
     spec = json.loads(target.read_text(encoding="utf-8"))
     assert set(spec["paths"]) == {
+        "/api/branding",
         "/api/check-in",
         "/api/health-form",
         "/api/link",
