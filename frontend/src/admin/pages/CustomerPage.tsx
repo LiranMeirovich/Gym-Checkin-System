@@ -144,7 +144,9 @@ function CustomerDetails({ customer }: { customer: Customer }) {
       ) : (
         <dl>
           <dt>טלפון</dt>
-          <dd dir="ltr">{formatPhone(customer.phone)}</dd>
+          <dd>
+            <span dir="ltr">{formatPhone(customer.phone)}</span>
+          </dd>
           <dt>תאריך לידה</dt>
           <dd>{formatDate(customer.date_of_birth)}</dd>
           <dt>הערות</dt>

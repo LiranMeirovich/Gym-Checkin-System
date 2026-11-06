@@ -24,7 +24,7 @@ export function AppHeader({
   return (
     <header className={styles.bar}>
       <div className={styles.inner}>
-        <NavLink to="/" className={styles.home} aria-label="ראשי">
+        <NavLink to="/" className={styles.home}>
           <Brand branding={branding} size="header" />
         </NavLink>
         <nav aria-label="מסכים" className={styles.nav}>

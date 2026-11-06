@@ -1,0 +1,133 @@
+/* The building blocks of a staff screen. Plain HTML already has the look
+   (shared/styles/base.css); these add the page's structure. */
+
+/* The heading row: the title, with the screen's main actions at the end. */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-5);
+  margin-block-end: var(--space-5);
+}
+
+.head h1 {
+  margin: 0;
+}
+
+.actions {
+  margin-inline-start: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* "Back to the list": a quiet link above the title. */
+.back {
+  display: inline-block;
+  margin-block-end: var(--space-2);
+  font-size: var(--text-s);
+  color: var(--muted);
+}
+
+/* A link that does what a main button does (opens a form). */
+.primaryLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--navy);
+  color: var(--paper);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.primaryLink:hover {
+  background: var(--navy-deep);
+  color: var(--paper);
+}
+
+/* A section of a screen: white on the grey page. */
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: var(--space-5);
+  margin-block-end: var(--space-5);
+}
+
+.panel > h2:first-child {
+  margin-block-end: var(--space-4);
+}
+
+/* A panel that is only a table: the table runs to the panel's edges. */
+.tablePanel {
+  composes: panel;
+  padding: 0;
+  overflow-x: auto;
+}
+
+.tablePanel table {
+  background: transparent;
+}
+
+.tablePanel tr:last-child > td {
+  border-block-end: none;
+}
+
+/* A section's title above a table panel. */
+.sectionTitle {
+  margin-block: var(--space-6) var(--space-3);
+}
+
+/* A form field: label above, the field, its error below. */
+.field {
+  margin-block-end: var(--space-4);
+}
+
+.field [role="alert"] {
+  margin-block-start: var(--space-1);
+  font-size: var(--text-s);
+}
+
+.form {
+  max-width: 36rem;
+}
+
+/* Two fields side by side, one under the other on a narrow screen. */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0 var(--space-4);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* "Nothing here yet". */
+.empty {
+  color: var(--muted);
+  padding: var(--space-5);
+  margin: 0;
+}
+
+/* A table cell that holds the row's action, at the row's end. */
+.rowAction {
+  text-align: end;
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* A row's own link: the whole name is the target. */
+.rowLink {
+  font-weight: 700;
+  color: var(--navy-deep);
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  color: var(--steel);
+  text-decoration: underline;
+}

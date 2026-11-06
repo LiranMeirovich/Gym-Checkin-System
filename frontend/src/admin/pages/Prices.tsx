@@ -3,7 +3,6 @@
 // the form is never the protection: the server checks `prices.edit`.
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router";
 import { api, type Schemas } from "../backend/client";
 import { formatDate } from "../customers";
 import { isManager } from "../roles";
@@ -18,6 +17,9 @@ import {
   shekelsToAgorot,
 } from "../prices";
 import { useSession } from "../session";
+import { Field, PageHead } from "../layout/ui";
+import ui from "../layout/ui.module.css";
+import styles from "./Prices.module.css";
 import {
   NoConnection,
   NO_CONNECTION_TRY_AGAIN,
@@ -42,16 +44,17 @@ export function Prices() {
 
   return (
     <>
-      <h1>מחירון</h1>
-      <p>
-        <Link to="/">חזרה</Link>
-      </p>
+      <PageHead title="מחירון" />
       {isPending ? null : isError ? (
         <NoConnection />
       ) : (
         <>
           <Current overview={data} />
-          <Rows title="שינויים עתידיים" rows={data.upcoming} empty="אין." />
+          <Rows
+            title="שינויים עתידיים"
+            rows={data.upcoming}
+            empty="אין שינויים מתוכננים."
+          />
           {isManager(session) && <ChangeForm overview={data} />}
           <Rows
             title="היסטוריה"
@@ -70,42 +73,48 @@ function Current({ overview }: { overview: Overview }) {
       (c) => c.plan === plan && c.age_group === ageGroup,
     );
     if (price?.amount_agorot == null || !price.valid_from_month) {
-      return "לא נקבע";
+      return <span className={styles.notSet}>לא נקבע</span>;
     }
     return (
       <>
-        <span dir="ltr">{formatShekels(price.amount_agorot)}</span> (מ-
-        <span dir="ltr">{formatMonth(price.valid_from_month)}</span>)
+        <span className={styles.amount}>
+          <span dir="ltr">{formatShekels(price.amount_agorot)}</span>
+        </span>
+        <span className={styles.since}>
+          מ-<span dir="ltr">{formatMonth(price.valid_from_month)}</span>
+        </span>
       </>
     );
   }
 
   return (
     <>
-      <h2>
+      <h2 className={ui.sectionTitle}>
         המחירים החודש (
         <span dir="ltr">{formatMonth(overview.current_month)}</span>)
       </h2>
-      <table>
-        <thead>
-          <tr>
-            <th>תוכנית</th>
-            {AGE_GROUPS.map((group) => (
-              <th key={group}>{AGE_GROUP_NAMES[group]}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {PLANS.map((plan) => (
-            <tr key={plan}>
-              <td>{PLAN_NAMES[plan]}</td>
+      <div className={ui.tablePanel}>
+        <table className={styles.current}>
+          <thead>
+            <tr>
+              <th>תוכנית</th>
               {AGE_GROUPS.map((group) => (
-                <td key={group}>{cell(plan, group)}</td>
+                <th key={group}>{AGE_GROUP_NAMES[group]}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {PLANS.map((plan) => (
+              <tr key={plan}>
+                <th scope="row">{PLAN_NAMES[plan]}</th>
+                {AGE_GROUPS.map((group) => (
+                  <td key={group}>{cell(plan, group)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
@@ -121,32 +130,42 @@ function Rows({
 }) {
   return (
     <>
-      <h2>{title}</h2>
+      <h2 className={ui.sectionTitle}>{title}</h2>
       {rows.length === 0 ? (
-        <p>{empty}</p>
+        <div className={ui.tablePanel}>
+          <p className={ui.empty}>{empty}</p>
+        </div>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>תוכנית</th>
-              <th>גיל</th>
-              <th>מחיר</th>
-              <th>בתוקף מ-</th>
-              <th>הוזן בתאריך</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td>{PLAN_NAMES[row.plan]}</td>
-                <td>{AGE_GROUP_NAMES[row.age_group]}</td>
-                <td dir="ltr">{formatShekels(row.amount_agorot)}</td>
-                <td dir="ltr">{formatMonth(row.valid_from_month)}</td>
-                <td dir="ltr">{formatDate(row.created_at)}</td>
+        <div className={ui.tablePanel}>
+          <table>
+            <thead>
+              <tr>
+                <th>תוכנית</th>
+                <th>גיל</th>
+                <th>מחיר</th>
+                <th>בתוקף מ-</th>
+                <th>הוזן בתאריך</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td>{PLAN_NAMES[row.plan]}</td>
+                  <td>{AGE_GROUP_NAMES[row.age_group]}</td>
+                  <td>
+                    <span dir="ltr">{formatShekels(row.amount_agorot)}</span>
+                  </td>
+                  <td>
+                    <span dir="ltr">{formatMonth(row.valid_from_month)}</span>
+                  </td>
+                  <td>
+                    <span dir="ltr">{formatDate(row.created_at)}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   );
@@ -215,30 +234,34 @@ function ChangeForm({ overview }: { overview: Overview }) {
 
   return (
     <>
-      <h2>שינוי מחירים</h2>
-      <p>
-        מחיר חדש חל מהחודש שנבחר ואילך, ושינויים עתידיים שכבר נקבעו נשארים.
-        לקוחות שכבר בחרו תוכנית שומרים על המחיר שבחרו בו.
-      </p>
-      <form onSubmit={submit} autoComplete="off">
+      <h2 className={ui.sectionTitle}>שינוי מחירים</h2>
+      <form className={ui.panel} onSubmit={submit} autoComplete="off">
+        <p className={ui.muted}>
+          מחיר חדש חל מהחודש שנבחר ואילך, ושינויים עתידיים שכבר נקבעו נשארים.
+          לקוחות שכבר בחרו תוכנית שומרים על המחיר שבחרו בו.
+        </p>
         {formError && <p role="alert">{formError}</p>}
         {outcome && <p role="status">{outcome}</p>}
-        <p>
-          <label htmlFor="valid_from_month">בתוקף מחודש</label>{" "}
+        <Field
+          id="valid_from_month"
+          label="בתוקף מחודש"
+          error={
+            errors.has("valid_from_month") &&
+            "החודש הנוכחי או עד 24 חודשים קדימה"
+          }
+        >
           <input
             id="valid_from_month"
+            className={styles.month}
             type="month"
             dir="ltr"
             value={month}
             min={overview.current_month}
             onChange={(event) => setMonth(event.target.value)}
             required
-          />{" "}
-          {errors.has("valid_from_month") && (
-            <span role="alert">החודש הנוכחי או עד 24 חודשים קדימה</span>
-          )}
-        </p>
-        <table>
+          />
+        </Field>
+        <table className={styles.changes}>
           <thead>
             <tr>
               <th>תוכנית</th>
@@ -250,12 +273,13 @@ function ChangeForm({ overview }: { overview: Overview }) {
           <tbody>
             {PLANS.map((plan) => (
               <tr key={plan}>
-                <td>{PLAN_NAMES[plan]}</td>
+                <th scope="row">{PLAN_NAMES[plan]}</th>
                 {AGE_GROUPS.map((group) => {
                   const name = priceField(plan, group);
                   return (
                     <td key={group}>
                       <input
+                        className={styles.amountInput}
                         aria-label={`${PLAN_NAMES[plan]}, ${AGE_GROUP_NAMES[group]}`}
                         inputMode="decimal"
                         dir="ltr"
@@ -263,7 +287,7 @@ function ChangeForm({ overview }: { overview: Overview }) {
                         onChange={(event) =>
                           setAmounts({ ...amounts, [name]: event.target.value })
                         }
-                      />{" "}
+                      />
                       {errors.has(name) && (
                         <span role="alert">
                           סכום בין ₪0.01 ל-₪10,000, עד שתי ספרות אחרי הנקודה
