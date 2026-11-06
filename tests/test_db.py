@@ -262,3 +262,28 @@ def test_a_read_only_session_hands_its_connection_back_writable(
         assert connection.exec_driver_sql("PRAGMA query_only").scalar() == 0
 
     assert saved_notes() == ["kept"]
+
+
+def test_a_read_only_session_leaves_no_pooled_connection_read_only(
+    notes: None,
+) -> None:
+    # Two idle connections in the pool, as when requests run at once. The
+    # session must switch query_only off on the connection it switched it
+    # on for, not on whichever one the pool hands out next.
+    engine = get_engine()
+    first, second = engine.connect(), engine.connect()
+    first.close()
+    second.close()
+
+    session = get_read_only_db()
+    next(session)
+    with contextlib.suppress(StopIteration):
+        next(session)
+
+    held = [engine.connect(), engine.connect()]
+    try:
+        for connection in held:
+            assert connection.exec_driver_sql("PRAGMA query_only").scalar() == 0
+    finally:
+        for connection in held:
+            connection.close()

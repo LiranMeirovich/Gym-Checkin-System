@@ -115,15 +115,22 @@ def get_read_only_db() -> Iterator[Session]:
     touches a staff or device session writes, so it can't use this. Routes
     don't use this directly; they declare a ``ReadOnlyDbSession`` parameter.
     """
+    # One connection, held throughout: switching query_only off must reach
+    # the same connection it was switched on for. Asking the session for a
+    # connection again after its rollback can get a different one from the
+    # pool when requests run at once, leaving this one read-only for the
+    # next request (which then fails at BEGIN IMMEDIATE).
     # No IMMEDIATE option on this engine: its transaction is a plain BEGIN.
-    with Session(get_engine()) as session:
-        session.connection().exec_driver_sql("PRAGMA query_only=ON")
+    with get_engine().connect() as connection:
+        connection.exec_driver_sql("PRAGMA query_only=ON")
         try:
-            yield session
+            with Session(bind=connection) as session:
+                yield session
         finally:
-            session.rollback()
+            connection.rollback()
             # Connections are pooled: hand this one back writable.
-            session.connection().exec_driver_sql("PRAGMA query_only=OFF")
+            connection.exec_driver_sql("PRAGMA query_only=OFF")
+            connection.rollback()
 
 
 # For the few routes that only read the gym's public facts on every page
