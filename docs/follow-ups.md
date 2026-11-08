@@ -14,7 +14,6 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 ## Milestone 3: phone linking & check-in
 - Doctor's notes: the official text says a note must be at most 3 months old. Not enforced (the developer's call, for now); confirm with the manager. A note added by mistake can't be removed (append-only); a "withdrawn" row would be new.
 - Health form renewal for customers without a phone (an expired form blocks their manual check-in): left for later by the developer. The PC form screen from feature 4 can serve it.
-- **The customer at the desk PC uses a logged-in staff session** (code review of feature 4, decision 0033). (1) The form screen hides the staff header, but its cancel link, the browser's Back button and the redirect after signing all lead into the admin app, so a customer left alone can browse other customers. (2) The auto-lock counts only API requests, and filling in the form sends none, so a manager's 5-minute lock can wipe a slow customer's form. One fix for both: a "customer mode" for the form screen that keeps the session alive while it's open and asks for the staff PIN to leave. Protected area (staff auth): the developer decides, before production.
 
 ## Milestone 4: admin screens (from Customers)
 - Customer list: search, and sorting / filtering by recent check-ins (e.g. who came in the past month), as queries.
@@ -53,6 +52,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Staff sessions (decision 0019): if the admin app moves behind HTTPS on a real hostname, change `ALLOWED_HOSTS` in `app/admin/main.py` and add `Secure` to the `gym_staff` cookie. Prod needs `GYM_SECRET_KEY` (both apps and `alembic`).
 
 ## Before launch: confirm with the manager
+- Staff stay with a customer filling in the health form on the desk PC: the form runs in a logged-in staff session, so a customer left alone could leave it for the admin app, and a manager's 5-minute lock can wipe a slow customer's form (no customer mode, decision 0037). A customer tablet with its own screen may come later.
 - Keeping customer data (no deletion on request) is fine (decision 0021).
 - The lock times (managers 5 min, instructors 60).
 - The instructor/manager permission split, still the design doc's proposal (one-line change in `ROLE_PERMISSIONS` plus its test). That now includes instructors seeing prices and their history (`prices.view`).
