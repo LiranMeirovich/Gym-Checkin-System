@@ -5,7 +5,7 @@ here that breaks the frontend fails its build."""
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StrictBool, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints
 
 from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
@@ -235,6 +235,11 @@ class PriceOverview(Answer):
 
 
 class PriceChange(BaseModel):
+    # An unknown field is refused, not dropped: a page from before one price
+    # per plan (decision 0036) still sends ``age_group``, and its under-18
+    # box must not quietly become the plan's price.
+    model_config = ConfigDict(extra="forbid")
+
     plan: Plan
     # Strict, so "100" and 100.0 are malformed rather than quietly converted.
     amount_agorot: int = Field(strict=True)

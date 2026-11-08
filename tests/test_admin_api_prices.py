@@ -228,6 +228,8 @@ def test_a_broken_save_names_every_part_and_saves_nothing(
         {**SAVE, "valid_from_month": "0999-01"},
         {**SAVE, "valid_from_month": "2026-10\n"},
         {**SAVE, "prices": [{**MONTHLY, "plan": "weekly"}]},
+        # A page from before one price per plan (decision 0036).
+        {**SAVE, "prices": [{**MONTHLY, "age_group": "under_18"}]},
         {**SAVE, "prices": [{**MONTHLY, "amount_agorot": "25000"}]},
         {**SAVE, "prices": [{**MONTHLY, "amount_agorot": 250.5}]},
         {"prices": [MONTHLY]},

@@ -13,7 +13,6 @@ import {
   customerKey,
   formatDate,
   formatPhone,
-  planKey,
   type Customer,
   type CustomerField,
 } from "../customers";
@@ -102,9 +101,6 @@ function CustomerDetails({ customer }: { customer: Customer }) {
       const { data, error, response } = await send();
       if (data) {
         queryClient.setQueryData(customerKey(data.id), data);
-        // The Plan section reads its own query; refresh it with the
-        // customer, so it never shows a stale one.
-        void queryClient.invalidateQueries({ queryKey: planKey(data.id) });
         void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
         setReactivated(false);
         return { saved: true };
