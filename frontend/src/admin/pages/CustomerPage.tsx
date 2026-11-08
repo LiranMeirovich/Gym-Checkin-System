@@ -102,8 +102,8 @@ function CustomerDetails({ customer }: { customer: Customer }) {
       const { data, error, response } = await send();
       if (data) {
         queryClient.setQueryData(customerKey(data.id), data);
-        // A new date of birth can change the age group, and so the prices
-        // the Plan section offers.
+        // The Plan section reads its own query; refresh it with the
+        // customer, so it never shows a stale one.
         void queryClient.invalidateQueries({ queryKey: planKey(data.id) });
         void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
         setReactivated(false);
@@ -385,11 +385,7 @@ function DateOfBirthForm({
   return (
     <form onSubmit={submit}>
       <OutcomeMessage outcome={outcome} />
-      <Field
-        id="date_of_birth"
-        label="תיקון תאריך לידה (קובע את מחיר עד גיל 18)"
-        error={error}
-      >
+      <Field id="date_of_birth" label="תיקון תאריך לידה" error={error}>
         <div className={styles.inline}>
           <input
             id="date_of_birth"

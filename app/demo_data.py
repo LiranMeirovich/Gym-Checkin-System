@@ -42,7 +42,7 @@ from app.core.health_forms import (
     local_today,
     save_form,
 )
-from app.core.models import AgeGroup, Customer, Plan, StaffUser
+from app.core.models import Customer, Plan, StaffUser
 from app.core.months import Month
 from app.core.permissions import Role
 from app.core.plans import choose_plan
@@ -58,14 +58,7 @@ INSTRUCTOR = ("איתי", "135790")
 FEMALE, MALE = Gender.FEMALE, Gender.MALE
 
 # The design doc's sample prices, in agorot.
-PRICES = {
-    (Plan.MONTHLY, AgeGroup.ADULT): 25000,
-    (Plan.MONTHLY, AgeGroup.UNDER_18): 20000,
-    (Plan.TRI_MONTHLY, AgeGroup.ADULT): 65000,
-    (Plan.TRI_MONTHLY, AgeGroup.UNDER_18): 52000,
-    (Plan.SINGLE_ENTRY, AgeGroup.ADULT): 4000,
-    (Plan.SINGLE_ENTRY, AgeGroup.UNDER_18): 3000,
-}
+PRICES = {Plan.MONTHLY: 25000, Plan.TRI_MONTHLY: 65000, Plan.SINGLE_ENTRY: 4000}
 
 
 def _signature() -> bytes:
@@ -141,7 +134,7 @@ def fill(db: Session) -> None:
     set_prices(
         db,
         month,
-        [PriceChange(plan, group, amount) for (plan, group), amount in PRICES.items()],
+        [PriceChange(plan, amount) for plan, amount in PRICES.items()],
         by=manager,
     )
     first_question = FORMS[CURRENT_VERSION].questions[0].key
@@ -165,7 +158,7 @@ def fill(db: Session) -> None:
     _sign_form(db, maya, FEMALE)
     check_in_manually(db, maya, by=instructor)
 
-    # Under 18: the form is signed by a parent, the under-18 price.
+    # Under 18: the form is signed by a parent.
     eitan = add("איתן", "גולן", "050-555-0105", date(2011, 2, 14))
     _sign_form(db, eitan, MALE, signer="אבי גולן")
     choose_plan(db, eitan, Plan.MONTHLY, month, by=manager)

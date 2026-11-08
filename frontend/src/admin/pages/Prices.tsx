@@ -7,13 +7,10 @@ import { api, type Schemas } from "../backend/client";
 import { formatDate } from "../customers";
 import { isManager } from "../roles";
 import {
-  AGE_GROUPS,
-  AGE_GROUP_NAMES,
   PLANS,
   PLAN_NAMES,
   formatMonth,
   formatShekels,
-  priceField,
   shekelsToAgorot,
 } from "../prices";
 import { useSession } from "../session";
@@ -68,10 +65,8 @@ export function Prices() {
 }
 
 function Current({ overview }: { overview: Overview }) {
-  function cell(plan: string, ageGroup: string) {
-    const price = overview.current.find(
-      (c) => c.plan === plan && c.age_group === ageGroup,
-    );
+  function cell(plan: string) {
+    const price = overview.current.find((c) => c.plan === plan);
     if (price?.amount_agorot == null || !price.valid_from_month) {
       return <span className={styles.notSet}>לא נקבע</span>;
     }
@@ -98,18 +93,14 @@ function Current({ overview }: { overview: Overview }) {
           <thead>
             <tr>
               <th>תוכנית</th>
-              {AGE_GROUPS.map((group) => (
-                <th key={group}>{AGE_GROUP_NAMES[group]}</th>
-              ))}
+              <th>מחיר</th>
             </tr>
           </thead>
           <tbody>
             {PLANS.map((plan) => (
               <tr key={plan}>
                 <th scope="row">{PLAN_NAMES[plan]}</th>
-                {AGE_GROUPS.map((group) => (
-                  <td key={group}>{cell(plan, group)}</td>
-                ))}
+                <td>{cell(plan)}</td>
               </tr>
             ))}
           </tbody>
@@ -141,7 +132,6 @@ function Rows({
             <thead>
               <tr>
                 <th>תוכנית</th>
-                <th>גיל</th>
                 <th>מחיר</th>
                 <th>בתוקף מ-</th>
                 <th>הוזן בתאריך</th>
@@ -151,7 +141,6 @@ function Rows({
               {rows.map((row) => (
                 <tr key={row.id}>
                   <td>{PLAN_NAMES[row.plan]}</td>
-                  <td>{AGE_GROUP_NAMES[row.age_group]}</td>
                   <td>
                     <span dir="ltr">{formatShekels(row.amount_agorot)}</span>
                   </td>
@@ -188,15 +177,13 @@ function ChangeForm({ overview }: { overview: Overview }) {
 
     const prices: Schemas["PriceChange"][] = [];
     const notAmounts = new Set<string>();
+    // A price's field, and the API's name for it in a refusal, is its plan.
     for (const plan of PLANS) {
-      for (const age_group of AGE_GROUPS) {
-        const name = priceField(plan, age_group);
-        const text = amounts[name]?.trim();
-        if (!text) continue;
-        const amount_agorot = shekelsToAgorot(text);
-        if (amount_agorot === null) notAmounts.add(name);
-        else prices.push({ plan, age_group, amount_agorot });
-      }
+      const text = amounts[plan]?.trim();
+      if (!text) continue;
+      const amount_agorot = shekelsToAgorot(text);
+      if (amount_agorot === null) notAmounts.add(plan);
+      else prices.push({ plan, amount_agorot });
     }
     setErrors(notAmounts);
     if (notAmounts.size > 0) return;
@@ -265,37 +252,30 @@ function ChangeForm({ overview }: { overview: Overview }) {
           <thead>
             <tr>
               <th>תוכנית</th>
-              {AGE_GROUPS.map((group) => (
-                <th key={group}>{AGE_GROUP_NAMES[group]} (₪)</th>
-              ))}
+              <th>מחיר (₪)</th>
             </tr>
           </thead>
           <tbody>
             {PLANS.map((plan) => (
               <tr key={plan}>
                 <th scope="row">{PLAN_NAMES[plan]}</th>
-                {AGE_GROUPS.map((group) => {
-                  const name = priceField(plan, group);
-                  return (
-                    <td key={group}>
-                      <input
-                        className={styles.amountInput}
-                        aria-label={`${PLAN_NAMES[plan]}, ${AGE_GROUP_NAMES[group]}`}
-                        inputMode="decimal"
-                        dir="ltr"
-                        value={amounts[name] ?? ""}
-                        onChange={(event) =>
-                          setAmounts({ ...amounts, [name]: event.target.value })
-                        }
-                      />
-                      {errors.has(name) && (
-                        <span role="alert">
-                          סכום בין ₪0.01 ל-₪10,000, עד שתי ספרות אחרי הנקודה
-                        </span>
-                      )}
-                    </td>
-                  );
-                })}
+                <td>
+                  <input
+                    className={styles.amountInput}
+                    aria-label={PLAN_NAMES[plan]}
+                    inputMode="decimal"
+                    dir="ltr"
+                    value={amounts[plan] ?? ""}
+                    onChange={(event) =>
+                      setAmounts({ ...amounts, [plan]: event.target.value })
+                    }
+                  />
+                  {errors.has(plan) && (
+                    <span role="alert">
+                      סכום בין ₪0.01 ל-₪10,000, עד שתי ספרות אחרי הנקודה
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

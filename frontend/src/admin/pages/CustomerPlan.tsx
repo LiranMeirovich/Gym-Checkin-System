@@ -1,20 +1,14 @@
 // The Plan section of a customer's page: what covers this month, the
 // manager's choice for a month with no plan, changing or clearing this
-// month's choice, and every choice so far. The price and age group come
-// from the server; the forms only send the plan and which month or choice
+// month's choice, and every choice so far. The price comes from the
+// server; the forms only send the plan and which month or choice
 // they showed.
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { formatDate, planKey, type Customer } from "../customers";
 import { isManager } from "../roles";
-import {
-  AGE_GROUP_NAMES,
-  PLAN_NAMES,
-  formatMonth,
-  formatShekels,
-  type Plan,
-} from "../prices";
+import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
 import { useSession } from "../session";
 import {
   NoConnection,
@@ -325,9 +319,6 @@ function PlanOptions({
               onChange={() => onChange(option.plan)}
             />
             {PLAN_NAMES[option.plan]}
-            <span className={ui.muted}>
-              {AGE_GROUP_NAMES[option.age_group]}
-            </span>
             <span className={ui.choicePrice}>
               {option.amount_agorot === null
                 ? "המחיר לא נקבע"
@@ -359,7 +350,6 @@ function History({ choices }: { choices: PlanChoice[] }) {
               <th>חודשים</th>
               <th>מסלול</th>
               <th>מחיר</th>
-              <th>קבוצת גיל</th>
               <th>מצב</th>
               <th>נבחר על ידי</th>
               <th>תאריך</th>
@@ -380,11 +370,6 @@ function History({ choices }: { choices: PlanChoice[] }) {
                   {choice.unit_price_agorot === null
                     ? "—"
                     : formatShekels(choice.unit_price_agorot)}
-                </td>
-                <td>
-                  {choice.age_group === null
-                    ? "—"
-                    : AGE_GROUP_NAMES[choice.age_group]}
                 </td>
                 <td>{state(choice)}</td>
                 <td>
