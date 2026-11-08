@@ -42,7 +42,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | --- | --- | --- |
 | Manager | Admin app on the gym PC, own login | Everything, including prices, reports, settings and staff accounts |
 | Instructor | Admin app on the gym PC, own login | Day-to-day desk work: check-ins, new customers, linking phones (see table below) |
-| Customer | Own phone browser, via the wall QR | See their own status; choose their own plan once a month |
+| Customer | Own phone browser, via the wall QR | Sign themselves up; see their own status; choose their own plan once a month |
 
 **Permissions** (*proposed*; the manager confirms the final split)
 
@@ -51,7 +51,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | See the dashboard, today's check-ins, customer list and customer pages | Yes | Yes |
 | Manual check-in (with no plan this month, an instructor's check-in records single entry) | Yes | Yes |
 | Pick a plan for a customer who has none this month | No | Yes |
-| Add a customer; edit name, phone and notes | Yes | Yes |
+| Add a customer; edit name, phone and notes (a new customer can also sign up on their own phone, decision 0035) | Yes | Yes |
 | Link or unlink a customer's phone | Yes | Yes |
 | See whether a customer's health form is valid and when it expires | Yes | Yes |
 | Open the health form on a gym device for a customer, add a doctor's note | Yes | Yes |
@@ -125,6 +125,14 @@ The plan page lists the three plans with this customer's prices (adult or under 
 3. The server checks both, creates a device session, sets the login cookie, and checks the customer in straight away.
 
 A customer can have up to 3 linked phones; linking a 4th unlinks the least recently used one. The customer page lists them (device, last used) with an "Unlink" button for each.
+
+**Signing up on the phone (a new customer, decision 0035)**
+
+1. On the link page, a new customer taps "New here? Sign up" and enters their first name, last name, phone number and date of birth (the same rules as at the desk).
+2. The server creates the customer and a device session and sets the login cookie, all at once. The phone then continues as a linked phone: health form, plan, check-in.
+3. A number that already belongs to a customer, active or not, is refused with "go to the desk", where staff link the phone with a code. Only staff bring back an inactive customer.
+
+The number isn't verified, and the refusal shows that a number is a customer's; both are accepted risks (decision 0035). The sign-up isn't in the activity log, since no staff member made it.
 
 **Login cookie**
 
@@ -292,7 +300,7 @@ The only thing reachable from outside is the public app's check-in pages; everyt
 
 **Public app (reachable through the tunnel)**
 
-- Mounts only the customer routes: the check-in page, the link page, and static files. Admin routes are not registered on this instance, so they can't be reached even by guessing URLs.
+- Mounts only the customer routes: the check-in page, the link and sign-up pages, and static files. Admin routes are not registered on this instance, so they can't be reached even by guessing URLs.
 - Listens on `127.0.0.1:8001` only; `cloudflared` is the one thing that connects to it. No router ports are opened.
 - Shows a customer only their own name, plan and visit count, never other customers' data.
 - Is rate-limited by IP at the edge (a Cloudflare rule in front of the tunnel), not in the app (decision 0029).
@@ -337,7 +345,7 @@ The built screens share one look (decision 0034): the gym's logo (kept outside t
 
 &#91;embedded content: customer phone pages · link, choose a plan, status, sample prices\]
 
-The link page appears only on a phone that isn't linked yet; the plan page only at the first check-in of a month with no plan. Every other scan goes straight to the status page (or "Already checked in"). Pages are mobile-first, with large text and no login form.
+The link page (with sign-up for a new customer) appears only on a phone that isn't linked yet; the plan page only at the first check-in of a month with no plan. Every other scan goes straight to the status page (or "Already checked in"). Pages are mobile-first, with large text and no login form.
 
 ### Admin: dashboard
 
@@ -404,7 +412,7 @@ Build in six milestones, each usable and testable on its own; hand them to Claud
 
 1. **Foundation**: project layout, settings, SQLite schema and migrations, first manager account on first run, staff accounts with roles and server-side permission checks, the activity log, and the two app entry points (admin and public) sharing one core package. It ends with the frontend foundation: the React + TypeScript project with its admin and public builds, served by the two apps, with the first screens (setup, login) moved to React (decision 0020).
 2. **Customers, prices and plans**: customer create/edit/archive with date of birth, the price table with valid-from months, plan choices and corrections, and the monthly plan logic, with unit tests for every rule in Plans, prices and billing. Split into four features (decision 0022): Customers, Prices, Plan choices and monthly status, Plan corrections. Each ships its core logic, admin JSON routes and a plain, unstyled React page; freezes are dropped for now.
-3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, and manual check-in with plan selection and the health form on the desk PC. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (the official form's questions, decision 0031), Phone check-in and plan page, Manual check-in, doctor's notes and the form on the desk PC (decision 0033).
+3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, and manual check-in with plan selection and the health form on the desk PC. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (the official form's questions, decision 0031), Phone check-in and plan page, Manual check-in, doctor's notes and the form on the desk PC (decision 0033); then self sign-up on the phone (decision 0035).
 4. **Admin screens**: dashboard with live check-ins and expiring health forms, customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role, building on the pages from milestones 2 and 3. The styling pass comes first, before milestone 3's last feature (decision 0034): the look is designed once with the `frontend-design` skill and applied to every existing screen, admin and customer (including the milestone 3 phone pages); the new screens here use it. Test every manager-only action as an instructor and confirm it's refused.
 5. **Report**: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan, age group and edge case.
 6. **Operations**: encrypted backups and restore, Windows services for both apps and `cloudflared`, the named Cloudflare tunnel on the gym domain, SMTP setup, a printable wall-QR page, and a setup guide for the gym PC. All deployment testing happens here, through the chosen host: proxy headers, https and the login cookie on real phones, and edge rate limiting (decisions 0029, 0030).
