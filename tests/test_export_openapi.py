@@ -69,6 +69,7 @@ def test_the_public_export_works_with_its_docs_switched_off(tmp_path: Path) -> N
         "/api/health-form",
         "/api/link",
         "/api/me",
+        "/api/sign-up",
     }
 
 

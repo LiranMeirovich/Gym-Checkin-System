@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sign-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign Up Route */
+        post: operations["sign_up_route_api_sign_up_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -328,6 +345,19 @@ export interface components {
          */
         Outcome: "checked_in" | "already_checked_in";
         /**
+         * PhoneTaken
+         * @description 409: the number is already a customer's (active or not). Nothing
+         *     was saved; the customer links this phone at the desk instead.
+         */
+        PhoneTaken: {
+            /**
+             * Detail
+             * @default phone_taken
+             * @constant
+             */
+            detail: "phone_taken";
+        };
+        /**
          * Plan
          * @description What a customer can choose for a month. The values are what the
          *     database stores.
@@ -380,6 +410,31 @@ export interface components {
             text: string;
             /** Has Details */
             has_details: boolean;
+        };
+        /**
+         * SignUpRefused
+         * @description 400: every field that breaks its rule, at once. Nothing was
+         *     saved.
+         */
+        SignUpRefused: {
+            /** Errors */
+            errors: {
+                [key: string]: "invalid";
+            };
+        };
+        /** SignUpRequest */
+        SignUpRequest: {
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Phone */
+            phone: string;
+            /**
+             * Date Of Birth
+             * Format: date
+             */
+            date_of_birth: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -452,6 +507,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinkRefused"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sign_up_route_api_sign_up_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignUpRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignUpRefused"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneTaken"];
                 };
             };
             /** @description Validation Error */
