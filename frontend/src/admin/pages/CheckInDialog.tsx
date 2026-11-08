@@ -12,7 +12,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, type Schemas } from "../backend/client";
 import { formatTime, healthFormKey, planKey } from "../customers";
-import { isManager } from "../roles";
+import { can } from "../roles";
 import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
 import { useSession } from "../session";
 import { fetchStatus } from "./CustomerHealthForm";
@@ -105,7 +105,7 @@ function CheckInBody({
 }) {
   const session = useSession();
   const queryClient = useQueryClient();
-  const manager = isManager(session);
+  const manager = can(session, "plans.choose");
   const health = useQuery({
     queryKey: healthFormKey(customerId),
     queryFn: () => fetchStatus(customerId),

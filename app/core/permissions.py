@@ -93,6 +93,12 @@ ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyTy
 )
 
 
+def permissions_for(role: Role | str) -> list[Permission]:
+    """Everything ``role`` may do, sorted, for the admin page to decide what
+    to offer (the session answer). The server still checks every route."""
+    return sorted(ROLE_PERMISSIONS[Role(role)])
+
+
 def has_permission(role: Role | str, permission: Permission) -> bool:
     """Whether ``role`` may do ``permission``.
 

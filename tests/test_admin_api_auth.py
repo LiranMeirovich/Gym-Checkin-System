@@ -17,7 +17,7 @@ from app.admin.security import SESSION_COOKIE
 from app.core import pins
 from app.core.db import get_engine
 from app.core.models import Setting, StaffSession, StaffUser
-from app.core.permissions import Role
+from app.core.permissions import ROLE_PERMISSIONS, Permission, Role
 from app.core.staff import (
     MAX_FAILED_ATTEMPTS,
     create_first_manager,
@@ -149,6 +149,7 @@ def test_the_right_pin_logs_in_and_returns_the_session(
         "staff": {"id": noa.id, "display_name": "נועה", "role": "manager"},
         "csrf_token": csrf_token(token),
         "lock_after_seconds": 300,
+        "permissions": sorted(Permission),
     }
     cookie = response.headers["set-cookie"].lower()
     assert "httponly" in cookie
@@ -164,6 +165,19 @@ def test_an_instructor_gets_the_instructor_lock_time(
 
     assert response.json()["staff"]["role"] == "instructor"
     assert response.json()["lock_after_seconds"] == 3600
+    # What the page may offer: the instructor's permissions, and no others.
+    assert response.json()["permissions"] == sorted(ROLE_PERMISSIONS[Role.INSTRUCTOR])
+
+
+def test_the_session_answer_carries_the_permissions_too(
+    client: TestClient, dana: StaffUser
+) -> None:
+    log_in(client, dana.id)
+
+    answer = client.get("/api/session").json()
+
+    assert answer["permissions"] == sorted(ROLE_PERMISSIONS[Role.INSTRUCTOR])
+    assert "activity_log.view" not in answer["permissions"]
 
 
 def test_a_wrong_pin_is_refused_and_counted(

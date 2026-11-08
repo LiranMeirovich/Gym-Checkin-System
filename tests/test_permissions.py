@@ -5,7 +5,13 @@ import re
 
 import pytest
 
-from app.core.permissions import ROLE_PERMISSIONS, Permission, Role, has_permission
+from app.core.permissions import (
+    ROLE_PERMISSIONS,
+    Permission,
+    Role,
+    has_permission,
+    permissions_for,
+)
 
 # The design doc's "Users and roles" table, written out again here, so a
 # change to the split has to be made in two places on purpose.
@@ -69,3 +75,8 @@ def test_the_map_cannot_be_changed_at_runtime() -> None:
 def test_permission_names_are_area_dot_action() -> None:
     for permission in Permission:
         assert re.fullmatch(r"[a-z_]+\.[a-z_]+", permission.value), permission
+
+
+def test_permissions_for_lists_the_roles_permissions_sorted() -> None:
+    assert permissions_for(Role.INSTRUCTOR) == sorted(INSTRUCTOR_CAN)
+    assert permissions_for("manager") == sorted(Permission)

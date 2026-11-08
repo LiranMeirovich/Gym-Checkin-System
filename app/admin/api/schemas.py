@@ -19,7 +19,7 @@ from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
 from app.core.http import Answer, DateOfBirth
 from app.core.models import ChosenBy, Plan
-from app.core.permissions import Role
+from app.core.permissions import Permission, Role
 
 # SQLite's integer range. A bigger id can't exist, and SQLite would refuse
 # to look it up (a 500), so it's refused as a malformed request instead.
@@ -79,10 +79,13 @@ class StaffInfo(Answer):
 
 class SessionInfo(Answer):
     """Who is logged in, plus what the page needs to act for them: the
-    CSRF token for the ``X-CSRF-Token`` header (kept in memory only) and
-    the idle time after which the page goes to the lock screen."""
+    CSRF token for the ``X-CSRF-Token`` header (kept in memory only), the
+    idle time after which the page goes to the lock screen, and the role's
+    permissions, so the page offers only what the server would allow
+    (every route still checks its own)."""
 
     staff: StaffInfo
+    permissions: list[Permission]
     csrf_token: str
     lock_after_seconds: int
 

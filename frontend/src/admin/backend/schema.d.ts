@@ -1065,6 +1065,12 @@ export interface components {
          */
         Outcome: "checked_in" | "already_checked_in";
         /**
+         * Permission
+         * @description Everything a role can be allowed to do, named ``<area>.<action>``.
+         * @enum {string}
+         */
+        Permission: "customers.view" | "customers.add" | "customers.edit" | "customers.edit_birth_date" | "customers.archive" | "checkins.manual" | "phones.link" | "plans.choose" | "plans.correct" | "plans.freeze" | "health_forms.view_status" | "health_forms.view_contents" | "health_forms.add_doctor_note" | "health_forms.fill_in" | "prices.view" | "prices.edit" | "reports.manage" | "settings.edit" | "backups.manage" | "staff.manage" | "activity_log.view";
+        /**
          * Plan
          * @description What a customer can choose for a month. The values are what the
          *     database stores.
@@ -1252,11 +1258,15 @@ export interface components {
         /**
          * SessionInfo
          * @description Who is logged in, plus what the page needs to act for them: the
-         *     CSRF token for the ``X-CSRF-Token`` header (kept in memory only) and
-         *     the idle time after which the page goes to the lock screen.
+         *     CSRF token for the ``X-CSRF-Token`` header (kept in memory only), the
+         *     idle time after which the page goes to the lock screen, and the role's
+         *     permissions, so the page offers only what the server would allow
+         *     (every route still checks its own).
          */
         SessionInfo: {
             staff: components["schemas"]["StaffInfo"];
+            /** Permissions */
+            permissions: components["schemas"]["Permission"][];
             /** Csrf Token */
             csrf_token: string;
             /** Lock After Seconds */

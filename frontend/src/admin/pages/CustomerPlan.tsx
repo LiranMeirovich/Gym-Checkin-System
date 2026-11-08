@@ -7,7 +7,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { formatDate, planKey, type Customer } from "../customers";
-import { isManager } from "../roles";
+import { can } from "../roles";
 import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
 import { useSession } from "../session";
 import {
@@ -74,7 +74,8 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
       </section>
     );
   }
-  const canManage = customer.active && isManager(session);
+  const canChoose = customer.active && can(session, "plans.choose");
+  const canCorrect = customer.active && can(session, "plans.correct");
   const covering = data.covering;
   return (
     <section className={ui.panel}>
@@ -93,7 +94,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
           </>
         )}
       </div>
-      {canManage && !covering && (
+      {canChoose && !covering && (
         <ChooseForm
           customerId={customer.id}
           month={data.current_month}
@@ -101,7 +102,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
           onMessage={setMessage}
         />
       )}
-      {canManage &&
+      {canCorrect &&
         covering &&
         (data.correctable ? (
           <CorrectForm
