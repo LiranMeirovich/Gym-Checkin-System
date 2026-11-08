@@ -428,7 +428,76 @@ export interface paths {
         /** Staff List */
         get: operations["staff_list_api_staff_get"];
         put?: never;
+        /** Add */
+        post: operations["add_api_staff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/staff/{staff_id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** New Pin */
+        put: operations["new_pin_api_staff__staff_id__pin_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/staff/{staff_id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** New Role */
+        put: operations["new_role_api_staff__staff_id__role_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/staff/{staff_id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make Inactive */
+        post: operations["make_inactive_api_staff__staff_id__deactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/staff/{staff_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make Active */
+        post: operations["make_active_api_staff__staff_id__reactivate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1056,6 +1125,14 @@ export interface components {
              */
             notes: string;
         };
+        /** NewStaffMember */
+        NewStaffMember: {
+            /** Display Name */
+            display_name: string;
+            role: components["schemas"]["Role"];
+            /** Pin */
+            pin: string;
+        };
         /**
          * NotLoggedIn
          * @description 401 from any route that needs a login: no session, or it ended or
@@ -1083,6 +1160,11 @@ export interface components {
          * @enum {string}
          */
         Permission: "customers.view" | "customers.add" | "customers.edit" | "customers.edit_birth_date" | "customers.archive" | "checkins.manual" | "phones.link" | "plans.choose" | "plans.correct" | "plans.freeze" | "health_forms.view_status" | "health_forms.view_contents" | "health_forms.add_doctor_note" | "health_forms.fill_in" | "prices.view" | "prices.edit" | "reports.manage" | "settings.edit" | "backups.manage" | "staff.manage" | "activity_log.view";
+        /** PinReset */
+        PinReset: {
+            /** Pin */
+            pin: string;
+        };
         /**
          * Plan
          * @description What a customer can choose for a month. The values are what the
@@ -1268,6 +1350,10 @@ export interface components {
          * @enum {string}
          */
         Role: "manager" | "instructor";
+        /** RoleChange */
+        RoleChange: {
+            role: components["schemas"]["Role"];
+        };
         /**
          * SessionInfo
          * @description Who is logged in, plus what the page needs to act for them: the
@@ -1317,6 +1403,20 @@ export interface components {
              */
             needed: true;
         };
+        /**
+         * StaffConflict
+         * @description 409. ``name_taken``: another active staff member has the name.
+         *     ``last_manager``: there must always be an active manager.
+         *     ``own_account``: nobody demotes or deactivates themselves; another
+         *     manager has to. Nothing was saved.
+         */
+        StaffConflict: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "name_taken" | "last_manager" | "own_account";
+        };
         /** StaffInfo */
         StaffInfo: {
             /** Id */
@@ -1333,7 +1433,12 @@ export interface components {
             /** Staff */
             staff: components["schemas"]["StaffMember"][];
         };
-        /** StaffMember */
+        /**
+         * StaffMember
+         * @description ``locked_until`` (the gym's local time, with its offset): locked out
+         *     after too many wrong PINs until then; ``None`` if not locked now. A
+         *     PIN reset lifts it.
+         */
         StaffMember: {
             /** Id */
             id: number;
@@ -1342,6 +1447,8 @@ export interface components {
             role: components["schemas"]["Role"];
             /** Active */
             active: boolean;
+            /** Locked Until */
+            locked_until: string | null;
         };
         /** StaffName */
         StaffName: {
@@ -1349,6 +1456,16 @@ export interface components {
             id: number;
             /** Display Name */
             display_name: string;
+        };
+        /**
+         * StaffRefused
+         * @description 400: the field that breaks its rule. Nothing was saved.
+         */
+        StaffRefused: {
+            /** Errors */
+            errors: {
+                [key: string]: "invalid";
+            };
         };
         /** ValidationError */
         ValidationError: {
@@ -3013,6 +3130,333 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    add_api_staff_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewStaffMember"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMember"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_pin_api_staff__staff_id__pin_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinReset"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMember"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    new_role_api_staff__staff_id__role_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMember"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    make_inactive_api_staff__staff_id__deactivate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMember"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    make_active_api_staff__staff_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMember"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

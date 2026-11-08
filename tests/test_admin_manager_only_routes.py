@@ -39,6 +39,11 @@ MANAGER_ONLY = {
     ("POST", "/api/customers/{customer_id}/health-forms/{form_id}/open"),
     ("POST", "/api/customers/{customer_id}/doctor-notes/{note_id}/open"),
     ("GET", "/api/staff"),
+    ("POST", "/api/staff"),
+    ("PUT", "/api/staff/{staff_id}/pin"),
+    ("PUT", "/api/staff/{staff_id}/role"),
+    ("POST", "/api/staff/{staff_id}/deactivate"),
+    ("POST", "/api/staff/{staff_id}/reactivate"),
     ("GET", "/api/activity-log"),
 }
 
@@ -106,7 +111,7 @@ def test_an_instructor_is_refused(
     client, headers = as_instructor
     # Ids of things that don't exist and an empty body: the permission
     # check comes first, so the answer is a 403, not a 404 or a 422.
-    url = path.format(customer_id=1, form_id=1, note_id=1)
+    url = path.format(customer_id=1, form_id=1, note_id=1, staff_id=1)
     answer = client.request(method, url, headers=headers, json={})
 
     assert answer.status_code == 403

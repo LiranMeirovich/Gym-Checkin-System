@@ -243,7 +243,20 @@ def test_the_staff_list_has_everyone_active_first(
             "display_name": "מדריך",
             "role": "instructor",
             "active": True,
+            "locked_until": None,
         },
-        {"id": manager.id, "display_name": "מנהלת", "role": "manager", "active": True},
-        {"id": other.id, "display_name": "אורי", "role": "instructor", "active": False},
+        {
+            "id": manager.id,
+            "display_name": "מנהלת",
+            "role": "manager",
+            "active": True,
+            "locked_until": None,
+        },
+        {
+            "id": other.id,
+            "display_name": "אורי",
+            "role": "instructor",
+            "active": False,
+            "locked_until": None,
+        },
     ]
