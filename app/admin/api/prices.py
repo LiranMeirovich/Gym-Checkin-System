@@ -62,10 +62,7 @@ def change_prices(
         core.set_prices(
             db,
             Month.parse(body.valid_from_month),
-            [
-                core.PriceChange(p.plan, p.age_group, p.amount_agorot)
-                for p in body.prices
-            ],
+            [core.PriceChange(p.plan, p.amount_agorot) for p in body.prices],
             by=login.staff,
         )
     except core.InvalidPricesError as refused:
@@ -83,7 +80,6 @@ def _overview(db: DbSession) -> PriceOverview:
         current=[
             PriceInEffect(
                 plan=cell.plan,
-                age_group=cell.age_group,
                 amount_agorot=None if cell.price is None else cell.price.amount_agorot,
                 valid_from_month=(
                     None if cell.price is None else str(cell.price.valid_from_month)
@@ -100,7 +96,6 @@ def _row(price: Price) -> PriceRow:
     return PriceRow(
         id=price.id,
         plan=price.plan,
-        age_group=price.age_group,
         amount_agorot=price.amount_agorot,
         valid_from_month=str(price.valid_from_month),
         created_at=to_local(price.created_at),

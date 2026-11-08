@@ -12,7 +12,8 @@ React shows:
   way, with ``reactivated``); an active customer's is a 409.
 - ``PATCH /api/customers/{id}``: name, phone, notes (``customers.edit``).
 - ``PUT /api/customers/{id}/date-of-birth``: manager only
-  (``customers.edit_birth_date``), since it sets the under-18 price.
+  (``customers.edit_birth_date``), since it decides who signs the health
+  form.
 - ``POST /api/customers/{id}/deactivate``: manager only
   (``customers.archive``).
 - ``POST /api/customers/{id}/reactivate``: ``customers.add``, the same as

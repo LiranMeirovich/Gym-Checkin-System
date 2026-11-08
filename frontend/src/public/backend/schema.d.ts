@@ -366,7 +366,7 @@ export interface components {
         Plan: "monthly" | "tri_monthly" | "single_entry";
         /**
          * PlanOffer
-         * @description One plan at this customer's price this month (adult or under 18).
+         * @description One plan at its price this month.
          *     ``price_agorot`` null: the price isn't set, so it can't be chosen.
          */
         PlanOffer: {

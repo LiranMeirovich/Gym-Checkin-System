@@ -30,7 +30,7 @@ class Permission(StrEnum):
     CUSTOMERS_ADD = "customers.add"
     # Name, phone and notes.
     CUSTOMERS_EDIT = "customers.edit"
-    # Sets the under-18 price.
+    # Decides whether a parent signs the health form.
     CUSTOMERS_EDIT_BIRTH_DATE = "customers.edit_birth_date"
     # The only way to remove a customer: nothing is deleted, the data and
     # the activity log stay (decision 0021).

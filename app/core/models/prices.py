@@ -1,5 +1,5 @@
-"""The ``prices`` table: the manager's price table, one row per price change
-(design doc: "Plans, prices and billing", "Data model").
+"""The ``prices`` table: the manager's price table, one row per price change,
+one price per plan (design doc: "Plans, prices and billing", "Data model").
 
 Rows are only ever added, so the table is also the price history. The row
 that applies to a month is the one with the latest ``valid_from_month`` up to
@@ -29,14 +29,6 @@ class Plan(StrEnum):
     SINGLE_ENTRY = "single_entry"
 
 
-class AgeGroup(StrEnum):
-    """Which of a plan's two prices applies. The values are what the database
-    stores."""
-
-    ADULT = "adult"
-    UNDER_18 = "under_18"
-
-
 class Price(Base):
     __tablename__ = "prices"
     __table_args__ = (
@@ -55,7 +47,7 @@ class Price(Base):
             " AND date(valid_from_month || '-01') IS valid_from_month || '-01'",
             name="valid_from_month_is_a_month",
         ),
-        Index(None, "plan", "age_group", "valid_from_month"),
+        Index(None, "plan", "valid_from_month"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -67,16 +59,6 @@ class Price(Base):
             create_constraint=True,
             length=20,
             values_callable=lambda plans: [plan.value for plan in plans],
-        )
-    )
-    age_group: Mapped[AgeGroup] = mapped_column(
-        Enum(
-            AgeGroup,
-            name="age_group",
-            native_enum=False,
-            create_constraint=True,
-            length=20,
-            values_callable=lambda groups: [group.value for group in groups],
         )
     )
     amount_agorot: Mapped[int] = mapped_column(Integer)

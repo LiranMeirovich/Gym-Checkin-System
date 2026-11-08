@@ -423,13 +423,6 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * AgeGroup
-         * @description Which of a plan's two prices applies. The values are what the database
-         *     stores.
-         * @enum {string}
-         */
-        AgeGroup: "adult" | "under_18";
-        /**
          * Branding
          * @description The gym's name (null before first-run setup) and whether
          *     ``/branding/logo`` has a logo to show.
@@ -484,7 +477,7 @@ export interface components {
         /**
          * CheckInRefusedOther
          * @description 409. ``price_not_set``: the plan (or an instructor's single entry)
-         *     has no price for the customer's age group. ``customer_inactive``:
+         *     has no price. ``customer_inactive``:
          *     reactivate them first. Nothing was recorded.
          */
         CheckInRefusedOther: {
@@ -1014,8 +1007,8 @@ export interface components {
          *     is the choice it corrected, if any; ``replaced_by_id`` the row that
          *     corrected or cleared it, if any (then it's no longer in force).
          *
-         *     A "no plan" row (``plan``, ``age_group`` and ``unit_price_agorot`` all
-         *     ``None``) cleared the choice it replaces; it's never ``covering``.
+         *     A "no plan" row (``plan`` and ``unit_price_agorot`` both ``None``)
+         *     cleared the choice it replaces; it's never ``covering``.
          */
         PlanChoiceRow: {
             /** Id */
@@ -1025,7 +1018,6 @@ export interface components {
             start_month: string;
             /** End Month */
             end_month: string;
-            age_group: components["schemas"]["AgeGroup"] | null;
             /** Unit Price Agorot */
             unit_price_agorot: number | null;
             /**
@@ -1063,20 +1055,19 @@ export interface components {
         };
         /**
          * PlanOption
-         * @description A plan with this customer's price this month; ``None`` if it's not
-         *     set, and then it can't be chosen.
+         * @description A plan with its price this month; ``None`` if it's not set, and then
+         *     it can't be chosen.
          */
         PlanOption: {
             plan: components["schemas"]["Plan"];
-            age_group: components["schemas"]["AgeGroup"];
             /** Amount Agorot */
             amount_agorot: number | null;
         };
         /**
          * PlanRefused
          * @description 400. ``month_not_choosable``: not the current month.
-         *     ``price_not_set``: the manager hasn't entered this plan's price for the
-         *     customer's age group. Nothing was saved.
+         *     ``price_not_set``: the manager hasn't entered this plan's price.
+         *     Nothing was saved.
          */
         PlanRefused: {
             /**
@@ -1105,7 +1096,6 @@ export interface components {
         /** PriceChange */
         PriceChange: {
             plan: components["schemas"]["Plan"];
-            age_group: components["schemas"]["AgeGroup"];
             /** Amount Agorot */
             amount_agorot: number;
         };
@@ -1121,11 +1111,10 @@ export interface components {
         };
         /**
          * PriceInEffect
-         * @description One cell of the price table. Both are ``None`` if it's not set yet.
+         * @description One plan's price this month. Both are ``None`` if it's not set yet.
          */
         PriceInEffect: {
             plan: components["schemas"]["Plan"];
-            age_group: components["schemas"]["AgeGroup"];
             /** Amount Agorot */
             amount_agorot: number | null;
             /** Valid From Month */
@@ -1155,7 +1144,6 @@ export interface components {
             /** Id */
             id: number;
             plan: components["schemas"]["Plan"];
-            age_group: components["schemas"]["AgeGroup"];
             /** Amount Agorot */
             amount_agorot: number;
             /** Valid From Month */
@@ -1169,7 +1157,7 @@ export interface components {
         /**
          * PricesRefused
          * @description 400: every part that breaks its rule, at once: ``valid_from_month``,
-         *     or a price as ``<plan>.<age_group>``. Nothing was saved.
+         *     or a price by its plan (``monthly``). Nothing was saved.
          */
         PricesRefused: {
             /** Errors */

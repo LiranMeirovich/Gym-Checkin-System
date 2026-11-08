@@ -16,7 +16,6 @@ from app.admin.main import app
 from app.core import checkins, months, pins
 from app.core.db import get_engine
 from app.core.models import (
-    AgeGroup,
     CheckIn,
     CheckInMethod,
     Customer,
@@ -106,7 +105,7 @@ def valid_form(db: Session, customer: Customer) -> None:
 
 @pytest.fixture
 def prices(db: Session) -> None:
-    """Every adult price, set from before this month. No under-18 ones."""
+    """Every price, set from before this month."""
     for plan, amount in {
         Plan.MONTHLY: 25000,
         Plan.TRI_MONTHLY: 65000,
@@ -115,7 +114,6 @@ def prices(db: Session) -> None:
         db.add(
             Price(
                 plan=plan,
-                age_group=AgeGroup.ADULT,
                 amount_agorot=amount,
                 valid_from_month=Month(2026, 1),
             )
@@ -248,7 +246,6 @@ def test_the_manager_is_asked_for_a_plan_with_the_options(
     assert body["month"] == "2026-11"
     assert {
         "plan": "monthly",
-        "age_group": "adult",
         "amount_agorot": 25000,
     } in body["options"]
     assert recorded(db) == []

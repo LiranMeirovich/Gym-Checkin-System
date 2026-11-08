@@ -2,7 +2,7 @@
 doc: "Plans, prices and billing", "Data model").
 
 A choice covers ``start_month`` to ``end_month``: one month, or three for
-tri-monthly. Its price and age group are copied in when it's made, so later
+tri-monthly. Its price is copied in when it's made, so later
 price changes never reach it and past reports regenerate identically.
 
 Rows are only ever added, never changed or deleted (triggers in the
@@ -12,8 +12,8 @@ it. Another trigger refuses a row that would give a customer-month two
 active choices, and another keeps a correction on the months of the choice
 it replaces.
 
-A "no plan" row clears a choice: it replaces it and has no plan, age group
-or price, so the months it names are covered by nothing and can be chosen
+A "no plan" row clears a choice: it replaces it and has no plan or price,
+so the months it names are covered by nothing and can be chosen
 again. The rules the database can't check (which months can be
 chosen, where the price comes from) live in ``app.core.plans``.
 """
@@ -26,7 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.clock import utc_now
 from app.core.models.base import Base
-from app.core.models.prices import AgeGroup, Plan
+from app.core.models.prices import Plan
 from app.core.models.staff import StaffUser
 from app.core.months import Month
 
@@ -71,11 +71,10 @@ class PlanChoice(Base):
             " OR (typeof(unit_price_agorot) = 'integer' AND unit_price_agorot >= 0)",
             name="unit_price_is_whole_agorot",
         ),
-        # A real choice has a plan, age group and price; a "no plan" row has
-        # none of them and always clears an earlier choice.
+        # A real choice has a plan and a price; a "no plan" row has neither
+        # and always clears an earlier choice.
         CheckConstraint(
-            "(plan IS NULL) = (age_group IS NULL)"
-            " AND (plan IS NULL) = (unit_price_agorot IS NULL)"
+            "(plan IS NULL) = (unit_price_agorot IS NULL)"
             " AND (plan IS NOT NULL OR replaces_id IS NOT NULL)",
             name="no_plan_row_is_complete",
         ),
@@ -102,17 +101,6 @@ class PlanChoice(Base):
     )
     start_month: Mapped[Month]
     end_month: Mapped[Month]
-    # On the 1st of ``start_month``, from the customer's date of birth.
-    age_group: Mapped[AgeGroup | None] = mapped_column(
-        Enum(
-            AgeGroup,
-            name="age_group",
-            native_enum=False,
-            create_constraint=True,
-            length=20,
-            values_callable=lambda groups: [group.value for group in groups],
-        )
-    )
     # The whole price for monthly and tri-monthly; per visit for single entry.
     unit_price_agorot: Mapped[int | None] = mapped_column(Integer)
     chosen_at: Mapped[datetime] = mapped_column(default=utc_now)

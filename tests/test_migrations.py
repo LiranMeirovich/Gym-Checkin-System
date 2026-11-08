@@ -195,7 +195,7 @@ def test_plan_choices_come_through_the_no_plan_rebuild(
             connection.exec_driver_sql(statement)
     before = plan_choice_rows()
 
-    command.upgrade(alembic_config, "head")
+    command.upgrade(alembic_config, NO_PLAN_ROWS)
 
     assert plan_choice_rows() == before
     # The rebuilt table is still append-only.
@@ -221,3 +221,102 @@ def test_the_downgrade_keeps_no_plan_rows(alembic_config: Config) -> None:
 
     assert current_revision() == NO_PLAN_ROWS
     assert len(plan_choice_rows()) == 3
+
+
+BEFORE_ONE_PRICE = "006819ebd2e9"
+
+SEED_PRICES = (
+    "INSERT INTO prices (id, plan, age_group, amount_agorot, valid_from_month,"
+    " created_at) VALUES"
+    " (1, 'monthly', 'adult', 25000, '2026-11', '2026-11-01 09:00:00.000000'),"
+    " (2, 'monthly', 'under_18', 20000, '2026-11', '2026-11-01 09:00:00.000000'),"
+    " (3, 'single_entry', 'adult', 4000, '2026-11', '2026-11-01 09:00:00.000000'),"
+    " (4, 'single_entry', 'under_18', 3000, '2026-12',"
+    " '2026-11-01 09:00:00.000000')",
+)
+
+# Made-up rows at BEFORE_ONE_PRICE: two real choices, one under 18, and a
+# "no plan" row that clears the second.
+SEED_CHOICES_WITH_AGE_GROUPS = (
+    *SEED_PLAN_CHOICES[:2],
+    "INSERT INTO plan_choices (id, customer_id, plan, start_month, end_month,"
+    " age_group, unit_price_agorot, chosen_at, chosen_by, staff_user_id,"
+    " replaces_id) VALUES"
+    " (1, 1, 'single_entry', '2026-11', '2026-11', 'adult', 4000,"
+    " '2026-11-03 09:00:00.000000', 'staff', 1, NULL),"
+    " (2, 1, 'monthly', '2026-11', '2026-11', 'under_18', 20000,"
+    " '2026-11-03 10:00:00.000000', 'customer', NULL, 1),"
+    " (3, 1, NULL, '2026-11', '2026-11', NULL, NULL,"
+    " '2026-11-03 11:00:00.000000', 'staff', 1, 2)",
+    *SEED_PRICES,
+)
+
+
+def price_rows() -> list[tuple[object, ...]]:
+    with get_engine().connect() as connection:
+        return connection.exec_driver_sql("SELECT * FROM prices ORDER BY id").fetchall()
+
+
+def trigger_names() -> set[str]:
+    with get_engine().connect() as connection:
+        return set(
+            connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master"
+                " WHERE type = 'trigger' AND tbl_name = 'plan_choices'"
+            ).scalars()
+        )
+
+
+def test_one_price_keeps_the_adult_prices_and_every_choice(
+    alembic_config: Config,
+) -> None:
+    command.upgrade(alembic_config, BEFORE_ONE_PRICE)
+    with get_engine().begin() as connection:
+        for statement in SEED_CHOICES_WITH_AGE_GROUPS:
+            connection.exec_driver_sql(statement)
+    triggers = trigger_names()
+
+    command.upgrade(alembic_config, "head")
+
+    # The under-18 rows are gone; the adult rows keep their ids and amounts.
+    assert price_rows() == [
+        (1, "monthly", 25000, "2026-11", "2026-11-01 09:00:00.000000"),
+        (3, "single_entry", 4000, "2026-11", "2026-11-01 09:00:00.000000"),
+    ]
+    # Every choice keeps the price copied onto it, under-18 ones included.
+    assert [(row[0], row[2], row[5]) for row in plan_choice_rows()] == [
+        (1, "single_entry", 4000),
+        (2, "monthly", 20000),
+        (3, None, None),
+    ]
+    # The rebuild re-created every trigger: still append-only.
+    assert trigger_names() == triggers
+    with get_engine().begin() as connection, pytest.raises(IntegrityError):
+        connection.exec_driver_sql("DELETE FROM plan_choices")
+
+
+def test_the_one_price_downgrade_marks_everything_adult(
+    alembic_config: Config,
+) -> None:
+    command.upgrade(alembic_config, BEFORE_ONE_PRICE)
+    with get_engine().begin() as connection:
+        for statement in SEED_CHOICES_WITH_AGE_GROUPS:
+            connection.exec_driver_sql(statement)
+    triggers = trigger_names()
+    command.upgrade(alembic_config, "head")
+
+    command.downgrade(alembic_config, BEFORE_ONE_PRICE)
+
+    # The schema is back; the deleted under-18 prices aren't.
+    assert price_rows() == [
+        (1, "monthly", "adult", 25000, "2026-11", "2026-11-01 09:00:00.000000"),
+        (3, "single_entry", "adult", 4000, "2026-11", "2026-11-01 09:00:00.000000"),
+    ]
+    assert [(row[0], row[5]) for row in plan_choice_rows()] == [
+        (1, "adult"),
+        (2, "adult"),
+        (3, None),
+    ]
+    assert trigger_names() == triggers
+    with get_engine().begin() as connection, pytest.raises(IntegrityError):
+        connection.exec_driver_sql("DELETE FROM plan_choices")

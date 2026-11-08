@@ -95,7 +95,6 @@ def check_in(
                 options=[
                     PlanOption(
                         plan=option.plan,
-                        age_group=option.age_group,
                         amount_agorot=(
                             None if option.price is None else option.price.amount_agorot
                         ),

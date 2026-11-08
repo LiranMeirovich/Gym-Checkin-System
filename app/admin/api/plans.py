@@ -128,7 +128,6 @@ def _status(db: DbSession, customer: Customer) -> PlanStatus:
         options=[
             PlanOption(
                 plan=option.plan,
-                age_group=option.age_group,
                 amount_agorot=(
                     None if option.price is None else option.price.amount_agorot
                 ),
@@ -145,7 +144,6 @@ def _row(choice: PlanChoice, replaced_by: dict[int, int]) -> PlanChoiceRow:
         plan=choice.plan,
         start_month=str(choice.start_month),
         end_month=str(choice.end_month),
-        age_group=choice.age_group,
         unit_price_agorot=choice.unit_price_agorot,
         chosen_at=to_local(choice.chosen_at),
         chosen_by=choice.chosen_by,
