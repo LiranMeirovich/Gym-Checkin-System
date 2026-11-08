@@ -9,7 +9,13 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.activity_log import Action, Target, list_entries, record
+from app.core.activity_log import (
+    Action,
+    InvalidLogFilterError,
+    Target,
+    list_entries,
+    record,
+)
 from app.core.db import get_engine
 from app.core.models import ActivityLogEntry, Customer, StaffUser
 from app.core.permissions import Role
@@ -243,8 +249,30 @@ def test_filter_by_target(db: Session, actor: StaffUser) -> None:
 
 
 def test_a_target_id_needs_a_target_type(db: Session) -> None:
-    with pytest.raises(ValueError, match="target_type"):
+    with pytest.raises(InvalidLogFilterError, match="target_type"):
         list_entries(db, target_id=3)
+
+
+@pytest.mark.parametrize(
+    "dates",
+    [
+        {"from_date": date(1, 1, 1)},
+        {"to_date": date(9999, 12, 31)},
+        {"from_date": date(1999, 12, 31)},
+        {"to_date": date(3000, 1, 1)},
+    ],
+    ids=str,
+)
+def test_dates_out_of_range_are_refused_not_overflowed(
+    db: Session, dates: dict[str, date]
+) -> None:
+    with pytest.raises(InvalidLogFilterError, match="out of range"):
+        list_entries(db, **dates)
+
+
+def test_the_range_ends_are_allowed(db: Session) -> None:
+    page = list_entries(db, from_date=date(2000, 1, 1), to_date=date(2999, 12, 31))
+    assert page.entries == []
 
 
 def test_staff_and_customer_targets_carry_their_names(

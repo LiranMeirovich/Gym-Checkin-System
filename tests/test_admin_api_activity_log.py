@@ -195,8 +195,21 @@ def test_an_older_shape_comes_back_as_stored(
 
 @pytest.mark.parametrize(
     "params",
+    [{"target_id": 1}, {"from": "0001-01-01"}, {"to": "9999-12-31"}],
+    ids=str,
+)
+def test_filters_that_cant_be_used_are_a_400(
+    as_manager: TestClient, params: dict[str, object]
+) -> None:
+    answer = as_manager.get("/api/activity-log", params=params)
+
+    assert answer.status_code == 400
+    assert answer.json() == {"error": "invalid_filter"}
+
+
+@pytest.mark.parametrize(
+    "params",
     [
-        {"target_id": 1},
         {"staff_id": 0},
         {"before_id": "x"},
         {"from": "2026-13-01"},

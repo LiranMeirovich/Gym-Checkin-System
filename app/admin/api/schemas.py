@@ -11,7 +11,6 @@ from pydantic import (
     Field,
     StrictBool,
     StringConstraints,
-    model_validator,
 )
 
 from app.core.checkins import Outcome
@@ -617,7 +616,8 @@ class StaffList(Answer):
 
 class ActivityLogQuery(BaseModel):
     """The filters of ``GET /api/activity-log``, all optional. ``from`` and
-    ``to`` are the gym's local days, both included."""
+    ``to`` are the gym's local days, both included. Which combinations make
+    sense is checked in ``app.core.activity_log`` (a 400 here)."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -627,12 +627,6 @@ class ActivityLogQuery(BaseModel):
     target_type: str | None = Field(default=None, min_length=1, max_length=50)
     target_id: int | None = Field(default=None, ge=1, le=MAX_ID)
     before_id: int | None = Field(default=None, ge=1, le=MAX_ID)
-
-    @model_validator(mode="after")
-    def _target_id_needs_a_type(self) -> "ActivityLogQuery":
-        if self.target_id is not None and self.target_type is None:
-            raise ValueError("target_id needs target_type")
-        return self
 
 
 class ActivityLogItem(Answer):
@@ -651,6 +645,13 @@ class ActivityLogItem(Answer):
     target_name: str | None
     before: dict[str, Any] | None
     after: dict[str, Any] | None
+
+
+class ActivityLogRefused(Answer):
+    """400: the filters can't be used together (a target id without its
+    type) or a date is out of range. Nothing to show."""
+
+    error: Literal["invalid_filter"] = "invalid_filter"
 
 
 class ActivityLogPage(Answer):

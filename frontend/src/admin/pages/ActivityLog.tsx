@@ -40,6 +40,9 @@ const FILTER_KEYS = [
 ] as const;
 
 class Forbidden extends Error {}
+// The server refused the filters (a hand-edited or old link): 400 for
+// filters that can't be used together, 422 for a malformed value.
+class BadFilter extends Error {}
 
 function readFilters(params: URLSearchParams): Filters {
   const id = (key: string) => {
@@ -50,14 +53,14 @@ function readFilters(params: URLSearchParams): Filters {
     const value = params.get(key);
     return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
   };
-  const targetType = params.get("target_type") || undefined;
+  // Passed on as they are: which combinations work is the server's rule,
+  // and a refusal shows as a bad filter.
   return {
     staff_id: id("staff_id"),
     from: date("from"),
     to: date("to"),
-    target_type: targetType,
-    // The server refuses an id without a type.
-    target_id: targetType ? id("target_id") : undefined,
+    target_type: params.get("target_type") || undefined,
+    target_id: id("target_id"),
   };
 }
 
@@ -67,6 +70,7 @@ async function fetchPage(filters: Filters, beforeId: number | undefined) {
   });
   if (data) return data;
   if (response.status === 403) throw new Forbidden();
+  if (response.status === 400 || response.status === 422) throw new BadFilter();
   throw new Error(`GET /api/activity-log failed: ${response.status}`);
 }
 
@@ -84,7 +88,8 @@ export function ActivityLog() {
     queryFn: ({ pageParam }) => fetchPage(filters, pageParam),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (page) => page.next_before_id ?? undefined,
-    retry: (count, error) => !(error instanceof Forbidden) && count < 3,
+    retry: (count, error) =>
+      !(error instanceof Forbidden || error instanceof BadFilter) && count < 3,
   });
 
   if (log.error instanceof Forbidden) {
@@ -108,7 +113,13 @@ export function ActivityLog() {
         filters={filters}
         onApply={(next) => setParams(toParams(next))}
       />
-      {log.isPending ? null : log.isError ? (
+      {log.isPending ? null : log.error instanceof BadFilter ? (
+        <p role="alert">
+          הסינון בכתובת לא תקין. <Link to="/activity-log">לכל היומן</Link>
+        </p>
+      ) : !log.data ? (
+        // Nothing loaded at all. A failed "more" or background refresh
+        // keeps the rows already on screen (below).
         <NoConnection />
       ) : entries.length === 0 ? (
         <div className={ui.tablePanel}>
@@ -172,7 +183,13 @@ function FilterForm({
   filters: Filters;
   onApply: (filters: Filters) => void;
 }) {
-  const staff = useQuery({ queryKey: ["staff"], queryFn: fetchStaff });
+  // No retries: a refusal won't change, and each request counts as
+  // activity for the auto-lock.
+  const staff = useQuery({
+    queryKey: ["staff"],
+    queryFn: fetchStaff,
+    retry: false,
+  });
   const [staffId, setStaffId] = useState(String(filters.staff_id ?? ""));
   const [from, setFrom] = useState(filters.from ?? "");
   const [to, setTo] = useState(filters.to ?? "");
@@ -206,7 +223,16 @@ function FilterForm({
               {member.active ? "" : " (לא פעיל/ה)"}
             </option>
           ))}
+          {/* A filter from the address that isn't in the list (or the
+              list didn't load) still shows what is filtered. */}
+          {staffId &&
+            !staff.data?.some((member) => String(member.id) === staffId) && (
+              <option value={staffId}>#{staffId}</option>
+            )}
         </select>
+        {staff.isError && (
+          <span role="alert">רשימת הצוות לא נטענה. נסו לרענן את הדף.</span>
+        )}
       </div>
       <div className={ui.field}>
         <label htmlFor="log-from">מתאריך</label>
@@ -241,6 +267,11 @@ function FilterForm({
               {label}
             </option>
           ))}
+          {/* An old or unknown target type from the address: shown by its
+              stored name rather than as "everything". */}
+          {targetType && !(targetType in TARGET_NAMES) && (
+            <option value={targetType}>{targetType}</option>
+          )}
         </select>
       </div>
       {targetType && targetType !== "settings" && (
@@ -330,7 +361,6 @@ function Value({
   value: unknown;
   old?: boolean;
 }) {
-  const text = formatValue(field, value);
   const className = old ? styles.old : undefined;
   if (field === "customer_id" && typeof value === "number") {
     return (
@@ -339,6 +369,7 @@ function Value({
       </Link>
     );
   }
+  const text = formatValue(field, value);
   return isLtr(field) ? (
     <span className={className} dir="ltr">
       {text}

@@ -500,6 +500,19 @@ export interface components {
             next_before_id: number | null;
         };
         /**
+         * ActivityLogRefused
+         * @description 400: the filters can't be used together (a target id without its
+         *     type) or a date is out of range. Nothing to show.
+         */
+        ActivityLogRefused: {
+            /**
+             * Error
+             * @default invalid_filter
+             * @constant
+             */
+            error: "invalid_filter";
+        };
+        /**
          * Branding
          * @description The gym's name (null before first-run setup) and whether
          *     ``/branding/logo`` has a logo to show.
@@ -3026,6 +3039,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityLogPage"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityLogRefused"];
                 };
             };
             /** @description Unauthorized */

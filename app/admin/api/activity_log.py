@@ -3,7 +3,8 @@ doc: "Activity log"; decisions 0021, 0037).
 
 - ``GET /api/activity-log``: one page, newest first, filtered by staff
   member, local days (``from``/``to``), target type and id; ``before_id``
-  asks for the next page. Manager only (``activity_log.view``). Reading the
+  asks for the next page. Filters that can't be used are a 400
+  ``invalid_filter``. Manager only (``activity_log.view``). Reading the
   log isn't itself logged: it holds no form contents or secrets (decision
   0021 logs only the sensitive reads the design doc names).
 """
@@ -11,16 +12,18 @@ doc: "Activity log"; decisions 0021, 0037).
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import JSONResponse
 
 from app.admin.api.schemas import (
     ActivityLogItem,
     ActivityLogPage,
     ActivityLogQuery,
+    ActivityLogRefused,
     NotLoggedIn,
     StaffName,
 )
 from app.admin.security import StaffLogin, require_permission
-from app.core.activity_log import list_entries
+from app.core.activity_log import InvalidLogFilterError, list_entries
 from app.core.clock import to_local
 from app.core.db import DbSession
 from app.core.permissions import Permission
@@ -38,19 +41,28 @@ CanView = Annotated[
 ]
 
 
-@router.get("")
+@router.get(
+    "",
+    response_model=ActivityLogPage,
+    responses={status.HTTP_400_BAD_REQUEST: {"model": ActivityLogRefused}},
+)
 def activity_log(
     query: Annotated[ActivityLogQuery, Query()], db: DbSession, _login: CanView
-) -> ActivityLogPage:
-    page = list_entries(
-        db,
-        staff_user_id=query.staff_id,
-        from_date=query.from_date,
-        to_date=query.to_date,
-        target_type=query.target_type,
-        target_id=query.target_id,
-        before_id=query.before_id,
-    )
+) -> ActivityLogPage | JSONResponse:
+    try:
+        page = list_entries(
+            db,
+            staff_user_id=query.staff_id,
+            from_date=query.from_date,
+            to_date=query.to_date,
+            target_type=query.target_type,
+            target_id=query.target_id,
+            before_id=query.before_id,
+        )
+    except InvalidLogFilterError:
+        return JSONResponse(
+            ActivityLogRefused().model_dump(), status.HTTP_400_BAD_REQUEST
+        )
     return ActivityLogPage(
         entries=[
             ActivityLogItem(

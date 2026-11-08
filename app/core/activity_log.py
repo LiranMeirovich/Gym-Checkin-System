@@ -128,6 +128,16 @@ def record(
 
 PAGE_SIZE = 50
 
+# The dates a filter may use. Far wider than the log will ever span, and far
+# enough from date.min/max that turning a local day into UTC can't overflow.
+EARLIEST_DATE = date(2000, 1, 1)
+LATEST_DATE = date(2999, 12, 31)
+
+
+class InvalidLogFilterError(ValueError):
+    """The filters can't be used: a ``target_id`` without a
+    ``target_type``, or a date outside EARLIEST_DATE..LATEST_DATE."""
+
 
 @dataclass(frozen=True)
 class LogEntry:
@@ -173,10 +183,14 @@ def list_entries(
 
     The dates are local (Israel) days, both included. ``before_id`` pages by
     id rather than by offset, so entries added while the manager reads don't
-    shift the pages. ``target_id`` needs a ``target_type``.
+    shift the pages. ``target_id`` needs a ``target_type``; anything else
+    raises ``InvalidLogFilterError``.
     """
     if target_id is not None and target_type is None:
-        raise ValueError("target_id needs a target_type")
+        raise InvalidLogFilterError("target_id needs a target_type")
+    for day in (from_date, to_date):
+        if day is not None and not EARLIEST_DATE <= day <= LATEST_DATE:
+            raise InvalidLogFilterError(f"date out of range: {day}")
     if limit < 1:
         raise ValueError("limit must be at least 1")
 
