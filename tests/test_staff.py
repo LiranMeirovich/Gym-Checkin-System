@@ -13,13 +13,14 @@ from sqlalchemy.orm import Session
 
 from app.core import pins, staff
 from app.core.db import get_engine
-from app.core.models import ActivityLogEntry, StaffUser
+from app.core.models import ActivityLogEntry, StaffSession, StaffUser
 from app.core.permissions import Role
 from app.core.pins import InvalidPinError, pin_matches
 from app.core.staff import (
     DuplicateDisplayNameError,
     InvalidDisplayNameError,
     LastManagerError,
+    OwnAccountError,
     PinCheck,
     SetupAlreadyDoneError,
     change_role,
@@ -27,9 +28,11 @@ from app.core.staff import (
     create_first_manager,
     create_staff_user,
     deactivate,
+    locked_until,
     reactivate,
     reset_pin,
 )
+from app.core.staff_sessions import find_session, start_session
 
 PIN = "482913"
 OTHER_PIN = "570461"
@@ -195,6 +198,32 @@ def test_a_reset_applies_the_format_rules(
     assert pin_matches(instructor.pin_hash, PIN)
 
 
+def test_a_reset_logs_the_member_out_everywhere(
+    db: Session, manager: StaffUser, instructor: StaffUser
+) -> None:
+    tokens = [start_session(db, instructor) for _ in range(2)]
+    managers_token = start_session(db, manager)
+
+    reset_pin(db, instructor, OTHER_PIN, by=manager)
+
+    assert [find_session(db, token) for token in tokens] == [None, None]
+    assert find_session(db, managers_token) is not None
+
+
+def test_a_reset_of_your_own_pin_keeps_this_session(
+    db: Session, manager: StaffUser
+) -> None:
+    this_token = start_session(db, manager)
+    other_token = start_session(db, manager)
+    this_session = find_session(db, this_token)
+    assert isinstance(this_session, StaffSession)
+
+    reset_pin(db, manager, OTHER_PIN, by=manager, keep_session=this_session)
+
+    assert find_session(db, this_token) is this_session
+    assert find_session(db, other_token) is None
+
+
 # ── Roles and the last manager ──────────────────────────────────────────
 
 
@@ -209,8 +238,31 @@ def test_a_manager_can_be_demoted_while_another_remains(
     db: Session, manager: StaffUser, instructor: StaffUser
 ) -> None:
     change_role(db, instructor, Role.MANAGER, by=manager)
-    change_role(db, manager, Role.INSTRUCTOR, by=manager)
+    change_role(db, manager, Role.INSTRUCTOR, by=instructor)
     assert manager.role is Role.INSTRUCTOR
+
+
+def test_a_manager_cannot_demote_themselves(
+    db: Session, manager: StaffUser, instructor: StaffUser
+) -> None:
+    change_role(db, instructor, Role.MANAGER, by=manager)
+
+    with pytest.raises(OwnAccountError):
+        change_role(db, manager, Role.INSTRUCTOR, by=manager)
+    assert manager.role is Role.MANAGER
+
+
+def test_a_manager_cannot_deactivate_themselves(
+    db: Session, manager: StaffUser, instructor: StaffUser
+) -> None:
+    change_role(db, instructor, Role.MANAGER, by=manager)
+
+    with pytest.raises(OwnAccountError):
+        deactivate(db, manager, by=manager)
+    assert manager.active
+
+    deactivate(db, manager, by=instructor)
+    assert not manager.active
 
 
 def test_the_last_manager_cannot_be_demoted(db: Session, manager: StaffUser) -> None:
@@ -290,6 +342,24 @@ def test_reactivating_into_a_taken_name_is_refused(
     with pytest.raises(DuplicateDisplayNameError):
         reactivate(db, instructor, by=manager)
     assert not instructor.active
+
+
+# ── Lockout status ──────────────────────────────────────────────────────
+
+
+def test_nobody_is_locked_at_first(instructor: StaffUser, clock: Clock) -> None:
+    assert locked_until(instructor) is None
+
+
+def test_a_lockout_shows_until_it_ends(
+    db: Session, instructor: StaffUser, clock: Clock
+) -> None:
+    for _ in range(staff.MAX_FAILED_ATTEMPTS):
+        check_pin(db, instructor, OTHER_PIN)
+
+    assert locked_until(instructor) == START + staff.LOCKOUT
+    clock.now = START + staff.LOCKOUT
+    assert locked_until(instructor) is None
 
 
 # ── Checking a PIN ──────────────────────────────────────────────────────

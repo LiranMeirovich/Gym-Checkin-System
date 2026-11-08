@@ -11,12 +11,14 @@ caller's transaction and never commits.
 Every change is written to the activity log in the same transaction, with
 ``by``, the staff member making it, as the actor. A change that changes
 nothing (the same role again) writes no entry. Whether ``by`` may make the
-change is the route's check (``require_permission``), not this module's.
+change is the route's check (``require_permission``), not this module's,
+with one exception: a manager can't demote or deactivate themselves
+(``OwnAccountError``), so they can't lock themselves out mid-session.
 Logins aren't changes: ``check_pin`` records nothing.
 """
 
 import unicodedata
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from sqlalchemy import func, select
@@ -24,9 +26,10 @@ from sqlalchemy.orm import Session
 
 from app.core.activity_log import Action, Target, record
 from app.core.clock import utc_now
-from app.core.models import StaffUser
+from app.core.models import StaffSession, StaffUser
 from app.core.permissions import Role
 from app.core.pins import hash_pin, needs_rehash, pin_matches, rehash_pin
+from app.core.staff_sessions import end_sessions_of
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT = timedelta(minutes=5)
@@ -51,6 +54,11 @@ class SetupAlreadyDoneError(RuntimeError):
 class LastManagerError(ValueError):
     """The change would leave no active manager, and with it nobody who
     could manage staff, prices or settings."""
+
+
+class OwnAccountError(ValueError):
+    """A staff member tried to demote or deactivate themselves. Another
+    manager has to do it, so nobody locks themselves out by mistake."""
 
 
 class PinCheck(StrEnum):
@@ -83,6 +91,15 @@ def list_staff(db: Session) -> list[StaffUser]:
     )
 
 
+def locked_until(staff: StaffUser) -> datetime | None:
+    """Until when ``staff`` is locked out after too many wrong PINs, or
+    ``None`` if they aren't locked now. A past ``locked_until`` on the row
+    is an old lockout that has already ended."""
+    if staff.locked_until is not None and staff.locked_until > utc_now():
+        return staff.locked_until
+    return None
+
+
 def create_first_manager(db: Session, display_name: str, pin: str) -> StaffUser:
     """Add the first manager at first-run setup. Nobody is logged in yet,
     so the activity log records the new manager as creating themselves.
@@ -107,28 +124,43 @@ def create_staff_user(
     return staff
 
 
-def reset_pin(db: Session, staff: StaffUser, pin: str, *, by: StaffUser) -> None:
+def reset_pin(
+    db: Session,
+    staff: StaffUser,
+    pin: str,
+    *,
+    by: StaffUser,
+    keep_session: StaffSession | None = None,
+) -> None:
     """Give ``staff`` a new PIN. It also lifts a lockout, so a manager can
     let a locked-out instructor straight back in. Raises
     ``pins.InvalidPinError``.
+
+    A reset usually means the old PIN got out, so it ends every open
+    session of ``staff``: whoever is logged in as them must log in again
+    with the new PIN. ``keep_session`` is spared, so a manager resetting
+    their own PIN stays logged in on this browser.
 
     The log records that the PIN was reset, never the PIN or its hash.
     """
     staff.pin_hash = hash_pin(pin)
     _clear_failures(staff)
     db.flush()
+    end_sessions_of(db, staff, keep=keep_session)
     record(db, by, Action.STAFF_RESET_PIN, Target.STAFF_USER, staff.id)
 
 
 def change_role(db: Session, staff: StaffUser, role: Role, *, by: StaffUser) -> None:
     """Make ``staff`` a manager or an instructor. Raises
-    ``LastManagerError`` if this demotes the last active manager."""
+    ``LastManagerError`` if this demotes the last active manager, and
+    ``OwnAccountError`` if ``by`` demotes themselves."""
     role = Role(role)
     # ==, not "is": see _ensure_not_last_manager.
     if staff.role == role:
         return
     if role is not Role.MANAGER:
         _ensure_not_last_manager(db, staff)
+        _ensure_not_own_account(staff, by)
     before = Role(staff.role)
     staff.role = role
     db.flush()
@@ -145,10 +177,14 @@ def change_role(db: Session, staff: StaffUser, role: Role, *, by: StaffUser) -> 
 
 def deactivate(db: Session, staff: StaffUser, *, by: StaffUser) -> None:
     """Stop ``staff`` from logging in. The row stays, since other records
-    point at it. Raises ``LastManagerError`` for the last active manager."""
+    point at it. Its sessions stop counting from the next request
+    (``find_session`` checks ``active``). Raises ``LastManagerError`` for
+    the last active manager, and ``OwnAccountError`` if ``by`` is
+    ``staff``."""
     if not staff.active:
         return
     _ensure_not_last_manager(db, staff)
+    _ensure_not_own_account(staff, by)
     staff.active = False
     db.flush()
     _record_active_change(db, staff, by=by)
@@ -298,3 +334,10 @@ def _ensure_not_last_manager(db: Session, staff: StaffUser) -> None:
     )
     if not other_managers:
         raise LastManagerError("there must be at least one active manager")
+
+
+def _ensure_not_own_account(staff: StaffUser, by: StaffUser) -> None:
+    # Checked after the last-manager rule, so the only manager left gets
+    # that (truer) refusal.
+    if staff.id == by.id:
+        raise OwnAccountError("staff can't demote or deactivate themselves")
