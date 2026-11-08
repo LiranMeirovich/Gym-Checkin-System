@@ -14,7 +14,7 @@ The phone opens the gym's check-in page, which is served from the gym PC through
 - Hosting: the system runs on the gym PC; Cloudflare Tunnel makes the customer check-in page reachable from phones. No cloud server. **Under review:** the manager wants the system always on, so it will probably move to a server (the village's server or a paid VPS). See Open questions.
 - Plans: customers choose their own plan (monthly, tri-monthly or single entry) on their phone at their first check-in of each month, which also confirms they're continuing. Punch cards are coming as a fourth option (see Punch cards).
 - Health form: every customer must have a valid signed health form before any check-in. It's filled in on the phone, or on a gym device at the desk (see Health form).
-- Prices: the manager keeps an editable price table with adult and under-18 prices for every plan.
+- Prices: the manager keeps an editable price table with one price for every plan, the same for every customer (decision 0036).
 - Report: generated automatically on the 1st, emailed to the manager, and sent on to the other recipients once the manager approves it.
 
 **Goals**
@@ -56,7 +56,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | See whether a customer's health form is valid and when it expires | Yes | Yes |
 | Open the health form on a gym device for a customer, add a doctor's note | Yes | Yes |
 | View the contents of a health form | No | Yes |
-| Edit a customer's date of birth (sets the under-18 price) | No | Yes |
+| Edit a customer's date of birth (decides who signs the health form) | No | Yes |
 | Change or clear a plan already chosen | No | Yes |
 | Deactivate a customer (customers are never deleted; adding their phone again brings them back) | No | Yes |
 | See prices, upcoming changes and the price history | Yes | Yes |
@@ -110,7 +110,7 @@ A linked phone checks in with one scan of the wall QR; a new phone is linked onc
 
 Every check-in runs the same checks in order: **linked phone → valid health form → plan for this month → checked in**. If the customer has no valid health form (never filled in, or expired), the phone shows the health form before anything else (see Health form).
 
-The plan page lists the three plans with this customer's prices (adult or under 18); see Plans, prices and billing. A missing plan never blocks entry: a customer who backs out of the plan page can still talk to the instructor, who can check them in manually. **A missing health form always blocks entry**, by phone and manually.
+The plan page lists the three plans with their prices; see Plans, prices and billing. A missing plan never blocks entry: a customer who backs out of the plan page can still talk to the instructor, who can check them in manually. **A missing health form always blocks entry**, by phone and manually.
 
 **The wall QR**
 
@@ -172,11 +172,10 @@ Customers choose their own plan on their phone at their first check-in of each m
 
 **Prices**
 
-- The manager keeps one price table: each plan has an adult price and an under-18 price. All staff can see it on the Prices screen; only the manager can edit it.
+- The manager keeps one price table: each plan has one price, the same for every customer (decision 0036: the under-18 prices were dropped in November 2026). All staff can see it on the Prices screen; only the manager can edit it.
 - Each price change has a "valid from" month: the current month or up to 24 months ahead, never a past one. New prices apply from that month on; earlier months keep their old prices, so past reports never change.
 - Changes are only ever added. Correcting a price or cancelling an upcoming change is another row for the same month, and the newest row for a month wins.
 - The price is copied onto the customer's choice when it's made, so later price changes don't affect it.
-- Under 18 is worked out from the customer's date of birth on the 1st of the month (*assumption*): someone who turns 18 mid-month pays the under-18 price until the next month.
 - The system ships with no prices: a placeholder could be copied onto a real customer's choice and charged. The manager enters the real ones before launch, and a price that isn't set shows as "not set".
 
 **Freezes** (*dropped for now*, decision 0022)
@@ -240,11 +239,11 @@ One SQLite file (`gym.db`, WAL mode) with thirteen tables (fourteen once punch c
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `customers` | id, first\_name, last\_name, phone (unique, normalised), date\_of\_birth, notes, created\_at, active | Date of birth sets the under-18 price; deactivate instead of delete (decision 0023). No photo column for now (decision 0022) |
+| `customers` | id, first\_name, last\_name, phone (unique, normalised), date\_of\_birth, notes, created\_at, active | Date of birth decides whether a parent signs the health form; deactivate instead of delete (decision 0023). No photo column for now (decision 0022) |
 | `device_sessions` | id, customer\_id, token\_hash (unique), user\_agent, created\_at, last\_seen\_at, revoked\_at | One row per linked phone; at most 3 active per customer |
 | `link_codes` | id, customer\_id, code\_hash, created\_by, created\_at, expires\_at, used\_at | 6-digit code, 15-minute expiry, single use; only the customer's newest code counts |
-| `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry; NULL for "no plan"), start\_month, end\_month, age\_group (nullable), unit\_price\_agorot (nullable), chosen\_at, chosen\_by (customer / staff), staff\_user\_id (nullable), replaces\_id (nullable, unique) | Tri-monthly spans 3 months. Append-only (triggers refuse UPDATE and DELETE): a correction is a new row pointing at the one it replaces, from the same start month, and a choice is active while nothing replaces it (decision 0025). A "no plan" row (no plan, age group or price) clears the choice it replaces and covers nothing (decision 0026) |
-| `prices` | id, plan, age\_group (adult / under\_18), amount\_agorot, valid\_from\_month, created\_at | The manager's price table and its history; rows are only added. The row with the latest valid\_from\_month up to a month applies, and the newest row among those for the same month wins |
+| `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry; NULL for "no plan"), start\_month, end\_month, unit\_price\_agorot (nullable), chosen\_at, chosen\_by (customer / staff), staff\_user\_id (nullable), replaces\_id (nullable, unique) | Tri-monthly spans 3 months. Append-only (triggers refuse UPDATE and DELETE): a correction is a new row pointing at the one it replaces, from the same start month, and a choice is active while nothing replaces it (decision 0025). A "no plan" row (no plan or price) clears the choice it replaces and covers nothing (decision 0026) |
+| `prices` | id, plan, amount\_agorot, valid\_from\_month, created\_at | The manager's price table and its history; rows are only added. The row with the latest valid\_from\_month up to a month applies, and the newest row among those for the same month wins |
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable, phone only), staff\_user\_id (nullable, manual only) | Single-entry payments count these. Append-only (triggers refuse UPDATE and DELETE); no link to a plan choice, since a correction changes which one is active (decision 0032) |
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
@@ -286,7 +285,7 @@ The dashboard shows where the current month's report stands (generated, emailed,
 | Noa | Friedman | 0 (covered by a tri-monthly plan) | 30 Nov 2026 |
 | Yossi | Cohen | 3 × single-entry price | (empty) |
 
-Payment uses the price saved on each customer's choice, including the under-18 price where it applies. The last row shows the total to be collected.
+Payment uses the price saved on each customer's choice. The last row shows the total to be collected.
 
 **Format and storage**
 
@@ -361,13 +360,13 @@ Everything about one customer in one place. Buttons that change data (check in, 
 
 ### Admin: prices
 
-The price table, one row per plan with an adult and an under-18 price (sample prices; the real ones come from the manager). All staff see it; only the manager gets the edit form:
+The price table, one row per plan with its price (sample prices; the real ones come from the manager). All staff see it; only the manager gets the edit form:
 
-| Plan | Adult (₪) | Under 18 (₪) | Valid from |
-| --- | --- | --- | --- |
-| Monthly | 250 | 200 | Nov 2026 |
-| Tri-monthly | 650 | 520 | Nov 2026 |
-| Single entry (per visit) | 40 | 30 | Nov 2026 |
+| Plan | Price (₪) | Valid from |
+| --- | --- | --- |
+| Monthly | 250 | Nov 2026 |
+| Tri-monthly | 650 | Nov 2026 |
+| Single entry (per visit) | 40 | Nov 2026 |
 
 Editing a price asks which month it applies from and keeps the old row, so past months are unaffected. The screen also shows upcoming changes and the price history.
 
@@ -383,8 +382,7 @@ Each answer replaces an *assumption* above; none of them changes the architectur
 
 **For the manager**
 
-- [ ] Prices: the adult and under-18 price for each plan (entered on the Prices screen before launch; none are set until then).
-- [ ] Under 18: is age checked on the 1st of the month, or on the day the plan is chosen?
+- [ ] Prices: the price of each plan (entered on the Prices screen before launch; none are set until then).
 - [ ] A customer who doesn't come in at all during a month: really not charged?
 - [ ] Tri-monthly: once chosen, can the customer switch plans before the 3 months are up?
 - [x] Freezes: the manager probably doesn't want them; dropped for now (decision 0022).
@@ -393,7 +391,7 @@ Each answer replaces an *assumption* above; none of them changes the architectur
 - [ ] Photos: do we want them at all? (Left out for now, decision 0022; a nullable column can be added later.)
 - [ ] Health form: which official form to copy, how long it stays valid, and whether minors need a parent's signature.
 - [ ] Health form: confirm that instructors see only valid / expired, and only the manager opens the contents.
-- [ ] Punch cards: number of entries, price (and under-18 price), expiry, who records the purchase, whether unused entries carry over, and whether single entry is still needed.
+- [ ] Punch cards: number of entries, price, expiry, who records the purchase, whether unused entries carry over, and whether single entry is still needed.
 
 **Setup**
 
@@ -414,7 +412,7 @@ Build in six milestones, each usable and testable on its own; hand them to Claud
 2. **Customers, prices and plans**: customer create/edit/archive with date of birth, the price table with valid-from months, plan choices and corrections, and the monthly plan logic, with unit tests for every rule in Plans, prices and billing. Split into four features (decision 0022): Customers, Prices, Plan choices and monthly status, Plan corrections. Each ships its core logic, admin JSON routes and a plain, unstyled React page; freezes are dropped for now.
 3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, and manual check-in with plan selection and the health form on the desk PC. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (the official form's questions, decision 0031), Phone check-in and plan page, Manual check-in, doctor's notes and the form on the desk PC (decision 0033); then self sign-up on the phone (decision 0035).
 4. **Admin screens**: dashboard with live check-ins and expiring health forms, customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role, building on the pages from milestones 2 and 3. The styling pass comes first, before milestone 3's last feature (decision 0034): the look is designed once with the `frontend-design` skill and applied to every existing screen, admin and customer (including the milestone 3 phone pages); the new screens here use it. Test every manager-only action as an instructor and confirm it's refused.
-5. **Report**: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan, age group and edge case.
+5. **Report**: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan and edge case.
 6. **Operations**: encrypted backups and restore, Windows services for both apps and `cloudflared`, the named Cloudflare tunnel on the gym domain, SMTP setup, a printable wall-QR page, and a setup guide for the gym PC. All deployment testing happens here, through the chosen host: proxy headers, https and the login cookie on real phones, and edge rate limiting (decisions 0029, 0030).
 
 **Notes for Claude Code**

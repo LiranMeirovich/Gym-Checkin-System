@@ -1,6 +1,6 @@
 # 0024. Prices start empty, are only added, and all staff can see them
 
-- Status: Accepted
+- Status: Accepted; its age-group parts superseded by [0036](0036-one-price-per-plan.md) (one price per plan)
 - Date: 2026-10-30
 
 ## Context
