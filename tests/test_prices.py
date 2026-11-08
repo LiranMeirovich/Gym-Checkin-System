@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core import months
 from app.core.db import get_engine
-from app.core.models import ActivityLogEntry, AgeGroup, Plan, Price, StaffUser
+from app.core.models import ActivityLogEntry, Plan, Price, StaffUser
 from app.core.months import Month
 from app.core.permissions import Role
 from app.core.prices import (
@@ -28,7 +28,6 @@ from app.core.prices import (
 # Not a real hash; it only has to look like one to pass the CHECK.
 FAKE_PIN_HASH = "$argon2id$v=19$m=65536,t=3,p=4$fake"
 THIS_MONTH = Month(2026, 10)
-MONTHLY_ADULT = (Plan.MONTHLY, AgeGroup.ADULT)
 
 
 @pytest.fixture(autouse=True)
@@ -52,22 +51,20 @@ def manager(db: Session) -> StaffUser:
     return member
 
 
-def change(amount: int, plan_and_group=MONTHLY_ADULT) -> PriceChange:
-    return PriceChange(*plan_and_group, amount)
+def change(amount: int, plan: Plan = Plan.MONTHLY) -> PriceChange:
+    return PriceChange(plan, amount)
 
 
-def old_row(db: Session, month: Month, amount: int, pair=MONTHLY_ADULT) -> Price:
+def old_row(db: Session, month: Month, amount: int, plan: Plan = Plan.MONTHLY) -> Price:
     """A row from before today, which ``set_prices`` wouldn't add now."""
-    price = Price(
-        plan=pair[0], age_group=pair[1], amount_agorot=amount, valid_from_month=month
-    )
+    price = Price(plan=plan, amount_agorot=amount, valid_from_month=month)
     db.add(price)
     db.flush()
     return price
 
 
-def amount_for(db: Session, month: Month, pair=MONTHLY_ADULT) -> int | None:
-    price = price_for(db, *pair, month)
+def amount_for(db: Session, month: Month, plan: Plan = Plan.MONTHLY) -> int | None:
+    price = price_for(db, plan, month)
     return None if price is None else price.amount_agorot
 
 
@@ -89,7 +86,7 @@ def log(db: Session) -> list[tuple]:
 
 
 def test_no_price_is_none_not_a_guess(db: Session) -> None:
-    assert price_for(db, *MONTHLY_ADULT, THIS_MONTH) is None
+    assert price_for(db, Plan.MONTHLY, THIS_MONTH) is None
 
 
 def test_a_price_applies_from_its_month_until_the_next_change(db: Session) -> None:
@@ -124,15 +121,13 @@ def test_a_later_month_wins_over_a_newer_row_for_an_earlier_month(db: Session) -
     assert amount_for(db, Month(2026, 7)) == 25000
 
 
-def test_plans_and_age_groups_dont_mix(db: Session) -> None:
+def test_plans_dont_mix(db: Session) -> None:
     old_row(db, Month(2026, 1), 25000)
-    old_row(db, Month(2026, 1), 20000, (Plan.MONTHLY, AgeGroup.UNDER_18))
-    old_row(db, Month(2026, 1), 4000, (Plan.SINGLE_ENTRY, AgeGroup.ADULT))
+    old_row(db, Month(2026, 1), 4000, Plan.SINGLE_ENTRY)
 
     assert amount_for(db, THIS_MONTH) == 25000
-    assert amount_for(db, THIS_MONTH, (Plan.MONTHLY, AgeGroup.UNDER_18)) == 20000
-    assert amount_for(db, THIS_MONTH, (Plan.SINGLE_ENTRY, AgeGroup.ADULT)) == 4000
-    assert amount_for(db, THIS_MONTH, (Plan.TRI_MONTHLY, AgeGroup.ADULT)) is None
+    assert amount_for(db, THIS_MONTH, Plan.SINGLE_ENTRY) == 4000
+    assert amount_for(db, THIS_MONTH, Plan.TRI_MONTHLY) is None
 
 
 # Adding prices
@@ -182,16 +177,14 @@ def test_a_price_already_in_effect_adds_nothing(
 def test_only_the_changed_prices_of_a_save_are_added(
     db: Session, manager: StaffUser
 ) -> None:
-    under_18 = (Plan.MONTHLY, AgeGroup.UNDER_18)
-    set_prices(db, THIS_MONTH, [change(25000), change(20000, under_18)], by=manager)
+    single = Plan.SINGLE_ENTRY
+    set_prices(db, THIS_MONTH, [change(25000), change(4000, single)], by=manager)
 
     added = set_prices(
-        db, THIS_MONTH.plus(1), [change(25000), change(21000, under_18)], by=manager
+        db, THIS_MONTH.plus(1), [change(25000), change(4500, single)], by=manager
     )
 
-    assert [(p.age_group, p.amount_agorot) for p in added] == [
-        (AgeGroup.UNDER_18, 21000)
-    ]
+    assert [(p.plan, p.amount_agorot) for p in added] == [(single, 4500)]
 
 
 def test_an_upcoming_change_can_be_cancelled_with_another_row(
@@ -243,7 +236,7 @@ def test_bad_amounts_are_refused(
     with pytest.raises(InvalidPricesError) as refused:
         set_prices(db, THIS_MONTH, [change(amount)], by=manager)  # type: ignore[arg-type]
 
-    assert refused.value.fields == {"monthly.adult"}
+    assert refused.value.fields == {"monthly"}
 
 
 @pytest.mark.parametrize("amount", [1, MAX_AMOUNT_AGOROT])
@@ -257,7 +250,7 @@ def test_two_amounts_for_one_price_are_refused(db: Session, manager: StaffUser) 
     with pytest.raises(InvalidPricesError) as refused:
         set_prices(db, THIS_MONTH, [change(25000), change(26000)], by=manager)
 
-    assert refused.value.fields == {"monthly.adult"}
+    assert refused.value.fields == {"monthly"}
 
 
 def test_a_bad_save_names_everything_and_adds_nothing(
@@ -269,12 +262,12 @@ def test_a_bad_save_names_everything_and_adds_nothing(
             Month(2020, 1),
             [
                 change(25000),
-                change(0, (Plan.TRI_MONTHLY, AgeGroup.UNDER_18)),
+                change(0, Plan.TRI_MONTHLY),
             ],
             by=manager,
         )
 
-    assert refused.value.fields == {MONTH_FIELD, "tri_monthly.under_18"}
+    assert refused.value.fields == {MONTH_FIELD, "tri_monthly"}
     assert db.query(Price).count() == 0
     assert log(db) == []
 
@@ -294,7 +287,6 @@ def test_the_first_price_is_logged_with_no_before(
             None,
             {
                 "plan": "monthly",
-                "age_group": "adult",
                 "amount_agorot": 25000,
                 "valid_from_month": "2026-10",
             },
@@ -306,16 +298,16 @@ def test_the_first_price_is_logged_with_no_before(
 def test_a_change_logs_the_amount_it_replaces_per_row(
     db: Session, manager: StaffUser
 ) -> None:
-    under_18 = (Plan.MONTHLY, AgeGroup.UNDER_18)
-    set_prices(db, THIS_MONTH, [change(25000), change(20000, under_18)], by=manager)
+    single = Plan.SINGLE_ENTRY
+    set_prices(db, THIS_MONTH, [change(25000), change(4000, single)], by=manager)
     set_prices(
-        db, THIS_MONTH.plus(1), [change(26000), change(21000, under_18)], by=manager
+        db, THIS_MONTH.plus(1), [change(26000), change(4500, single)], by=manager
     )
 
     entries = log(db)
     assert len(entries) == 4
     assert entries[2][2] == {"amount_agorot": 25000}
-    assert entries[3][2] == {"amount_agorot": 20000}
+    assert entries[3][2] == {"amount_agorot": 4000}
 
 
 # The overview
@@ -325,13 +317,10 @@ def test_an_empty_table_shows_every_price_as_not_set(db: Session) -> None:
     overview = price_overview(db)
 
     assert overview.current_month == THIS_MONTH
-    assert [(c.plan, c.age_group, c.price) for c in overview.current] == [
-        (Plan.MONTHLY, AgeGroup.ADULT, None),
-        (Plan.MONTHLY, AgeGroup.UNDER_18, None),
-        (Plan.TRI_MONTHLY, AgeGroup.ADULT, None),
-        (Plan.TRI_MONTHLY, AgeGroup.UNDER_18, None),
-        (Plan.SINGLE_ENTRY, AgeGroup.ADULT, None),
-        (Plan.SINGLE_ENTRY, AgeGroup.UNDER_18, None),
+    assert [(c.plan, c.price) for c in overview.current] == [
+        (Plan.MONTHLY, None),
+        (Plan.TRI_MONTHLY, None),
+        (Plan.SINGLE_ENTRY, None),
     ]
     assert overview.upcoming == []
     assert overview.history == []
@@ -345,7 +334,7 @@ def test_the_overview_splits_current_upcoming_and_history(
     far = old_row(db, Month(2027, 3), 40000)
     typo = old_row(db, Month(2026, 12), 99000)
     fixed = old_row(db, Month(2026, 12), 30000)
-    other = old_row(db, Month(2026, 12), 22000, (Plan.MONTHLY, AgeGroup.UNDER_18))
+    other = old_row(db, Month(2026, 12), 4500, Plan.SINGLE_ENTRY)
 
     overview = price_overview(db)
 

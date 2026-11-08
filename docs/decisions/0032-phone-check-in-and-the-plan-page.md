@@ -1,6 +1,6 @@
 # 0032. Phone check-in: one route, an append-only `checkins` table, plan chosen with the check-in
 
-- Status: Accepted
+- Status: Accepted; its age-group parts superseded by [0036](0036-one-price-per-plan.md) (one price per plan)
 - Date: 2026-11-05
 
 ## Context

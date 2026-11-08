@@ -132,9 +132,7 @@ def check_in_by_phone(
     covering = covering_choice(db, customer, visit.month)
     if covering is None:
         if plan is None:
-            raise PlanRequiredError(
-                visit.month, plan_options(db, customer, visit.month)
-            )
+            raise PlanRequiredError(visit.month, plan_options(db, visit.month))
         covering = choose_plan_by_customer(db, customer, plan, visit.month)
 
     check_in = CheckIn(
@@ -175,9 +173,7 @@ def check_in_manually(
         if not may_choose:
             plan = Plan.SINGLE_ENTRY
         elif plan is None:
-            raise PlanRequiredError(
-                visit.month, plan_options(db, customer, visit.month)
-            )
+            raise PlanRequiredError(visit.month, plan_options(db, visit.month))
         covering = choose_plan_at_check_in(db, customer, plan, visit.month, by=by)
 
     check_in = CheckIn(

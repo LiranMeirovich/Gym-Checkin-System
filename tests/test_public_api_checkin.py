@@ -15,7 +15,6 @@ from app.core import checkins, health_forms, months, phone_links
 from app.core.db import get_engine
 from app.core.health_forms import expires_on
 from app.core.models import (
-    AgeGroup,
     CheckIn,
     ChosenBy,
     Customer,
@@ -103,15 +102,7 @@ def valid_form(db: Session, customer: Customer) -> None:
 def prices(db: Session) -> None:
     amounts = {Plan.MONTHLY: 25000, Plan.TRI_MONTHLY: 65000, Plan.SINGLE_ENTRY: 4000}
     for plan, amount in amounts.items():
-        for group in AgeGroup:
-            db.add(
-                Price(
-                    plan=plan,
-                    age_group=group,
-                    amount_agorot=amount,
-                    valid_from_month=EARLY_MONTH,
-                )
-            )
+        db.add(Price(plan=plan, amount_agorot=amount, valid_from_month=EARLY_MONTH))
     db.commit()
 
 
@@ -141,7 +132,6 @@ def add_monthly(db: Session, customer: Customer) -> None:
             plan=Plan.MONTHLY,
             start_month=month,
             end_month=month,
-            age_group=AgeGroup.ADULT,
             unit_price_agorot=25000,
             chosen_by=ChosenBy.CUSTOMER,
         )
@@ -265,7 +255,6 @@ def test_no_plan_is_plan_required_with_the_options(
     db.add(
         Price(
             plan=Plan.MONTHLY,
-            age_group=AgeGroup.ADULT,
             amount_agorot=25000,
             valid_from_month=EARLY_MONTH,
         )

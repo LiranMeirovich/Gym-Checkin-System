@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.db import get_engine
-from app.core.models import AgeGroup, ChosenBy, Plan, PlanChoice
+from app.core.models import ChosenBy, Plan, PlanChoice
 from app.core.months import Month
 
 # Not a real hash; it only has to look like one to pass the CHECK.
@@ -52,7 +52,6 @@ def insert(db: Session, **values: object) -> int:
         "plan": "monthly",
         "start_month": "2026-11",
         "end_month": "2026-11",
-        "age_group": "adult",
         "unit_price_agorot": 25000,
         "chosen_at": "2026-11-03 09:00:00.000000",
         "chosen_by": "staff",
@@ -63,10 +62,10 @@ def insert(db: Session, **values: object) -> int:
     result = db.execute(
         text(
             "INSERT INTO plan_choices (customer_id, plan, start_month, end_month,"
-            " age_group, unit_price_agorot, chosen_at, chosen_by, staff_user_id,"
-            " replaces_id) VALUES (:customer_id, :plan, :start_month, :end_month,"
-            " :age_group, :unit_price_agorot, :chosen_at, :chosen_by,"
-            " :staff_user_id, :replaces_id) RETURNING id"
+            " unit_price_agorot, chosen_at, chosen_by, staff_user_id, replaces_id)"
+            " VALUES (:customer_id, :plan, :start_month, :end_month,"
+            " :unit_price_agorot, :chosen_at, :chosen_by, :staff_user_id,"
+            " :replaces_id) RETURNING id"
         ),
         row,
     )
@@ -81,7 +80,6 @@ def no_plan(replaces_id: int, **values: object) -> dict[str, object]:
     """A row clearing choice ``replaces_id`` (a November one by default)."""
     return {
         "plan": None,
-        "age_group": None,
         "unit_price_agorot": None,
         "replaces_id": replaces_id,
         **values,
@@ -95,7 +93,6 @@ def test_a_row_reads_back_with_its_types_and_timestamp(db: Session) -> None:
             plan=Plan.TRI_MONTHLY,
             start_month=Month(2026, 11),
             end_month=Month(2027, 1),
-            age_group=AgeGroup.UNDER_18,
             unit_price_agorot=60000,
             chosen_by=ChosenBy.CUSTOMER,
         )
@@ -107,7 +104,6 @@ def test_a_row_reads_back_with_its_types_and_timestamp(db: Session) -> None:
     assert row.plan is Plan.TRI_MONTHLY
     assert row.start_month == Month(2026, 11)
     assert row.end_month == Month(2027, 1)
-    assert row.age_group is AgeGroup.UNDER_18
     assert row.chosen_by is ChosenBy.CUSTOMER
     assert row.staff_user_id is None
     assert row.replaces_id is None
@@ -133,7 +129,6 @@ def test_the_database_accepts_good_rows(db: Session, good: dict[str, object]) ->
     [
         {"customer_id": 99},
         {"plan": "weekly"},
-        {"age_group": "senior"},
         {"chosen_by": "robot"},
         {"unit_price_agorot": -1},
         {"unit_price_agorot": 100.5},
@@ -167,7 +162,6 @@ def test_the_database_refuses_bad_rows(db: Session, bad: dict[str, object]) -> N
         "plan",
         "start_month",
         "end_month",
-        "age_group",
         "unit_price_agorot",
         "chosen_at",
         "chosen_by",
@@ -187,9 +181,8 @@ def test_a_row_cannot_replace_itself(db: Session) -> None:
         db.execute(
             text(
                 "INSERT INTO plan_choices (id, customer_id, plan, start_month,"
-                " end_month, age_group, unit_price_agorot, chosen_at, chosen_by,"
-                " replaces_id) VALUES (1, 1, 'monthly', '2026-11', '2026-11',"
-                " 'adult', 0, '2026-11-03 09:00:00.000000', 'customer', 1)"
+                " end_month, unit_price_agorot, chosen_at, chosen_by,"
+                " replaces_id) VALUES (1, 1, 'monthly', '2026-11', '2026-11', 0, '2026-11-03 09:00:00.000000', 'customer', 1)"
             )
         )
 
@@ -285,7 +278,6 @@ def test_a_no_plan_row_clears_a_choice(db: Session) -> None:
     row = db.get(PlanChoice, cleared)
     assert row is not None
     assert row.plan is None
-    assert row.age_group is None
     assert row.unit_price_agorot is None
 
 
@@ -297,13 +289,9 @@ def test_a_no_plan_row_clears_a_whole_tri_monthly_period(db: Session) -> None:
 @pytest.mark.parametrize(
     "bad",
     [
-        # Partly empty: a row has all of plan, age group and price, or none.
-        {"plan": None},
-        {"age_group": None},
-        {"unit_price_agorot": None},
-        {"plan": None, "age_group": None},
-        {"plan": None, "unit_price_agorot": None},
-        {"age_group": None, "unit_price_agorot": None},
+        # Partly empty: a row has both plan and price, or neither.
+        no_plan(1, plan="monthly"),
+        no_plan(1, unit_price_agorot=25000),
         # "No plan" only ever clears an earlier choice.
         no_plan(None),  # type: ignore[arg-type]
     ],
@@ -311,7 +299,9 @@ def test_a_no_plan_row_clears_a_whole_tri_monthly_period(db: Session) -> None:
 def test_the_database_refuses_partial_or_unattached_no_plan_rows(
     db: Session, bad: dict[str, object]
 ) -> None:
-    with pytest.raises(IntegrityError):
+    # Choice 1, for the corrections above to replace.
+    insert(db)
+    with pytest.raises(IntegrityError, match="no_plan_row_is_complete"):
         insert(db, **bad)
 
 

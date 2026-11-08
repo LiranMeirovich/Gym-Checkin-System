@@ -22,8 +22,8 @@ from app.core.staff import create_first_manager, create_staff_user
 ORIGIN = "http://127.0.0.1:8000"
 SAME_ORIGIN = {"Origin": ORIGIN, "Sec-Fetch-Site": "same-origin"}
 PIN = "482913"
-MONTHLY_ADULT = {"plan": "monthly", "age_group": "adult", "amount_agorot": 25000}
-SAVE = {"valid_from_month": "2026-10", "prices": [MONTHLY_ADULT]}
+MONTHLY = {"plan": "monthly", "amount_agorot": 25000}
+SAVE = {"valid_from_month": "2026-10", "prices": [MONTHLY]}
 
 
 @pytest.fixture(autouse=True)
@@ -134,10 +134,9 @@ def test_an_empty_table(as_manager: Staff) -> None:
     assert answer.headers["Cache-Control"] == "no-store"
     body = answer.json()
     assert body["current_month"] == "2026-10"
-    assert len(body["current"]) == 6
+    assert len(body["current"]) == 3
     assert body["current"][0] == {
         "plan": "monthly",
-        "age_group": "adult",
         "amount_agorot": None,
         "valid_from_month": None,
     }
@@ -150,12 +149,8 @@ def test_a_save_answers_with_the_updated_overview(as_manager: Staff) -> None:
         {
             "valid_from_month": "2026-11",
             "prices": [
-                MONTHLY_ADULT,
-                {
-                    "plan": "single_entry",
-                    "age_group": "under_18",
-                    "amount_agorot": 3050,
-                },
+                MONTHLY,
+                {"plan": "single_entry", "amount_agorot": 3050},
             ],
         }
     )
@@ -176,14 +171,14 @@ def test_a_save_answers_with_the_updated_overview(as_manager: Staff) -> None:
 def test_this_months_price_shows_as_current(as_manager: Staff) -> None:
     body = as_manager.post(SAVE).json()
 
-    assert body["current"][0] == {**MONTHLY_ADULT, "valid_from_month": "2026-10"}
+    assert body["current"][0] == {**MONTHLY, "valid_from_month": "2026-10"}
     assert body["upcoming"] == []
 
 
 def test_a_correction_stays_in_the_history(as_manager: Staff) -> None:
     as_manager.post(SAVE)
     body = as_manager.post(
-        {**SAVE, "prices": [{**MONTHLY_ADULT, "amount_agorot": 26000}]}
+        {**SAVE, "prices": [{**MONTHLY, "amount_agorot": 26000}]}
     ).json()
 
     assert body["current"][0]["amount_agorot"] == 26000
@@ -212,15 +207,15 @@ def test_a_broken_save_names_every_part_and_saves_nothing(
         {
             "valid_from_month": "2026-09",
             "prices": [
-                MONTHLY_ADULT,
-                {**MONTHLY_ADULT, "plan": "tri_monthly", "amount_agorot": 0},
+                MONTHLY,
+                {**MONTHLY, "plan": "tri_monthly", "amount_agorot": 0},
             ],
         }
     )
 
     assert answer.status_code == 400
     assert answer.json() == {
-        "errors": {"valid_from_month": "invalid", "tri_monthly.adult": "invalid"}
+        "errors": {"valid_from_month": "invalid", "tri_monthly": "invalid"}
     }
     assert rows_in_db(db) == 0
 
@@ -232,11 +227,12 @@ def test_a_broken_save_names_every_part_and_saves_nothing(
         {**SAVE, "valid_from_month": "2026-10-01"},
         {**SAVE, "valid_from_month": "0999-01"},
         {**SAVE, "valid_from_month": "2026-10\n"},
-        {**SAVE, "prices": [{**MONTHLY_ADULT, "plan": "weekly"}]},
-        {**SAVE, "prices": [{**MONTHLY_ADULT, "age_group": "senior"}]},
-        {**SAVE, "prices": [{**MONTHLY_ADULT, "amount_agorot": "25000"}]},
-        {**SAVE, "prices": [{**MONTHLY_ADULT, "amount_agorot": 250.5}]},
-        {"prices": [MONTHLY_ADULT]},
+        {**SAVE, "prices": [{**MONTHLY, "plan": "weekly"}]},
+        # A page from before one price per plan (decision 0036).
+        {**SAVE, "prices": [{**MONTHLY, "age_group": "under_18"}]},
+        {**SAVE, "prices": [{**MONTHLY, "amount_agorot": "25000"}]},
+        {**SAVE, "prices": [{**MONTHLY, "amount_agorot": 250.5}]},
+        {"prices": [MONTHLY]},
     ],
 )
 def test_a_malformed_request_is_a_422(

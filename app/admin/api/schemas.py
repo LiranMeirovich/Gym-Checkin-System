@@ -5,13 +5,13 @@ here that breaks the frontend fails its build."""
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, StrictBool, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints
 
 from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
 from app.core.http import Answer, DateOfBirth
-from app.core.models import AgeGroup, ChosenBy, Plan
+from app.core.models import ChosenBy, Plan
 from app.core.permissions import Role
 
 # SQLite's integer range. A bigger id can't exist, and SQLite would refuse
@@ -206,10 +206,9 @@ MonthText = Annotated[str, Field(pattern=r"^[1-9][0-9]{3}-(0[1-9]|1[0-2])$")]
 
 
 class PriceInEffect(Answer):
-    """One cell of the price table. Both are ``None`` if it's not set yet."""
+    """One plan's price this month. Both are ``None`` if it's not set yet."""
 
     plan: Plan
-    age_group: AgeGroup
     amount_agorot: int | None
     valid_from_month: MonthText | None
 
@@ -220,7 +219,6 @@ class PriceRow(Answer):
 
     id: int
     plan: Plan
-    age_group: AgeGroup
     amount_agorot: int
     valid_from_month: MonthText
     created_at: datetime
@@ -237,8 +235,12 @@ class PriceOverview(Answer):
 
 
 class PriceChange(BaseModel):
+    # An unknown field is refused, not dropped: a page from before one price
+    # per plan (decision 0036) still sends ``age_group``, and its under-18
+    # box must not quietly become the plan's price.
+    model_config = ConfigDict(extra="forbid")
+
     plan: Plan
-    age_group: AgeGroup
     # Strict, so "100" and 100.0 are malformed rather than quietly converted.
     amount_agorot: int = Field(strict=True)
 
@@ -252,15 +254,15 @@ class PriceChanges(BaseModel):
 
 class PricesRefused(Answer):
     """400: every part that breaks its rule, at once: ``valid_from_month``,
-    or a price as ``<plan>.<age_group>``. Nothing was saved."""
+    or a price by its plan (``monthly``). Nothing was saved."""
 
     errors: dict[str, Literal["invalid"]]
 
 
 # ── Plans ───────────────────────────────────────────────────────────────
-# What covers a customer's month and the manager's choice. The price and age
-# group are worked out on the server and copied onto the choice; a request
-# never carries them.
+# What covers a customer's month and the manager's choice. The price is
+# looked up on the server and copied onto the choice; a request never
+# carries it.
 
 
 class PlanChoiceRow(Answer):
@@ -269,14 +271,13 @@ class PlanChoiceRow(Answer):
     is the choice it corrected, if any; ``replaced_by_id`` the row that
     corrected or cleared it, if any (then it's no longer in force).
 
-    A "no plan" row (``plan``, ``age_group`` and ``unit_price_agorot`` all
-    ``None``) cleared the choice it replaces; it's never ``covering``."""
+    A "no plan" row (``plan`` and ``unit_price_agorot`` both ``None``)
+    cleared the choice it replaces; it's never ``covering``."""
 
     id: int
     plan: Plan | None
     start_month: MonthText
     end_month: MonthText
-    age_group: AgeGroup | None
     unit_price_agorot: int | None
     chosen_at: datetime
     chosen_by: ChosenBy
@@ -286,11 +287,10 @@ class PlanChoiceRow(Answer):
 
 
 class PlanOption(Answer):
-    """A plan with this customer's price this month; ``None`` if it's not
-    set, and then it can't be chosen."""
+    """A plan with its price this month; ``None`` if it's not set, and then
+    it can't be chosen."""
 
     plan: Plan
-    age_group: AgeGroup
     amount_agorot: int | None
 
 
@@ -315,8 +315,8 @@ class PlanChoiceRequest(BaseModel):
 
 class PlanRefused(Answer):
     """400. ``month_not_choosable``: not the current month.
-    ``price_not_set``: the manager hasn't entered this plan's price for the
-    customer's age group. Nothing was saved."""
+    ``price_not_set``: the manager hasn't entered this plan's price.
+    Nothing was saved."""
 
     error: Literal["month_not_choosable", "price_not_set"]
 
@@ -568,7 +568,7 @@ class CheckInPlanRequired(Answer):
 
 class CheckInRefusedOther(Answer):
     """409. ``price_not_set``: the plan (or an instructor's single entry)
-    has no price for the customer's age group. ``customer_inactive``:
+    has no price. ``customer_inactive``:
     reactivate them first. Nothing was recorded."""
 
     error: Literal["price_not_set", "customer_inactive"]

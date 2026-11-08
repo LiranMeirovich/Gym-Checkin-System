@@ -17,7 +17,6 @@ from app.core import months, pins
 from app.core.db import get_engine
 from app.core.models import (
     ActivityLogEntry,
-    AgeGroup,
     ChosenBy,
     Customer,
     Plan,
@@ -90,7 +89,7 @@ def customer(db: Session) -> Customer:
 
 @pytest.fixture
 def prices(db: Session) -> None:
-    """Every adult price, set from before this month. No under-18 ones."""
+    """Every price, set from before this month."""
     for plan, amount in {
         Plan.MONTHLY: 25000,
         Plan.TRI_MONTHLY: 65000,
@@ -99,7 +98,6 @@ def prices(db: Session) -> None:
         db.add(
             Price(
                 plan=plan,
-                age_group=AgeGroup.ADULT,
                 amount_agorot=amount,
                 valid_from_month=Month(2026, 1),
             )
@@ -206,7 +204,7 @@ def test_nothing_chosen_yet(as_manager: Staff, customer: Customer) -> None:
         "covering": None,
         "correctable": False,
         "options": [
-            {"plan": plan, "age_group": "adult", "amount_agorot": None}
+            {"plan": plan, "amount_agorot": None}
             for plan in ("monthly", "tri_monthly", "single_entry")
         ],
         "history": [],
@@ -225,7 +223,6 @@ def test_a_choice_answers_with_the_updated_status(
         "plan": "tri_monthly",
         "start_month": "2026-11",
         "end_month": "2027-01",
-        "age_group": "adult",
         "unit_price_agorot": 65000,
         "chosen_by": "staff",
         "staff_name": "מנהלת",
@@ -442,7 +439,6 @@ def test_clearing_answers_with_a_no_plan_row(
         "plan": None,
         "start_month": "2026-11",
         "end_month": "2027-01",
-        "age_group": None,
         "unit_price_agorot": None,
         "chosen_by": "staff",
         "staff_name": "מנהלת",
@@ -514,7 +510,6 @@ def test_a_choice_from_an_earlier_month_is_refused(
         plan=Plan.TRI_MONTHLY,
         start_month=Month(2026, 10),
         end_month=Month(2026, 12),
-        age_group=AgeGroup.ADULT,
         unit_price_agorot=65000,
         chosen_by=ChosenBy.CUSTOMER,
     )
@@ -565,31 +560,17 @@ def test_no_change_is_refused(
 
 
 def test_an_unset_price_is_refused_for_a_correction(
-    as_manager: Staff, customer: Customer, prices: None, db: Session
+    as_manager: Staff, customer: Customer, db: Session
 ) -> None:
-    young = Customer(
-        first_name="Tal",
-        last_name="Ben",
-        phone="+972507654321",
-        date_of_birth=date(2010, 1, 1),
+    # Only the monthly price is set.
+    db.add(
+        Price(plan=Plan.MONTHLY, amount_agorot=25000, valid_from_month=Month(2026, 1))
     )
-    db.add(young)
     db.commit()
-    choice = PlanChoice(
-        customer_id=young.id,
-        plan=Plan.MONTHLY,
-        start_month=Month(2026, 11),
-        end_month=Month(2026, 11),
-        age_group=AgeGroup.UNDER_18,
-        unit_price_agorot=20000,
-        chosen_by=ChosenBy.CUSTOMER,
-    )
-    db.add(choice)
-    db.commit()
+    monthly = as_manager.choose(customer.id)
 
-    # Only adult prices are set.
     answer = as_manager.correct(
-        young.id, {"replaces_id": choice.id, "plan": "single_entry"}
+        customer.id, {"replaces_id": monthly, "plan": "single_entry"}
     )
 
     assert answer.status_code == 400
@@ -605,7 +586,6 @@ def test_running_into_a_covered_month_is_a_conflict(
         plan=Plan.MONTHLY,
         start_month=Month(2026, 12),
         end_month=Month(2026, 12),
-        age_group=AgeGroup.ADULT,
         unit_price_agorot=25000,
         chosen_by=ChosenBy.CUSTOMER,
     )

@@ -28,7 +28,6 @@ from app.core.db import get_engine
 from app.core.health_forms import FormState
 from app.core.models import (
     ActivityLogEntry,
-    AgeGroup,
     CheckIn,
     CheckInMethod,
     ChosenBy,
@@ -93,11 +92,10 @@ def valid_form(db: Session, customer: Customer) -> None:
 
 @pytest.fixture
 def prices(db: Session) -> None:
-    """Every price, set from before this month. Under-18 prices are lower."""
+    """Every price, set from before this month."""
     amounts = {Plan.MONTHLY: 25000, Plan.TRI_MONTHLY: 65000, Plan.SINGLE_ENTRY: 4000}
     for plan, amount in amounts.items():
-        add_price(db, plan, AgeGroup.ADULT, amount)
-        add_price(db, plan, AgeGroup.UNDER_18, amount - 1000)
+        add_price(db, plan, amount)
 
 
 def add_customer(db: Session, number: str, born: date) -> Customer:
@@ -148,15 +146,10 @@ def add_form(
 def add_price(
     db: Session,
     plan: Plan,
-    age_group: AgeGroup,
     amount: int,
     month: Month = EARLY_MONTH,
 ) -> None:
-    db.add(
-        Price(
-            plan=plan, age_group=age_group, amount_agorot=amount, valid_from_month=month
-        )
-    )
+    db.add(Price(plan=plan, amount_agorot=amount, valid_from_month=month))
     db.flush()
 
 
@@ -166,7 +159,6 @@ def add_choice(db: Session, customer: Customer, plan: Plan, start: Month) -> Pla
         plan=plan,
         start_month=start,
         end_month=end_month(plan, start),
-        age_group=AgeGroup.ADULT,
         unit_price_agorot=25000,
         chosen_by=ChosenBy.CUSTOMER,
     )
@@ -420,7 +412,7 @@ def test_a_repeat_comes_before_the_plan_check(
 # The plan for the month
 
 
-def test_no_plan_asks_for_one_with_this_customers_prices(
+def test_no_plan_asks_for_one_with_the_prices(
     db: Session, phone: DeviceSession, valid_form: None, prices: None
 ) -> None:
     with pytest.raises(PlanRequiredError) as refused:
@@ -428,18 +420,17 @@ def test_no_plan_asks_for_one_with_this_customers_prices(
 
     assert refused.value.month == THIS_MONTH
     assert [
-        (o.plan, o.age_group, o.price and o.price.amount_agorot)
-        for o in refused.value.options
+        (o.plan, o.price and o.price.amount_agorot) for o in refused.value.options
     ] == [
-        (Plan.MONTHLY, AgeGroup.ADULT, 25000),
-        (Plan.TRI_MONTHLY, AgeGroup.ADULT, 65000),
-        (Plan.SINGLE_ENTRY, AgeGroup.ADULT, 4000),
+        (Plan.MONTHLY, 25000),
+        (Plan.TRI_MONTHLY, 65000),
+        (Plan.SINGLE_ENTRY, 4000),
     ]
     assert recorded(db) == []
     assert choices(db) == []
 
 
-def test_an_under_18_customer_is_offered_the_under_18_prices(
+def test_an_under_18_customer_is_offered_the_same_prices(
     db: Session, prices: None
 ) -> None:
     young = add_customer(db, "+972507654321", date(2010, 1, 1))
@@ -448,16 +439,16 @@ def test_an_under_18_customer_is_offered_the_under_18_prices(
     with pytest.raises(PlanRequiredError) as refused:
         check_in_by_phone(db, add_phone(db, young, "b"))
     assert [o.price and o.price.amount_agorot for o in refused.value.options] == [
-        24000,
-        64000,
-        3000,
+        25000,
+        65000,
+        4000,
     ]
 
 
 def test_a_plan_without_a_price_is_offered_as_not_set(
     db: Session, phone: DeviceSession, valid_form: None
 ) -> None:
-    add_price(db, Plan.MONTHLY, AgeGroup.ADULT, 25000)
+    add_price(db, Plan.MONTHLY, 25000)
 
     with pytest.raises(PlanRequiredError) as refused:
         check_in_by_phone(db, phone)
@@ -509,7 +500,7 @@ def test_a_plan_sent_for_a_covered_month_is_ignored(
 def test_a_plan_without_a_price_refuses_and_records_nothing(
     db: Session, phone: DeviceSession, valid_form: None
 ) -> None:
-    add_price(db, Plan.MONTHLY, AgeGroup.ADULT, 25000)
+    add_price(db, Plan.MONTHLY, 25000)
 
     with pytest.raises(PriceNotSetError):
         check_in_by_phone(db, phone, Plan.SINGLE_ENTRY)

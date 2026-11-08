@@ -10,14 +10,13 @@ from app.core.models.doctor_notes import DoctorNote, ImageType
 from app.core.models.health_forms import HealthForm
 from app.core.models.phone_links import DeviceSession, LinkCode
 from app.core.models.plan_choices import ChosenBy, PlanChoice
-from app.core.models.prices import AgeGroup, Plan, Price
+from app.core.models.prices import Plan, Price
 from app.core.models.settings import Setting
 from app.core.models.staff import StaffUser
 from app.core.models.staff_sessions import StaffSession
 
 __all__ = [
     "ActivityLogEntry",
-    "AgeGroup",
     "Base",
     "CheckIn",
     "CheckInMethod",

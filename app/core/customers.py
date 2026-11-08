@@ -285,8 +285,9 @@ def edit_customer(
 def change_date_of_birth(
     db: Session, customer: Customer, date_of_birth: date, *, by: StaffUser
 ) -> None:
-    """Correct the date of birth, which sets the under-18 price. Raises
-    ``CustomerInactiveError`` or ``InvalidCustomerError``."""
+    """Correct the date of birth, which decides whether a parent signs the
+    health form. Raises ``CustomerInactiveError`` or
+    ``InvalidCustomerError``."""
     _ensure_active(customer)
     values = _clean({CustomerField.DATE_OF_BIRTH: date_of_birth})
     _apply(db, customer, values, Action.CUSTOMER_CHANGE_DATE_OF_BIRTH, by=by)

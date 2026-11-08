@@ -1,5 +1,6 @@
 """Prices: what a plan costs in a month, and the manager's price changes
-(design doc: "Plans, prices and billing").
+(design doc: "Plans, prices and billing"). Each plan has one price, the same
+for every customer (decision 0036).
 
 Prices are only ever added. A change applies from its ``valid_from_month`` on,
 until a later month's change; among rows for the same month the newest wins,
@@ -24,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.activity_log import Action, Target, record
-from app.core.models import AgeGroup, Plan, Price, StaffUser
+from app.core.models import Plan, Price, StaffUser
 from app.core.months import Month
 
 # How far ahead a change can start; anything later is a typo in the year.
@@ -36,16 +37,15 @@ MONTH_FIELD = "valid_from_month"
 
 @dataclass(frozen=True)
 class PriceChange:
-    """One price in a save: this plan and age group cost this much."""
+    """One price in a save: this plan costs this much."""
 
     plan: Plan
-    age_group: AgeGroup
     amount_agorot: int
 
     @property
     def field(self) -> str:
-        """The name a refusal uses for this price."""
-        return f"{self.plan.value}.{self.age_group.value}"
+        """The name a refusal uses for this price: the plan."""
+        return self.plan.value
 
 
 class InvalidPricesError(ValueError):
@@ -63,7 +63,6 @@ class PriceInEffect:
     """One cell of the price table. ``price`` is ``None`` if it's not set."""
 
     plan: Plan
-    age_group: AgeGroup
     price: Price | None
 
 
@@ -72,7 +71,7 @@ class PriceOverview:
     """Everything the Prices screen shows."""
 
     current_month: Month
-    # All plan and age group pairs, in a fixed order.
+    # Every plan, in a fixed order.
     current: list[PriceInEffect]
     # The change waiting for each later month, soonest first. A row replaced
     # by a newer one for the same month isn't here.
@@ -81,15 +80,12 @@ class PriceOverview:
     history: list[Price]
 
 
-def price_for(
-    db: Session, plan: Plan, age_group: AgeGroup, month: Month
-) -> Price | None:
+def price_for(db: Session, plan: Plan, month: Month) -> Price | None:
     """The price that applies to ``month``, or ``None`` if none does yet."""
     return db.scalar(
         select(Price)
         .where(
             Price.plan == plan,
-            Price.age_group == age_group,
             Price.valid_from_month <= month,
         )
         .order_by(Price.valid_from_month.desc(), Price.id.desc())
@@ -106,26 +102,21 @@ def price_overview(db: Session) -> PriceOverview:
         )
     )
     # Oldest first, so a later row replaces an earlier one in both.
-    in_effect: dict[tuple[Plan, AgeGroup], Price] = {}
-    upcoming: dict[tuple[Plan, AgeGroup, Month], Price] = {}
+    in_effect: dict[Plan, Price] = {}
+    upcoming: dict[tuple[Plan, Month], Price] = {}
     for row in reversed(history):
         if row.valid_from_month <= today:
-            in_effect[row.plan, row.age_group] = row
+            in_effect[row.plan] = row
         else:
-            upcoming[row.plan, row.age_group, row.valid_from_month] = row
+            upcoming[row.plan, row.valid_from_month] = row
     return PriceOverview(
         current_month=today,
-        current=[
-            PriceInEffect(plan, age_group, in_effect.get((plan, age_group)))
-            for plan in Plan
-            for age_group in AgeGroup
-        ],
+        current=[PriceInEffect(plan, in_effect.get(plan)) for plan in Plan],
         upcoming=[
-            upcoming[plan, age_group, month]
-            for month in sorted({month for _, _, month in upcoming})
+            upcoming[plan, month]
+            for month in sorted({month for _, month in upcoming})
             for plan in Plan
-            for age_group in AgeGroup
-            if (plan, age_group, month) in upcoming
+            if (plan, month) in upcoming
         ],
         history=history,
     )
@@ -150,12 +141,11 @@ def set_prices(
     _check(valid_from_month, changes)
     added = []
     for change in changes:
-        previous = price_for(db, change.plan, change.age_group, valid_from_month)
+        previous = price_for(db, change.plan, valid_from_month)
         if previous is not None and previous.amount_agorot == change.amount_agorot:
             continue
         price = Price(
             plan=change.plan,
-            age_group=change.age_group,
             amount_agorot=change.amount_agorot,
             valid_from_month=valid_from_month,
         )
@@ -172,7 +162,6 @@ def set_prices(
             ),
             after={
                 "plan": change.plan.value,
-                "age_group": change.age_group.value,
                 "amount_agorot": change.amount_agorot,
                 "valid_from_month": str(valid_from_month),
             },

@@ -32,7 +32,9 @@ from app.core.health_form_pdf import (
     render_snapshot,
 )
 from app.core.models import Customer, DoctorNote, HealthForm, StaffUser
-from app.core.plans import ADULT_AGE
+
+# Under this age on the signing day, a parent or guardian signs.
+ADULT_AGE = 18
 
 # How long a form lasts, counted from the day it's signed. Each form keeps
 # its own ``expires_on``, so changing this never touches old forms.

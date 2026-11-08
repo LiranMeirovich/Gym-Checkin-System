@@ -16,8 +16,9 @@ export function customerKey(id: number) {
 }
 
 // The customer's plan status. Under the customer's key, but a save that
-// only writes the customer with setQueryData doesn't refresh it, so saves
-// that can change the age group or the prices invalidate it themselves.
+// only writes the customer with setQueryData doesn't refresh it, so the
+// saves that change it (a plan choice or correction, a check-in that
+// chooses a plan) refresh it themselves.
 export function planKey(id: number) {
   return ["customers", id, "plan"] as const;
 }
