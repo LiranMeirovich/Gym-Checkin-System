@@ -1,5 +1,6 @@
 // The page the wall QR opens. A phone that isn't linked gets the link
-// form (its phone number and the code from the desk). A linked phone with
+// form (its phone number and the code from the desk), or a new customer
+// signs up on it (SignUpForm, decision 0035). A linked phone with
 // no valid health form gets the form first (decision 0004); one whose
 // form needs a doctor's note is sent to the desk. Otherwise the phone
 // checks in straight away (CheckInStep), right after linking or signing
@@ -9,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { CheckInStep } from "./CheckInStep";
 import { HealthForm } from "./HealthForm";
+import { SignUpForm } from "./SignUpForm";
 import {
   NoConnection,
   NO_CONNECTION_TRY_AGAIN,
@@ -39,7 +41,7 @@ export function CheckIn() {
 
   if (isPending) return null;
   if (isError) return <NoConnection />;
-  if (!me) return <LinkForm />;
+  if (!me) return <NotLinked />;
   return <Linked me={me} />;
 }
 
@@ -73,8 +75,29 @@ function Linked({ me }: { me: Me }) {
   );
 }
 
-function LinkForm() {
+/** Linking with a code from the desk, or signing up as a new customer.
+ * Either way the answer is the customer, and the page carries on as a
+ * linked phone. */
+function NotLinked() {
   const queryClient = useQueryClient();
+  const [signingUp, setSigningUp] = useState(false);
+  const linked = (me: Me) => queryClient.setQueryData(ME_KEY, me);
+
+  if (signingUp) {
+    return (
+      <SignUpForm onSignedUp={linked} onHaveCode={() => setSigningUp(false)} />
+    );
+  }
+  return <LinkForm onLinked={linked} onNew={() => setSigningUp(true)} />;
+}
+
+function LinkForm({
+  onLinked,
+  onNew,
+}: {
+  onLinked: (me: Me) => void;
+  onNew: () => void;
+}) {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -89,7 +112,7 @@ function LinkForm() {
         body: { phone, code },
       });
       if (data) {
-        queryClient.setQueryData(ME_KEY, data);
+        onLinked(data);
         return;
       }
       if (response.status !== 400) {
@@ -150,6 +173,12 @@ function LinkForm() {
           קישור
         </button>
       </form>
+      <p className={styles.switch}>
+        חדשים במכון?{" "}
+        <button type="button" onClick={onNew}>
+          הרשמה
+        </button>
+      </p>
     </>
   );
 }
