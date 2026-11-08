@@ -1,0 +1,182 @@
+/* The phone pages' own pieces: the link form, the plan page and the
+   check-in result. */
+
+.heading {
+  font-size: var(--text-xl);
+  margin-block-end: var(--space-2);
+}
+
+.lead {
+  color: var(--muted);
+  margin-block-end: var(--space-5);
+}
+
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: var(--space-5) var(--space-4);
+}
+
+.field {
+  margin-block-end: var(--space-4);
+}
+
+.field input {
+  min-height: 3.25rem;
+}
+
+/* The code from the desk: six digits, spaced to read back at a glance. */
+.code {
+  letter-spacing: 0.3em;
+  font-size: var(--text-l);
+  font-weight: 700;
+  text-align: center;
+}
+
+.wide {
+  width: 100%;
+  min-height: 3.25rem;
+  font-size: var(--text-l);
+}
+
+.waiting {
+  text-align: center;
+  color: var(--muted);
+  padding-block: var(--space-7);
+}
+
+/* ── The check-in result: the one bold moment ────────────────────────── */
+/* A kettlebell, after the logo: a rounded body with the handle's opening
+   cut out of its top. The greeting and the time sit in the body. */
+
+.bell {
+  position: relative;
+  margin: var(--space-2) auto var(--space-5);
+  width: min(100%, 22rem);
+  aspect-ratio: 1 / 1.08;
+  padding: 44% var(--space-5) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--paper);
+  background: linear-gradient(170deg, var(--steel) 0%, var(--navy) 70%);
+  border: none;
+  border-radius: 42% 42% 46% 46% / 30% 30% 52% 52%;
+  animation: bell-in 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+/* The handle's opening, in the page's own colour. */
+.bell::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 8%;
+  inset-inline-start: 26%;
+  width: 48%;
+  height: 23%;
+  border-radius: 40% 40% 24% 24% / 55% 55% 32% 32%;
+  background: var(--mist);
+}
+
+.bellRepeat {
+  composes: bell;
+  color: var(--navy-deep);
+  /* Quieter than a new check-in, but the handle still shows. The first
+     line is for browsers without color-mix() (Safari before 16.2). */
+  background: var(--line);
+  background: color-mix(in srgb, var(--steel) 32%, var(--paper));
+  animation: none;
+}
+
+.bellGreeting {
+  margin: 0;
+  font-size: var(--text-l);
+  font-weight: 600;
+  color: inherit;
+}
+
+.bellWord {
+  margin: var(--space-1) 0;
+  font-size: 2.75rem;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.bellTime {
+  margin: 0;
+  font-size: var(--text-m);
+  opacity: 0.9;
+}
+
+@keyframes bell-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* What covers the month, and the form's date. */
+.facts {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.facts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+/* ── The plan page ───────────────────────────────────────────────────── */
+
+.plans {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-4) 0 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.plan {
+  width: 100%;
+  min-height: 5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  text-align: start;
+  border-radius: var(--radius-panel);
+  border-color: var(--line-strong);
+}
+
+.plan:not(:disabled):active {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.planName {
+  font-size: var(--text-l);
+  font-weight: 800;
+}
+
+.planPrice {
+  font-weight: 500;
+  font-size: var(--text-m);
+}

@@ -7,9 +7,11 @@ Run with: uvicorn app.public.main:app --host 127.0.0.1 --port 8001
 
 from fastapi import FastAPI
 
+from app.core.branding import BRANDING_DIR, serve_logo
 from app.core.http import API_PREFIX, NoStoreMiddleware, SameOriginMiddleware
 from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
+from app.public.api import branding as api_branding
 from app.public.api import checkin as api_checkin
 from app.public.api import health_form as api_health_form
 from app.public.api import link as api_link
@@ -27,6 +29,7 @@ app.add_middleware(NoStoreMiddleware)
 # Without it, another website could post a link form from the customer's
 # own phone. The tunnel hostname check waits on hosting (decision 0028).
 app.add_middleware(SameOriginMiddleware)
+app.include_router(api_branding.router, prefix=API_PREFIX)
 app.include_router(api_link.router, prefix=API_PREFIX)
 app.include_router(api_health_form.router, prefix=API_PREFIX)
 app.include_router(api_checkin.router, prefix=API_PREFIX)
@@ -37,6 +40,9 @@ def health() -> dict[str, str]:
     """Liveness check (decision 0009). Must never return more than "ok"."""
     return {"status": "ok"}
 
+
+# The gym's logo, from the install's git-ignored branding/ folder.
+serve_logo(app, BRANDING_DIR)
 
 # Last: its catch-all answers every GET no route above claimed. The public
 # build only: vite.config.ts keeps admin code out of it.

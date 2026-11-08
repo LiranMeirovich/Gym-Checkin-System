@@ -6,7 +6,8 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
-import { formatDate, isManager, planKey, type Customer } from "../customers";
+import { formatDate, planKey, type Customer } from "../customers";
+import { isManager } from "../roles";
 import {
   AGE_GROUP_NAMES,
   PLAN_NAMES,
@@ -15,6 +16,13 @@ import {
   type Plan,
 } from "../prices";
 import { useSession } from "../session";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
+import ui from "../layout/ui.module.css";
+import { StatusBadge } from "../../shared/Status";
+import styles from "./CustomerPlan.module.css";
 
 type PlanStatus = Schemas["PlanStatus"];
 type PlanChoice = Schemas["PlanChoiceRow"];
@@ -66,19 +74,31 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
   if (isPending) return null;
   if (isError) {
     return (
-      <section>
+      <section className={ui.panel}>
         <h2>מסלול</h2>
-        <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>
+        <NoConnection />
       </section>
     );
   }
   const canManage = customer.active && isManager(session);
   const covering = data.covering;
   return (
-    <section>
+    <section className={ui.panel}>
       <h2>מסלול לחודש {formatMonth(data.current_month)}</h2>
       {message && <p role="alert">{message}</p>}
-      {covering ? <p>{describe(covering)}</p> : <p>אין מסלול לחודש הזה.</p>}
+      <div className={ui.statusLine}>
+        {covering ? (
+          <>
+            <StatusBadge tone="ok">יש מסלול</StatusBadge>
+            <strong>{describe(covering)}</strong>
+          </>
+        ) : (
+          <>
+            <StatusBadge tone="warn">אין מסלול</StatusBadge>
+            <span className={ui.muted}>אין מסלול לחודש הזה.</span>
+          </>
+        )}
+      </div>
       {canManage && !covering && (
         <ChooseForm
           customerId={customer.id}
@@ -99,7 +119,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
             onMessage={setMessage}
           />
         ) : (
-          <p>
+          <p className={ui.note}>
             המסלול התחיל ב־{formatMonth(covering.start_month)}, ולכן אי אפשר
             לשנות אותו.
           </p>
@@ -159,7 +179,7 @@ function useSave(
         void queryClient.invalidateQueries({ queryKey: planKey(customerId) });
       }
     } catch {
-      onMessage("אין חיבור לשרת. נסו שוב.");
+      onMessage(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }
@@ -202,11 +222,9 @@ function ChooseForm({
         plan={plan}
         onChange={setPlan}
       />
-      <p>
-        <button type="submit" disabled={sending || !plan}>
-          שמירת המסלול
-        </button>
-      </p>
+      <button type="submit" disabled={sending || !plan}>
+        שמירת המסלול
+      </button>
     </form>
   );
 }
@@ -241,34 +259,33 @@ function CorrectForm({
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} className={ui.subsection}>
       <PlanOptions
         legend="שינוי המסלול"
         options={options}
         plan={plan}
         onChange={setPlan}
       />
-      <p>
-        <button type="submit" disabled={sending || !plan}>
-          שינוי המסלול
-        </button>
-      </p>
       {confirmingClear ? (
-        <p>
-          לבטל את המסלול? החודשים שהוא מכסה יישארו בלי מסלול.{" "}
+        <div className={ui.buttons}>
+          <span>לבטל את המסלול? החודשים שהוא מכסה יישארו בלי מסלול.</span>
           <button
             type="button"
+            className={styles.danger}
             disabled={sending}
             onClick={() => void correct(null)}
           >
             כן, לבטל
-          </button>{" "}
+          </button>
           <button type="button" onClick={() => setConfirmingClear(false)}>
             לא
           </button>
-        </p>
+        </div>
       ) : (
-        <p>
+        <div className={ui.buttons}>
+          <button type="submit" disabled={sending || !plan}>
+            שינוי המסלול
+          </button>
           <button
             type="button"
             disabled={sending}
@@ -276,7 +293,7 @@ function CorrectForm({
           >
             ביטול המסלול
           </button>
-        </p>
+        </div>
       )}
     </form>
   );
@@ -296,9 +313,9 @@ function PlanOptions({
   return (
     <fieldset>
       <legend>{legend}</legend>
-      {options.map((option) => (
-        <p key={option.plan}>
-          <label>
+      <div className={ui.choices}>
+        {options.map((option) => (
+          <label key={option.plan} className={ui.choice}>
             <input
               type="radio"
               name="plan"
@@ -306,14 +323,19 @@ function PlanOptions({
               checked={plan === option.plan}
               disabled={option.amount_agorot === null}
               onChange={() => onChange(option.plan)}
-            />{" "}
-            {PLAN_NAMES[option.plan]} ({AGE_GROUP_NAMES[option.age_group]}):{" "}
-            {option.amount_agorot === null
-              ? "המחיר לא נקבע"
-              : formatShekels(option.amount_agorot)}
+            />
+            {PLAN_NAMES[option.plan]}
+            <span className={ui.muted}>
+              {AGE_GROUP_NAMES[option.age_group]}
+            </span>
+            <span className={ui.choicePrice}>
+              {option.amount_agorot === null
+                ? "המחיר לא נקבע"
+                : formatShekels(option.amount_agorot)}
+            </span>
           </label>
-        </p>
-      ))}
+        ))}
+      </div>
     </fieldset>
   );
 }
@@ -328,52 +350,54 @@ function state(choice: PlanChoice): string {
 function History({ choices }: { choices: PlanChoice[] }) {
   if (choices.length === 0) return null;
   return (
-    <>
+    <div className={ui.subsection}>
       <h3>היסטוריית מסלולים</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>חודשים</th>
-            <th>מסלול</th>
-            <th>מחיר</th>
-            <th>קבוצת גיל</th>
-            <th>מצב</th>
-            <th>נבחר על ידי</th>
-            <th>תאריך</th>
-          </tr>
-        </thead>
-        <tbody>
-          {choices.map((choice) => (
-            <tr key={choice.id}>
-              <td>
-                {formatMonth(choice.start_month)}
-                {choice.end_month !== choice.start_month &&
-                  ` עד ${formatMonth(choice.end_month)}`}
-              </td>
-              <td>
-                {choice.plan === null ? "ללא מסלול" : PLAN_NAMES[choice.plan]}
-              </td>
-              <td>
-                {choice.unit_price_agorot === null
-                  ? "—"
-                  : formatShekels(choice.unit_price_agorot)}
-              </td>
-              <td>
-                {choice.age_group === null
-                  ? "—"
-                  : AGE_GROUP_NAMES[choice.age_group]}
-              </td>
-              <td>{state(choice)}</td>
-              <td>
-                {choice.chosen_by === "customer"
-                  ? "הלקוח"
-                  : (choice.staff_name ?? "צוות")}
-              </td>
-              <td>{formatDate(choice.chosen_at)}</td>
+      <div className={ui.flushTable}>
+        <table>
+          <thead>
+            <tr>
+              <th>חודשים</th>
+              <th>מסלול</th>
+              <th>מחיר</th>
+              <th>קבוצת גיל</th>
+              <th>מצב</th>
+              <th>נבחר על ידי</th>
+              <th>תאריך</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
+          </thead>
+          <tbody>
+            {choices.map((choice) => (
+              <tr key={choice.id}>
+                <td>
+                  {formatMonth(choice.start_month)}
+                  {choice.end_month !== choice.start_month &&
+                    ` עד ${formatMonth(choice.end_month)}`}
+                </td>
+                <td>
+                  {choice.plan === null ? "ללא מסלול" : PLAN_NAMES[choice.plan]}
+                </td>
+                <td>
+                  {choice.unit_price_agorot === null
+                    ? "—"
+                    : formatShekels(choice.unit_price_agorot)}
+                </td>
+                <td>
+                  {choice.age_group === null
+                    ? "—"
+                    : AGE_GROUP_NAMES[choice.age_group]}
+                </td>
+                <td>{state(choice)}</td>
+                <td>
+                  {choice.chosen_by === "customer"
+                    ? "הלקוח"
+                    : (choice.staff_name ?? "צוות")}
+                </td>
+                <td>{formatDate(choice.chosen_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

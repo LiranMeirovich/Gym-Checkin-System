@@ -1,0 +1,13 @@
+/* The content column of a logged-in staff screen. */
+.page {
+  max-width: 72rem;
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-5) var(--space-7);
+}
+
+/* A screen the customer uses at the desk: no header, a narrower column. */
+.bare {
+  max-width: 48rem;
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-5) var(--space-7);
+}

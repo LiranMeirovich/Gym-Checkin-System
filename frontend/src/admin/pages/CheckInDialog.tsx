@@ -11,29 +11,42 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, type Schemas } from "../backend/client";
-import { formatTime, healthFormKey, isManager, planKey } from "../customers";
+import { formatTime, healthFormKey, planKey } from "../customers";
+import { isManager } from "../roles";
 import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
 import { useSession } from "../session";
 import { fetchStatus } from "./CustomerHealthForm";
 import { describe, fetchPlan } from "./CustomerPlan";
+import {
+  NoConnection,
+  NO_CONNECTION_TRY_AGAIN,
+} from "../../shared/NoConnection";
+import ui from "../layout/ui.module.css";
+import { StatusBadge } from "../../shared/Status";
+import styles from "./CheckInDialog.module.css";
 
 type CheckedIn = Schemas["CheckedIn"];
 type PlanOption = Schemas["PlanOption"];
 
-const NO_CONNECTION = "אין חיבור לשרת. נסו שוב.";
 const PRICE_NOT_SET = "המחיר לא נקבע. יש להזין אותו במסך המחירים.";
 
 type Props = {
   customerId: number;
   name: string;
+  /** The page's main button (the customer page); a quiet one in a list. */
+  primary?: boolean;
 };
 
 /** A "Check in" button that opens the dialog. */
-export function CheckInButton({ customerId, name }: Props) {
+export function CheckInButton({ customerId, name, primary = false }: Props) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className={primary ? ui.primary : undefined}
+        onClick={() => setOpen(true)}
+      >
         רישום כניסה
       </button>
       {open && (
@@ -64,14 +77,19 @@ function CheckInDialog({
 
   return (
     // Escape closes a modal dialog; onClose tells React.
-    <dialog ref={ref} onClose={onClose}>
-      <h2>רישום כניסה: {name}</h2>
-      <CheckInBody customerId={customerId} close={close} />
-      <p>
+    <dialog ref={ref} onClose={onClose} className={styles.dialog}>
+      <h2 className={styles.title}>
+        רישום כניסה
+        <span className={styles.who}>{name}</span>
+      </h2>
+      <div className={styles.body}>
+        <CheckInBody customerId={customerId} close={close} />
+      </div>
+      <div className={styles.footer}>
         <button type="button" onClick={close}>
           סגירה
         </button>
-      </p>
+      </div>
     </dialog>
   );
 }
@@ -103,7 +121,7 @@ function CheckInBody({
 
   if (health.isPending || plan.isPending) return null;
   if (health.isError || plan.isError) {
-    return <p role="alert">אין חיבור לשרת. נסו לרענן את הדף.</p>;
+    return <NoConnection />;
   }
 
   async function checkIn() {
@@ -154,7 +172,7 @@ function CheckInBody({
           : "הרישום נכשל. נסו שוב.",
       );
     } catch {
-      setMessage(NO_CONNECTION);
+      setMessage(NO_CONNECTION_TRY_AGAIN);
     } finally {
       setSending(false);
     }
@@ -163,10 +181,11 @@ function CheckInBody({
   if (result) {
     const at = formatTime(result.checked_in_at);
     return (
-      <p role="status">
+      <p role="status" className={styles.result}>
+        <strong className={styles.resultTime}>{at}</strong>
         {result.outcome === "checked_in"
-          ? `הכניסה נרשמה בשעה ${at}.`
-          : `הלקוח כבר נרשם בשעה ${at}, לפני פחות מ-10 דקות. לא נרשמה כניסה נוספת.`}
+          ? "הכניסה נרשמה."
+          : "הלקוח כבר נרשם לפני פחות מ-10 דקות. לא נרשמה כניסה נוספת."}
         {result.plan && ` מסלול: ${PLAN_NAMES[result.plan.plan]}.`}
       </p>
     );
@@ -222,12 +241,22 @@ function CheckInBody({
 
   return (
     <>
-      <p>
-        הצהרת בריאות: {formValid ? "בתוקף" : "לא בתוקף"}
-        <br />
-        מסלול לחודש {formatMonth(plan.data.current_month)}:{" "}
-        {covering ? describe(covering) : "אין"}
-      </p>
+      <dl className={styles.summary}>
+        <dt>הצהרת בריאות</dt>
+        <dd>
+          <StatusBadge tone={formValid ? "ok" : "stop"}>
+            {formValid ? "בתוקף" : "לא בתוקף"}
+          </StatusBadge>
+        </dd>
+        <dt>מסלול לחודש {formatMonth(plan.data.current_month)}</dt>
+        <dd>
+          {covering ? (
+            describe(covering)
+          ) : (
+            <StatusBadge tone="warn">אין</StatusBadge>
+          )}
+        </dd>
+      </dl>
       {message && <p role="alert">{message}</p>}
       {action}
     </>
@@ -244,15 +273,14 @@ function CheckInSubmit({
   onClick: () => Promise<void>;
 }) {
   return (
-    <p>
-      <button
-        type="button"
-        disabled={sending || disabled}
-        onClick={() => void onClick()}
-      >
-        אישור כניסה
-      </button>
-    </p>
+    <button
+      type="button"
+      className={`${ui.primary} ${styles.confirm}`}
+      disabled={sending || disabled}
+      onClick={() => void onClick()}
+    >
+      אישור כניסה
+    </button>
   );
 }
 
@@ -275,23 +303,25 @@ function PlanPicker({
     <>
       <fieldset>
         <legend>אין מסלול לחודש הזה. בחירת מסלול:</legend>
-        {options.map((option) => (
-          <p key={option.plan}>
-            <label>
+        <div className={ui.choices}>
+          {options.map((option) => (
+            <label key={option.plan} className={ui.choice}>
               <input
                 type="radio"
                 name="check-in-plan"
                 checked={picked === option.plan}
                 disabled={option.amount_agorot === null}
                 onChange={() => onPick(option.plan)}
-              />{" "}
-              {PLAN_NAMES[option.plan]}{" "}
-              {option.amount_agorot === null
-                ? "(המחיר לא נקבע)"
-                : formatShekels(option.amount_agorot)}
+              />
+              {PLAN_NAMES[option.plan]}
+              <span className={ui.choicePrice}>
+                {option.amount_agorot === null
+                  ? "המחיר לא נקבע"
+                  : formatShekels(option.amount_agorot)}
+              </span>
             </label>
-          </p>
-        ))}
+          ))}
+        </div>
       </fieldset>
       <CheckInSubmit
         sending={sending}

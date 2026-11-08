@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Branding */
+        get: operations["branding_api_branding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/link": {
         parameters: {
             query?: never;
@@ -77,6 +94,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Branding
+         * @description The gym's name (null before first-run setup) and whether
+         *     ``/branding/logo`` has a logo to show.
+         */
+        Branding: {
+            /** Gym Name */
+            gym_name: string | null;
+            /** Has Logo */
+            has_logo: boolean;
+        };
         /**
          * CheckInRequest
          * @description ``plan``: the plan the customer tapped on the plan page, chosen
@@ -375,6 +403,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    branding_api_branding_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Branding"];
+                };
+            };
+        };
+    };
     link_api_link_post: {
         parameters: {
             query?: never;

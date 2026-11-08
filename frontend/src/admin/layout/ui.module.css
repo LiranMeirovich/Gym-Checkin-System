@@ -1,0 +1,234 @@
+/* The building blocks of a staff screen. Plain HTML already has the look
+   (shared/styles/base.css); these add the page's structure. */
+
+/* The heading row: the title, with the screen's main actions at the end. */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-5);
+  margin-block-end: var(--space-5);
+}
+
+.head h1 {
+  margin: 0;
+}
+
+.actions {
+  margin-inline-start: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* "Back to the list": a quiet link above the title. */
+.back {
+  display: inline-block;
+  margin-block-end: var(--space-2);
+  font-size: var(--text-s);
+  color: var(--muted);
+}
+
+/* A link that does what a main button does (opens a form). */
+.primaryLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--navy);
+  color: var(--paper);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.primaryLink:hover {
+  background: var(--navy-deep);
+  color: var(--paper);
+}
+
+/* A section of a screen: white on the grey page. */
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: var(--space-5);
+  margin-block-end: var(--space-5);
+}
+
+.panel > h2:first-child {
+  margin-block-end: var(--space-4);
+}
+
+/* A panel that is only a table: the table runs to the panel's edges. */
+.tablePanel {
+  composes: panel;
+  padding: 0;
+  overflow-x: auto;
+}
+
+.tablePanel table {
+  background: transparent;
+}
+
+.tablePanel tr:last-child > td {
+  border-block-end: none;
+}
+
+/* A section's title above a table panel. */
+.sectionTitle {
+  margin-block: var(--space-6) var(--space-3);
+}
+
+/* A form field: label above, the field, its error below. */
+.field {
+  margin-block-end: var(--space-4);
+}
+
+.field [role="alert"] {
+  margin-block-start: var(--space-1);
+  font-size: var(--text-s);
+}
+
+.form {
+  max-width: 36rem;
+}
+
+/* Two fields side by side, one under the other on a narrow screen. */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0 var(--space-4);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* "Nothing here yet". */
+.empty {
+  color: var(--muted);
+  padding: var(--space-5);
+  margin: 0;
+}
+
+/* A table cell that holds the row's action, at the row's end. */
+.rowAction {
+  text-align: end;
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* A row's own link: the whole name is the target. */
+.rowLink {
+  font-weight: 700;
+  color: var(--navy-deep);
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  color: var(--steel);
+  text-decoration: underline;
+}
+
+/* A button that is the screen's main action without submitting a form. */
+.primary {
+  background: var(--navy);
+  color: var(--paper);
+}
+
+.primary:hover {
+  background: var(--navy-deep);
+}
+
+/* A row of buttons. */
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block: var(--space-4) 0;
+}
+
+/* The status line at the top of a section: a badge and what it means. */
+.statusLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-block-end: var(--space-4);
+}
+
+/* A part of a section, under a thin line. */
+.subsection {
+  margin-block-start: var(--space-5);
+  padding-block-start: var(--space-5);
+  border-block-start: 1px solid var(--line);
+}
+
+/* A small note under a section. */
+.note {
+  font-size: var(--text-s);
+  color: var(--muted);
+  margin-block: var(--space-3) 0;
+}
+
+/* Plan choices as large rows to tap or click. */
+.choices {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-end: var(--space-3);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: var(--navy);
+  background: var(--steel-tint);
+}
+
+.choice:has(input:disabled) {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.choice input {
+  margin: 0;
+}
+
+.choicePrice {
+  margin-inline-start: auto;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.choice:has(input:disabled) .choicePrice {
+  font-weight: 500;
+  color: var(--warn);
+}
+
+/* A table inside a panel, running to its edges. */
+.flushTable {
+  margin-inline: calc(-1 * var(--space-5));
+  width: calc(100% + 2 * var(--space-5));
+  overflow-x: auto;
+}
+
+.flushTable table {
+  background: transparent;
+}
+
+.flushTable tr:last-child > td {
+  border-block-end: none;
+}
