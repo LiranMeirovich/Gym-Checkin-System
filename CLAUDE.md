@@ -63,6 +63,7 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - **Flag what's risky.** In every summary, call out anything surprising, security-relevant or hard to undo, even if it's small.
 - **Add a dependency only in the feature that first uses it** (decision 0010).
 - **Test features locally.** A feature is done when its tests pass and it works in the browser on `127.0.0.1` (phone-sized for customer pages). Anything that needs the real deployment (host or tunnel, proxy headers, https, real phones) waits for milestone 6; note it in that section of `docs/follow-ups.md` (decision 0030).
+- **Run only the affected tests in each step.** Run the test files for what the step changed, not the full suite (about 3 minutes). A step that adds or removes an API route also runs `tests/test_apps.py` and `tests/test_export_openapi.py`, which list every route each app may have. The full suite runs once in `/finish-feature`, and CI runs it again on the PR.
 - **Keep changes small and focused.** Do one feature or fix at a time, so each change can be reviewed and committed on its own.
 - **Never commit or push** unless asked.
 - **If the code and the design doc disagree, stop and ask.** Don't silently pick one.
