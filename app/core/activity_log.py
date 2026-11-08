@@ -7,7 +7,8 @@ recorded too (opening a health form's contents, milestone 3). Logins and
 locking aren't; ``staff_sessions`` is the login history.
 
 This module only adds rows. Nothing in the app changes or deletes one, and
-the database refuses to (triggers on ``activity_log``).
+the database refuses to (triggers on ``activity_log``). ``list_entries()``
+reads them for the manager's log screen.
 
 Never put a secret in ``before`` or ``after``: no PINs, PIN hashes, tokens
 or passwords. A change to one is recorded without its values.
@@ -15,11 +16,16 @@ or passwords. A change to one is recorded without its values.
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
+from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.models import ActivityLogEntry, StaffUser
+from app.core.config import get_settings
+from app.core.models import ActivityLogEntry, Customer, StaffUser
 
 
 class Action(StrEnum):
@@ -118,6 +124,150 @@ def record(
     db.add(entry)
     db.flush()
     return entry
+
+
+PAGE_SIZE = 50
+
+
+@dataclass(frozen=True)
+class LogEntry:
+    """One entry as the log screen shows it.
+
+    ``action`` and ``target_type`` are the stored text, not the enums, and
+    ``before``/``after`` are the stored JSON as it was written: older entries
+    keep older shapes (decision 0021), and the screen copes with any.
+    """
+
+    id: int
+    at: datetime
+    staff_user_id: int
+    staff_name: str
+    action: str
+    target_type: str
+    target_id: int | None
+    # The target's name, for a staff member or a customer; None for the rest.
+    target_name: str | None
+    before: dict[str, Any] | None
+    after: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
+class LogPage:
+    entries: list[LogEntry]
+    # Pass as ``before_id`` for the next (older) page; None on the last one.
+    next_before_id: int | None
+
+
+def list_entries(
+    db: Session,
+    *,
+    staff_user_id: int | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    target_type: str | None = None,
+    target_id: int | None = None,
+    before_id: int | None = None,
+    limit: int = PAGE_SIZE,
+) -> LogPage:
+    """The log, newest first, one page at a time.
+
+    The dates are local (Israel) days, both included. ``before_id`` pages by
+    id rather than by offset, so entries added while the manager reads don't
+    shift the pages. ``target_id`` needs a ``target_type``.
+    """
+    if target_id is not None and target_type is None:
+        raise ValueError("target_id needs a target_type")
+    if limit < 1:
+        raise ValueError("limit must be at least 1")
+
+    query = (
+        select(ActivityLogEntry, StaffUser.display_name)
+        .join(StaffUser, StaffUser.id == ActivityLogEntry.staff_user_id)
+        .order_by(ActivityLogEntry.id.desc())
+        # One more than asked, to know whether there's another page.
+        .limit(limit + 1)
+    )
+    if staff_user_id is not None:
+        query = query.where(ActivityLogEntry.staff_user_id == staff_user_id)
+    if from_date is not None:
+        query = query.where(ActivityLogEntry.at >= _start_of(from_date))
+    if to_date is not None:
+        query = query.where(
+            ActivityLogEntry.at < _start_of(to_date + timedelta(days=1))
+        )
+    if target_type is not None:
+        query = query.where(ActivityLogEntry.target_type == target_type)
+    if target_id is not None:
+        query = query.where(ActivityLogEntry.target_id == target_id)
+    if before_id is not None:
+        query = query.where(ActivityLogEntry.id < before_id)
+
+    rows = db.execute(query).all()
+    more = len(rows) > limit
+    rows = rows[:limit]
+    names = _target_names(db, [entry for entry, _ in rows])
+    entries = [
+        LogEntry(
+            id=entry.id,
+            at=entry.at,
+            staff_user_id=entry.staff_user_id,
+            staff_name=staff_name,
+            action=entry.action,
+            target_type=entry.target_type,
+            target_id=entry.target_id,
+            target_name=names.get((entry.target_type, entry.target_id)),
+            before=_from_json(entry.before_json),
+            after=_from_json(entry.after_json),
+        )
+        for entry, staff_name in rows
+    ]
+    return LogPage(entries, entries[-1].id if more else None)
+
+
+def _start_of(day: date) -> datetime:
+    """The UTC moment a local day starts."""
+    return datetime.combine(day, time(), tzinfo=get_settings().tz).astimezone(UTC)
+
+
+def _target_names(
+    db: Session, entries: list[ActivityLogEntry]
+) -> dict[tuple[str, int | None], str]:
+    """Names for the staff and customer targets on a page, two queries in all."""
+
+    def ids(target: Target) -> set[int]:
+        return {
+            e.target_id
+            for e in entries
+            if e.target_type == target and e.target_id is not None
+        }
+
+    names: dict[tuple[str, int | None], str] = {}
+    staff_ids = ids(Target.STAFF_USER)
+    if staff_ids:
+        for staff_id, name in db.execute(
+            select(StaffUser.id, StaffUser.display_name).where(
+                StaffUser.id.in_(staff_ids)
+            )
+        ):
+            names[(Target.STAFF_USER, staff_id)] = name
+    customer_ids = ids(Target.CUSTOMER)
+    if customer_ids:
+        for customer_id, first, last in db.execute(
+            select(Customer.id, Customer.first_name, Customer.last_name).where(
+                Customer.id.in_(customer_ids)
+            )
+        ):
+            names[(Target.CUSTOMER, customer_id)] = f"{first} {last}"
+    return names
+
+
+def _from_json(text: str | None) -> dict[str, Any] | None:
+    if text is None:
+        return None
+    value = json.loads(text)
+    # record() only writes objects, but a hand-written or older row might
+    # hold something else; keep it visible rather than failing the page.
+    return value if isinstance(value, dict) else {"value": value}
 
 
 def _to_json(values: Mapping[str, object] | None) -> str | None:
