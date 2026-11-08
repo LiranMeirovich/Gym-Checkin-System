@@ -62,6 +62,7 @@ def test_public_app_registers_only_expected_routes() -> None:
         "/api/health-form",
         "/api/link",
         "/api/me",
+        "/api/sign-up",
         "/assets",
         "/{path:path}",
     }

@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 
 from app.core import phone_links
 from app.core.customers import (
+    CustomerField,
     CustomerInactiveError,
+    InvalidCustomerError,
+    PhoneTakenError,
     deactivate_customer,
     reactivate_customer,
 )
@@ -503,3 +506,102 @@ def test_unlinking_twice_changes_nothing(
 
     assert linked.device.revoked_at == revoked_at
     assert len(log_entries(db)) == count
+
+
+# Signing up on the phone (decision 0035)
+
+
+def sign_up(db: Session, phone: str = PHONE, **kwargs: object):
+    details: dict[str, object] = {
+        "first_name": "Yael",
+        "last_name": "Mizrahi",
+        "phone": phone,
+        "date_of_birth": date(2001, 3, 9),
+        "user_agent": UA,
+    }
+    return phone_links.sign_up(db, **(details | kwargs))
+
+
+def test_signing_up_creates_the_customer_and_links_this_phone(db: Session) -> None:
+    signed = sign_up(db)
+
+    customer = signed.device.customer
+    assert (customer.first_name, customer.last_name) == ("Yael", "Mizrahi")
+    assert customer.phone == "+972501234567"
+    assert customer.date_of_birth == date(2001, 3, 9)
+    assert customer.notes == ""
+    assert customer.active
+    assert signed.device.token_hash == hash_token(signed.token)
+    assert signed.device.user_agent == UA
+    assert find_device(db, signed.token) == signed.device
+
+
+def test_signing_up_is_not_logged(db: Session) -> None:
+    sign_up(db)
+
+    assert log_entries(db) == []
+
+
+@pytest.mark.parametrize("active", [True, False])
+def test_a_number_that_is_already_a_customer_is_refused(
+    db: Session, customer: Customer, staff: StaffUser, active: bool
+) -> None:
+    if not active:
+        deactivate_customer(db, customer, by=staff)
+    before = log_entries(db)
+
+    with pytest.raises(PhoneTakenError):
+        sign_up(db, phone="+972 50-123-4567")
+
+    # Nothing changed: no second customer, the inactive one stays inactive,
+    # and no phone was linked.
+    assert db.scalars(select(Customer)).all() == [customer]
+    assert customer.active is active
+    assert db.scalars(select(DeviceSession)).all() == []
+    assert log_entries(db) == before
+
+
+def test_every_invalid_field_is_named(db: Session) -> None:
+    with pytest.raises(InvalidCustomerError) as refused:
+        sign_up(
+            db,
+            phone="12345",
+            first_name="  ",
+            last_name="x" * 51,
+            date_of_birth=date(2999, 1, 1),
+        )
+
+    assert refused.value.fields == {
+        CustomerField.FIRST_NAME,
+        CustomerField.LAST_NAME,
+        CustomerField.PHONE,
+        CustomerField.DATE_OF_BIRTH,
+    }
+    assert db.scalars(select(Customer)).all() == []
+
+
+def test_names_are_cleaned_like_at_the_desk(db: Session) -> None:
+    customer = sign_up(db, first_name="  Yael   Ruth ").device.customer
+
+    assert customer.first_name == "Yael Ruth"
+
+
+def test_signing_up_replaces_this_browsers_old_login(
+    db: Session, customer: Customer, staff: StaffUser
+) -> None:
+    theirs = link_new_phone(db, customer, staff)
+
+    sign_up(db, phone="0521112233", replacing_token=theirs.token)
+
+    assert list_devices(db, customer) == []
+
+
+def test_a_refused_sign_up_keeps_the_old_login(
+    db: Session, customer: Customer, staff: StaffUser
+) -> None:
+    theirs = link_new_phone(db, customer, staff)
+
+    with pytest.raises(PhoneTakenError):
+        sign_up(db, replacing_token=theirs.token)
+
+    assert find_device(db, theirs.token) == theirs.device

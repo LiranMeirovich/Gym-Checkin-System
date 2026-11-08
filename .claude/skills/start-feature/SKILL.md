@@ -40,7 +40,7 @@ After approval:
 - Track the steps in a todo list.
 
 ## 4. Work through the steps
-- Implement one step at a time, and run the tests and ruff.
+- Implement one step at a time, and run the affected tests (CLAUDE.md, "How we work") and ruff.
 - After each step, give a short architecture-level summary: what it adds, how it fits with the rest, any deviation from the plan, and anything risky. No line-by-line code walkthrough.
 - If a step turns up a decision that wasn't in the plan (library, schema, route contract, folder structure, protected area), stop and ask before going on.
 - **Commit after each approved step.** Once the developer is happy with a step, suggest a Conventional Commit message for it. Committing stays their call: never commit without being asked.

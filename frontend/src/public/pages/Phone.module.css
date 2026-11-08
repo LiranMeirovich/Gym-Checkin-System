@@ -1,5 +1,5 @@
-/* The phone pages' own pieces: the link form, the plan page and the
-   check-in result. */
+/* The phone pages' own pieces: the link and sign-up forms, the plan page
+   and the check-in result. */
 
 .heading {
   font-size: var(--text-xl);
@@ -38,6 +38,23 @@
   width: 100%;
   min-height: 3.25rem;
   font-size: var(--text-l);
+}
+
+/* "New here? Sign up" under the link form, and the way back. */
+.switch {
+  margin-block-start: var(--space-5);
+  text-align: center;
+  color: var(--muted);
+}
+
+.switch button {
+  margin-inline-start: var(--space-2);
+}
+
+/* An example number inside Hebrew text: one piece, never split at the
+   dash. */
+.number {
+  white-space: nowrap;
 }
 
 .waiting {

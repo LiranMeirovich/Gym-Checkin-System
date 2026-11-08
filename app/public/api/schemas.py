@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, StrictBool, StringConstraints
 from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
-from app.core.http import Answer
+from app.core.http import Answer, DateOfBirth
 from app.core.models import Plan
 
 # Base64 grows bytes by 4/3, plus the "data:image/png;base64," prefix.
@@ -50,6 +50,34 @@ class LinkRefused(Answer):
     every reason, so it never says whether a number is a customer's."""
 
     detail: Literal["link_refused"] = "link_refused"
+
+
+# ── Signing up (decision 0035) ──────────────────────────────────────────
+# The caps on text only keep a huge value out; app.core.customers has the
+# real rules and answers a broken field with a code, not a 422.
+
+SignUpField = Literal["first_name", "last_name", "phone", "date_of_birth"]
+
+
+class SignUpRequest(BaseModel):
+    first_name: str = Field(max_length=200)
+    last_name: str = Field(max_length=200)
+    phone: str = Field(max_length=50)
+    date_of_birth: DateOfBirth
+
+
+class SignUpRefused(Answer):
+    """400: every field that breaks its rule, at once. Nothing was
+    saved."""
+
+    errors: dict[SignUpField, Literal["invalid"]]
+
+
+class PhoneTaken(Answer):
+    """409: the number is already a customer's (active or not). Nothing
+    was saved; the customer links this phone at the desk instead."""
+
+    detail: Literal["phone_taken"] = "phone_taken"
 
 
 # ── Health form ─────────────────────────────────────────────────────────

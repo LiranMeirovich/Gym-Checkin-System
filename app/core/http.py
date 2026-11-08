@@ -1,6 +1,7 @@
 """HTTP plumbing both apps share: the ``/api`` prefix, the base of every API
 answer, ``no-store`` on every API answer, the same-origin check on every
-unsafe request, and reading an image sent as a data URL.
+unsafe request, reading an image sent as a data URL, and the date-of-birth
+field type.
 
 Here rather than in ``app.admin`` so the public app, the one reachable
 from the internet, never imports admin code.
@@ -8,8 +9,11 @@ from the internet, never imports admin code.
 
 import base64
 import binascii
+import re
+from datetime import date
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, BeforeValidator, ConfigDict
 from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
@@ -25,6 +29,22 @@ UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # FileReader's ``readAsDataURL()``.
 PNG_DATA_URL = "data:image/png;base64,"
 JPEG_DATA_URL = "data:image/jpeg;base64,"
+
+
+_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def _iso_date_text(value: object) -> object:
+    # Pydantic would also take a number (a Unix time) or a date-time with
+    # a zero time; a date of birth is only ever "YYYY-MM-DD".
+    if not (isinstance(value, str) and _ISO_DATE.fullmatch(value)):
+        raise ValueError("a date is YYYY-MM-DD")
+    return value
+
+
+# A date of birth in a request: only "YYYY-MM-DD" text. Whether it's a
+# believable one is app.core.customers' rule.
+DateOfBirth = Annotated[date, BeforeValidator(_iso_date_text)]
 
 
 def data_url_bytes(data_url: str, *prefixes: str) -> bytes:
