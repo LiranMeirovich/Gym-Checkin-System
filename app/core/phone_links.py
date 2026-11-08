@@ -11,6 +11,9 @@
 3. Every later request finds the customer through that token
    (``find_device``).
 
+A new customer can skip the desk: ``sign_up`` creates them and this
+phone's device session at once (decision 0035).
+
 A customer has at most ``MAX_PHONES`` live sessions: linking one more
 revokes the least recently used. A session dies when it's revoked (by
 staff, by a newer phone, or because its customer was deactivated, which
@@ -31,14 +34,18 @@ aren't (decision 0021). Whether ``by`` may do it is the route's check.
 import hmac
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, contains_eager
 
 from app.core.activity_log import Action, Target, record
 from app.core.clock import utc_now
-from app.core.customers import CustomerInactiveError, find_by_phone
+from app.core.customers import (
+    CustomerInactiveError,
+    find_by_phone,
+    register_customer,
+)
 from app.core.models import Customer, DeviceSession, LinkCode, StaffUser
 from app.core.models.phone_links import USER_AGENT_MAX_LENGTH
 from app.core.staff_sessions import TOKEN_BYTES, hash_token
@@ -134,6 +141,47 @@ def link_phone(
         raise LinkRefusedError
 
     newest.used_at = now
+    return _start_session(db, customer, user_agent, replacing_token, now)
+
+
+def sign_up(
+    db: Session,
+    *,
+    first_name: str,
+    last_name: str,
+    phone: str,
+    date_of_birth: date,
+    user_agent: str,
+    replacing_token: str | None = None,
+) -> Linked:
+    """A new customer signing up on the phone this request comes from
+    (decision 0035): the customer and this phone's device session, in the
+    caller's transaction. Like linking, it isn't logged, and
+    ``replacing_token`` is revoked.
+
+    Raises ``InvalidCustomerError`` or ``PhoneTakenError`` (the number is
+    already a customer's, active or not: they go to the desk).
+    """
+    customer = register_customer(
+        db,
+        first_name=first_name,
+        last_name=last_name,
+        phone=phone,
+        date_of_birth=date_of_birth,
+    )
+    return _start_session(db, customer, user_agent, replacing_token, utc_now())
+
+
+def _start_session(
+    db: Session,
+    customer: Customer,
+    user_agent: str,
+    replacing_token: str | None,
+    now: datetime,
+) -> Linked:
+    """A new device session for ``customer`` on this browser: its old
+    login (``replacing_token``) is revoked, and so are the customer's least
+    recently used phones beyond ``MAX_PHONES``."""
     if replacing_token:
         _revoke_by_token(db, replacing_token, now)
     live = list_devices(db, customer)

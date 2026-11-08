@@ -12,7 +12,9 @@ Every function works inside the caller's transaction and never commits.
 Every change is written to the activity log in the same transaction, with
 ``by``, the staff member making it, as the actor; a change that changes
 nothing writes no entry. Whether ``by`` may make the change is the route's
-check (``require_permission``), not this module's.
+check (``require_permission``), not this module's. The one change without
+staff is a customer signing up on their own phone (``register_customer``),
+which isn't logged, as a customer's own actions aren't (decision 0035).
 """
 
 import unicodedata
@@ -196,6 +198,41 @@ def add_customer(
         after=_loggable({**values, "active": customer.active}),
     )
     return Added(customer, reactivated=False)
+
+
+def register_customer(
+    db: Session,
+    *,
+    first_name: str,
+    last_name: str,
+    phone: str,
+    date_of_birth: date,
+) -> Customer:
+    """A new customer signing up on their own phone (decision 0035): the
+    same field rules as ``add_customer``, without notes, and not logged.
+
+    A phone that belongs to any customer, active or not, is refused: only
+    staff can bring an inactive customer back, or anyone could take over
+    a customer by typing their number.
+
+    Raises ``InvalidCustomerError`` (every invalid field) or
+    ``PhoneTakenError``.
+    """
+    values = _clean(
+        {
+            CustomerField.FIRST_NAME: first_name,
+            CustomerField.LAST_NAME: last_name,
+            CustomerField.PHONE: phone,
+            CustomerField.DATE_OF_BIRTH: date_of_birth,
+        }
+    )
+    owner = db.scalar(select(Customer).where(Customer.phone == values["phone"]))
+    if owner is not None:
+        raise PhoneTakenError(owner)
+    customer = Customer(**values)
+    db.add(customer)
+    db.flush()
+    return customer
 
 
 def edit_customer(
