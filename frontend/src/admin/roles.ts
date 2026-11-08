@@ -1,14 +1,18 @@
-// Role checks for the screens: which buttons and forms a role is offered.
+// Permission checks for the screens: which menus, buttons and forms the
+// logged-in staff member is offered.
 //
-// Hiding something is never the protection: every route checks its own
-// named permission on the server (decision 0018). This only keeps a screen
-// from offering what the server would refuse. Milestone 4's role-filtered
-// menus use these too.
+// The server sends the role's named permissions with the session, so the
+// one map stays ROLE_PERMISSIONS on the server (app/core/permissions.py):
+// moving an action between roles needs no change here. Hiding something is
+// never the protection: every route checks its own permission on the
+// server (decision 0018). This only keeps a screen from offering what the
+// server would refuse.
+import type { Schemas } from "./backend/client";
 import type { Session } from "./session";
 
-/** The manager-only actions: changing a date of birth, deactivating a
- * customer, choosing and correcting plans, editing prices, the full
- * health form. */
-export function isManager(session: Session): boolean {
-  return session.staff.role === "manager";
+export type Permission = Schemas["Permission"];
+
+/** Whether the logged-in staff member's role has ``permission``. */
+export function can(session: Session, permission: Permission): boolean {
+  return session.permissions.includes(permission);
 }

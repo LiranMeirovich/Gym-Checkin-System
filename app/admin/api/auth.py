@@ -41,6 +41,7 @@ from app.admin.security import (
 from app.core.clock import to_local
 from app.core.db import DbSession
 from app.core.models import StaffUser
+from app.core.permissions import permissions_for
 from app.core.staff import PinCheck, any_staff_exists, check_pin
 from app.core.staff_sessions import (
     end_session,
@@ -121,6 +122,7 @@ def session_info(staff: StaffUser, token: str, lock_after: timedelta) -> Session
     """What the page needs for the session whose cookie holds ``token``."""
     return SessionInfo(
         staff=StaffInfo(id=staff.id, display_name=staff.display_name, role=staff.role),
+        permissions=permissions_for(staff.role),
         csrf_token=csrf_token(token),
         lock_after_seconds=int(lock_after.total_seconds()),
     )

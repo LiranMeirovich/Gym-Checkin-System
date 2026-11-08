@@ -16,7 +16,7 @@ import {
   type Customer,
   type CustomerField,
 } from "../customers";
-import { isManager } from "../roles";
+import { can } from "../roles";
 import { useSession } from "../session";
 import { CheckInButton } from "./CheckInDialog";
 import { Field, PageHead } from "../layout/ui";
@@ -87,7 +87,8 @@ function CustomerDetails({ customer }: { customer: Customer }) {
     }
   }, [location, navigate]);
   const [editing, setEditing] = useState(false);
-  const manager = isManager(session);
+  const canEditBirthDate = can(session, "customers.edit_birth_date");
+  const canDeactivate = can(session, "customers.archive");
 
   /** Send a change; on success the page shows the stored customer. */
   async function save(
@@ -188,7 +189,7 @@ function CustomerDetails({ customer }: { customer: Customer }) {
                 <dd>{formatDate(customer.created_at)}</dd>
               </dl>
 
-              {customer.active && manager && (
+              {customer.active && canEditBirthDate && (
                 <div className={ui.subsection}>
                   <DateOfBirthForm
                     customer={customer}
@@ -204,7 +205,7 @@ function CustomerDetails({ customer }: { customer: Customer }) {
                 </div>
               )}
 
-              {(customer.active ? manager : true) && (
+              {(customer.active ? canDeactivate : true) && (
                 <div className={ui.subsection}>
                   <ActiveToggle
                     active={customer.active}

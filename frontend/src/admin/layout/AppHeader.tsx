@@ -1,16 +1,31 @@
-// The top bar of every logged-in staff screen: the gym, the screens, and
-// who is logged in with Lock. The role-filtered menus come in milestone 4;
-// every screen here is open to both roles (the server checks anyway).
+// The top bar of every logged-in staff screen: the gym, the screens the
+// role can use, and who is logged in with Lock. A screen with a
+// `permission` is listed only for roles that have it; the server refuses
+// the screen's routes to the others anyway.
 import { NavLink } from "react-router";
 import { Brand } from "../../shared/Brand";
 import { useBranding } from "../branding";
+import { can, type Permission } from "../roles";
 import { ROLE_NAMES, type Session } from "../session";
 import styles from "./AppHeader.module.css";
 
-const SCREENS = [
+type Screen = {
+  to: string;
+  label: string;
+  end: boolean;
+  permission?: Permission;
+};
+
+const SCREENS: Screen[] = [
   { to: "/", label: "ראשי", end: true },
   { to: "/customers", label: "לקוחות", end: false },
   { to: "/prices", label: "מחירון", end: true },
+  {
+    to: "/activity-log",
+    label: "יומן פעולות",
+    end: true,
+    permission: "activity_log.view",
+  },
 ];
 
 export function AppHeader({
@@ -28,7 +43,9 @@ export function AppHeader({
           <Brand branding={branding} size="header" />
         </NavLink>
         <nav aria-label="מסכים" className={styles.nav}>
-          {SCREENS.map((screen) => (
+          {SCREENS.filter(
+            (screen) => !screen.permission || can(session, screen.permission),
+          ).map((screen) => (
             <NavLink
               key={screen.to}
               to={screen.to}

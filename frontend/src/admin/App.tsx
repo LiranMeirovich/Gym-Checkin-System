@@ -3,6 +3,7 @@
 // <RequireSession> (or <RequireSession bare> for a screen the customer
 // uses).
 import { Navigate, Route, Routes } from "react-router";
+import { ActivityLog } from "./pages/ActivityLog";
 import { CustomerPage } from "./pages/CustomerPage";
 import { Customers } from "./pages/Customers";
 import { FillInHealthForm } from "./pages/FillInHealthForm";
@@ -24,6 +25,7 @@ export function App() {
         <Route path="/customers/new" element={<NewCustomer />} />
         <Route path="/customers/:id" element={<CustomerPage />} />
         <Route path="/prices" element={<Prices />} />
+        <Route path="/activity-log" element={<ActivityLog />} />
       </Route>
       {/* Screens the customer uses at the desk: no staff header. */}
       <Route element={<RequireSession bare />}>

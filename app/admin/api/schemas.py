@@ -3,16 +3,22 @@ types are generated from these (through the OpenAPI spec), so a change
 here that breaks the frontend fails its build."""
 
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StringConstraints,
+)
 
 from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
 from app.core.http import Answer, DateOfBirth
 from app.core.models import ChosenBy, Plan
-from app.core.permissions import Role
+from app.core.permissions import Permission, Role
 
 # SQLite's integer range. A bigger id can't exist, and SQLite would refuse
 # to look it up (a 500), so it's refused as a malformed request instead.
@@ -72,10 +78,13 @@ class StaffInfo(Answer):
 
 class SessionInfo(Answer):
     """Who is logged in, plus what the page needs to act for them: the
-    CSRF token for the ``X-CSRF-Token`` header (kept in memory only) and
-    the idle time after which the page goes to the lock screen."""
+    CSRF token for the ``X-CSRF-Token`` header (kept in memory only), the
+    idle time after which the page goes to the lock screen, and the role's
+    permissions, so the page offers only what the server would allow
+    (every route still checks its own)."""
 
     staff: StaffInfo
+    permissions: list[Permission]
     csrf_token: str
     lock_after_seconds: int
 
@@ -584,3 +593,70 @@ class CheckInForbidden(Answer):
     """403: a plan was sent by staff who may not choose plans."""
 
     error: Literal["plan_not_allowed"] = "plan_not_allowed"
+
+
+# ── Staff accounts ──────────────────────────────────────────────────────
+
+
+class StaffMember(Answer):
+    id: int
+    display_name: str
+    role: Role
+    active: bool
+
+
+class StaffList(Answer):
+    """Every staff account, active ones first."""
+
+    staff: list[StaffMember]
+
+
+# ── Activity log ────────────────────────────────────────────────────────
+
+
+class ActivityLogQuery(BaseModel):
+    """The filters of ``GET /api/activity-log``, all optional. ``from`` and
+    ``to`` are the gym's local days, both included. Which combinations make
+    sense is checked in ``app.core.activity_log`` (a 400 here)."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    staff_id: int | None = Field(default=None, ge=1, le=MAX_ID)
+    from_date: date | None = Field(default=None, alias="from")
+    to_date: date | None = Field(default=None, alias="to")
+    target_type: str | None = Field(default=None, min_length=1, max_length=50)
+    target_id: int | None = Field(default=None, ge=1, le=MAX_ID)
+    before_id: int | None = Field(default=None, ge=1, le=MAX_ID)
+
+
+class ActivityLogItem(Answer):
+    """One entry. ``action`` and ``target_type`` are the stored names (an
+    old entry may use one the code no longer has), and ``before``/``after``
+    are whatever the entry stored, in the shape it was written with."""
+
+    id: int
+    # The gym's local time, with its offset.
+    at: datetime
+    staff: StaffName
+    action: str
+    target_type: str
+    target_id: int | None
+    # For a staff member or a customer; empty for other targets.
+    target_name: str | None
+    before: dict[str, Any] | None
+    after: dict[str, Any] | None
+
+
+class ActivityLogRefused(Answer):
+    """400: the filters can't be used together (a target id without its
+    type) or a date is out of range. Nothing to show."""
+
+    error: Literal["invalid_filter"] = "invalid_filter"
+
+
+class ActivityLogPage(Answer):
+    """Newest first. ``next_before_id`` asks for the next, older page; empty
+    on the last one."""
+
+    entries: list[ActivityLogItem]
+    next_before_id: int | None

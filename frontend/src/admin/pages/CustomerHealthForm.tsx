@@ -15,7 +15,7 @@ import {
   healthFormsKey,
   type Customer,
 } from "../customers";
-import { isManager } from "../roles";
+import { can } from "../roles";
 import { useSession } from "../session";
 import {
   NoConnection,
@@ -106,7 +106,7 @@ export function CustomerHealthForm({ customer }: { customer: Customer }) {
           )}
         </>
       )}
-      {isManager(session) && (
+      {can(session, "health_forms.view_contents") && (
         <div className={ui.subsection}>
           <h3>טפסים חתומים</h3>
           <SignedForms customer={customer} />

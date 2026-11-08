@@ -3,7 +3,8 @@
 Work found during earlier features that wasn't done there. Grouped by when it's due. `/start-feature` reads the section for the current milestone plus "Any feature"; `/finish-feature` adds new items and removes finished ones.
 
 ## Any feature
-- Activity log (decision 0021): every feature adds its actions to `Action` and calls `record()` from its core functions. A migration that rebuilds `activity_log` must re-create its two triggers.
+- Activity log (decision 0021): every feature adds its actions to `Action` and calls `record()` from its core functions, and gives each new action (and any new before/after field) a Hebrew name in `frontend/src/admin/activityLog.ts`; a missing one shows its stored name. A migration that rebuilds `activity_log` must re-create its two triggers.
+- A new manager-only admin route goes in `MANAGER_ONLY` (`tests/test_admin_manager_only_routes.py`); the test fails until it does. React offers actions with `can(session, "<permission>")` (`roles.ts`), never by role.
 - Starlette warns that `httpx` for `TestClient` is deprecated in favour of `httpx2`. Look into it; swapping needs the developer's OK.
 - `openapi-typescript` has had no release since Feb 2026 and declares TypeScript 5; it runs on TypeScript 6 through an npm `overrides` entry. If it stays unmaintained or breaks on a TypeScript update, consider `@hey-api/openapi-ts` (needs the developer's OK).
 - Dev servers: `.claude/launch.json` starts the admin and public apps; add the two Vite dev servers if they're needed.
@@ -20,9 +21,9 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Dashboard: the latest sign-ups are the newest customers by `created_at` (no column, decision 0035). They include phone sign-ups, which no one at the desk has seen, so the manager can spot a fake one before the report.
 
 ## Milestone 4: admin screens
-- Role-filtered menus in React, using `isManager()` in `frontend/src/admin/roles.ts` (add more helpers there), in `AppHeader`'s `SCREENS` list.
 - Settings screen: load with `load_gym_settings_for_editing()`, convert form fields to their types before `update_gym_settings()`, and require a manager-only permission on the server. Email addresses are ASCII-only for now (decision 0016).
-- Activity log screen (`activity_log.view`) must cope with older before/after shapes.
+- Staff accounts: `GET /api/staff` (manager only, `staff.manage`) was built with the activity log for its staff filter; the Staff screen builds on it. React learns a role change only at the next `/api/session` fetch (reload or login); the server applies it from the next request.
+- Activity log: the target filter is exact, so a customer's plan choices, check-ins and forms (other target types) don't show under that customer. A full customer history would need a `customer_id` column or a JSON search.
 - Lock screen: a polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
 - Customer page, Phones: the list doesn't refresh itself while a code is on screen, because every React request counts as activity for the auto-lock. Once background refreshes skip the idle timer (the server already allows a request that doesn't `touch`), poll the list and hide the code once a phone links. The device name is a rough guess from the user agent (iPhone / Android / iPad); iPadOS sends a Mac user agent, so iPads show as "other device".
 - Dashboard: show the instructor the customers whose form needs a doctor's note, and the forms expiring in the next 30 days (design doc "Validity and access").

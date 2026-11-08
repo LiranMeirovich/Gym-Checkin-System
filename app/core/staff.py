@@ -70,6 +70,19 @@ def any_staff_exists(db: Session) -> bool:
     return db.scalar(select(StaffUser.id).limit(1)) is not None
 
 
+def list_staff(db: Session) -> list[StaffUser]:
+    """Every staff account, active or not, active ones first, then by name.
+    Inactive staff stay listed: their entries are still in the activity
+    log, and the manager may bring them back."""
+    return list(
+        db.scalars(
+            select(StaffUser).order_by(
+                StaffUser.active.desc(), StaffUser.display_name, StaffUser.id
+            )
+        )
+    )
+
+
 def create_first_manager(db: Session, display_name: str, pin: str) -> StaffUser:
     """Add the first manager at first-run setup. Nobody is logged in yet,
     so the activity log records the new manager as creating themselves.

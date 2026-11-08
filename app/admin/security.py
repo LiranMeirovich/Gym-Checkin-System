@@ -97,6 +97,9 @@ def require_permission(permission: Permission) -> Callable[..., StaffLogin]:
             raise HTTPException(status.HTTP_403_FORBIDDEN)
         return login
 
+    # Lets a test find which permission each route needs
+    # (tests/test_admin_manager_only_routes.py); nothing reads it at runtime.
+    check.permission = permission  # type: ignore[attr-defined]
     return check
 
 

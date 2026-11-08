@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { formatDate } from "../customers";
-import { isManager } from "../roles";
+import { can } from "../roles";
 import {
   PLANS,
   PLAN_NAMES,
@@ -52,7 +52,7 @@ export function Prices() {
             rows={data.upcoming}
             empty="אין שינויים מתוכננים."
           />
-          {isManager(session) && <ChangeForm overview={data} />}
+          {can(session, "prices.edit") && <ChangeForm overview={data} />}
           <Rows
             title="היסטוריה"
             rows={data.history}

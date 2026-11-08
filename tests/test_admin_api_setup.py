@@ -19,7 +19,7 @@ from app.core import pins
 from app.core.db import get_engine
 from app.core.gym_settings import load_gym_settings
 from app.core.models import ActivityLogEntry, StaffSession, StaffUser
-from app.core.permissions import Role
+from app.core.permissions import Permission, Role
 from app.core.staff_sessions import find_session
 
 ORIGIN = "http://127.0.0.1:8000"
@@ -97,6 +97,7 @@ def test_setup_saves_the_manager_and_gym_name_and_logs_in(
         "staff": {"id": manager.id, "display_name": "נועה", "role": "manager"},
         "csrf_token": csrf_token(token),
         "lock_after_seconds": 300,
+        "permissions": sorted(Permission),
     }
     assert client.get("/api/session").status_code == 200
 
