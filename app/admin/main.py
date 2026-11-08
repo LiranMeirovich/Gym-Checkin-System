@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.admin import security
+from app.admin.api import activity_log as api_activity_log
 from app.admin.api import auth as api_auth
 from app.admin.api import branding as api_branding
 from app.admin.api import checkins as api_checkins
@@ -16,6 +17,7 @@ from app.admin.api import phones as api_phones
 from app.admin.api import plans as api_plans
 from app.admin.api import prices as api_prices
 from app.admin.api import setup as api_setup
+from app.admin.api import staff as api_staff
 from app.core.branding import BRANDING_DIR, serve_logo
 from app.core.http import API_PREFIX, NoStoreMiddleware, SameOriginMiddleware
 from app.core.spa import FRONTEND_DIST, serve_frontend
@@ -45,6 +47,8 @@ app.include_router(api_plans.router, prefix=API_PREFIX)
 app.include_router(api_phones.router, prefix=API_PREFIX)
 app.include_router(api_health_forms.router, prefix=API_PREFIX)
 app.include_router(api_checkins.router, prefix=API_PREFIX)
+app.include_router(api_staff.router, prefix=API_PREFIX)
+app.include_router(api_activity_log.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

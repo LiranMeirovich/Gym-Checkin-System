@@ -418,10 +418,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Staff List */
+        get: operations["staff_list_api_staff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Activity Log */
+        get: operations["activity_log_api_activity_log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ActivityLogItem
+         * @description One entry. ``action`` and ``target_type`` are the stored names (an
+         *     old entry may use one the code no longer has), and ``before``/``after``
+         *     are whatever the entry stored, in the shape it was written with.
+         */
+        ActivityLogItem: {
+            /** Id */
+            id: number;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            staff: components["schemas"]["StaffName"];
+            /** Action */
+            action: string;
+            /** Target Type */
+            target_type: string;
+            /** Target Id */
+            target_id: number | null;
+            /** Target Name */
+            target_name: string | null;
+            /** Before */
+            before: {
+                [key: string]: unknown;
+            } | null;
+            /** After */
+            after: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * ActivityLogPage
+         * @description Newest first. ``next_before_id`` asks for the next, older page; empty
+         *     on the last one.
+         */
+        ActivityLogPage: {
+            /** Entries */
+            entries: components["schemas"]["ActivityLogItem"][];
+            /** Next Before Id */
+            next_before_id: number | null;
+        };
         /**
          * Branding
          * @description The gym's name (null before first-run setup) and whether
@@ -1224,6 +1301,24 @@ export interface components {
             /** Display Name */
             display_name: string;
             role: components["schemas"]["Role"];
+        };
+        /**
+         * StaffList
+         * @description Every staff account, active ones first.
+         */
+        StaffList: {
+            /** Staff */
+            staff: components["schemas"]["StaffMember"][];
+        };
+        /** StaffMember */
+        StaffMember: {
+            /** Id */
+            id: number;
+            /** Display Name */
+            display_name: string;
+            role: components["schemas"]["Role"];
+            /** Active */
+            active: boolean;
         };
         /** StaffName */
         StaffName: {
@@ -2850,6 +2945,94 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CheckInHealthFormRequired"] | components["schemas"]["CheckInPlanRequired"] | components["schemas"]["CheckInRefusedOther"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    staff_list_api_staff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffList"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    activity_log_api_activity_log_get: {
+        parameters: {
+            query?: {
+                staff_id?: number | null;
+                from?: string | null;
+                to?: string | null;
+                target_type?: string | null;
+                target_id?: number | null;
+                before_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityLogPage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -3,9 +3,16 @@ types are generated from these (through the OpenAPI spec), so a change
 here that breaks the frontend fails its build."""
 
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StringConstraints,
+    model_validator,
+)
 
 from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
@@ -584,3 +591,68 @@ class CheckInForbidden(Answer):
     """403: a plan was sent by staff who may not choose plans."""
 
     error: Literal["plan_not_allowed"] = "plan_not_allowed"
+
+
+# ── Staff accounts ──────────────────────────────────────────────────────
+
+
+class StaffMember(Answer):
+    id: int
+    display_name: str
+    role: Role
+    active: bool
+
+
+class StaffList(Answer):
+    """Every staff account, active ones first."""
+
+    staff: list[StaffMember]
+
+
+# ── Activity log ────────────────────────────────────────────────────────
+
+
+class ActivityLogQuery(BaseModel):
+    """The filters of ``GET /api/activity-log``, all optional. ``from`` and
+    ``to`` are the gym's local days, both included."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    staff_id: int | None = Field(default=None, ge=1, le=MAX_ID)
+    from_date: date | None = Field(default=None, alias="from")
+    to_date: date | None = Field(default=None, alias="to")
+    target_type: str | None = Field(default=None, min_length=1, max_length=50)
+    target_id: int | None = Field(default=None, ge=1, le=MAX_ID)
+    before_id: int | None = Field(default=None, ge=1, le=MAX_ID)
+
+    @model_validator(mode="after")
+    def _target_id_needs_a_type(self) -> "ActivityLogQuery":
+        if self.target_id is not None and self.target_type is None:
+            raise ValueError("target_id needs target_type")
+        return self
+
+
+class ActivityLogItem(Answer):
+    """One entry. ``action`` and ``target_type`` are the stored names (an
+    old entry may use one the code no longer has), and ``before``/``after``
+    are whatever the entry stored, in the shape it was written with."""
+
+    id: int
+    # The gym's local time, with its offset.
+    at: datetime
+    staff: StaffName
+    action: str
+    target_type: str
+    target_id: int | None
+    # For a staff member or a customer; empty for other targets.
+    target_name: str | None
+    before: dict[str, Any] | None
+    after: dict[str, Any] | None
+
+
+class ActivityLogPage(Answer):
+    """Newest first. ``next_before_id`` asks for the next, older page; empty
+    on the last one."""
+
+    entries: list[ActivityLogItem]
+    next_before_id: int | None
