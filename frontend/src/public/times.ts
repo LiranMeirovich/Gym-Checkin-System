@@ -18,3 +18,9 @@ export function formatTime(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/** Today in Israel as "YYYY-MM-DD", a date input's format (en-CA writes
+ * dates that way). */
+export function todayInIsrael(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+}

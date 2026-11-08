@@ -162,7 +162,7 @@ def test_every_invalid_field_is_named(db: Session, client: TestClient) -> None:
         {"date_of_birth": "09/03/2001"},
         {"date_of_birth": 984096000},
         {"first_name": "x" * 201},
-        {"notes": None, "phone": None},
+        {"phone": None},
     ],
 )
 def test_a_malformed_request_is_422(

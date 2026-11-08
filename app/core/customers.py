@@ -179,16 +179,14 @@ def add_customer(
             CustomerField.NOTES: notes,
         }
     )
-    owner = db.scalar(select(Customer).where(Customer.phone == values["phone"]))
+    owner = _phone_owner(db, values)
     if owner is not None:
         if owner.active:
             raise PhoneTakenError(owner)
         reactivate_customer(db, owner, by=by)
         return Added(owner, reactivated=True)
 
-    customer = Customer(**values)
-    db.add(customer)
-    db.flush()
+    customer = _insert(db, values)
     record(
         db,
         by,
@@ -226,9 +224,18 @@ def register_customer(
             CustomerField.DATE_OF_BIRTH: date_of_birth,
         }
     )
-    owner = db.scalar(select(Customer).where(Customer.phone == values["phone"]))
+    owner = _phone_owner(db, values)
     if owner is not None:
         raise PhoneTakenError(owner)
+    return _insert(db, values)
+
+
+def _phone_owner(db: Session, values: Mapping[str, object]) -> Customer | None:
+    """The customer, active or not, who already has the cleaned phone."""
+    return db.scalar(select(Customer).where(Customer.phone == values["phone"]))
+
+
+def _insert(db: Session, values: Mapping[str, object]) -> Customer:
     customer = Customer(**values)
     db.add(customer)
     db.flush()

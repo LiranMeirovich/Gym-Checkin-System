@@ -8,6 +8,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { api, type Schemas } from "../backend/client";
 import { NO_CONNECTION_TRY_AGAIN } from "../../shared/NoConnection";
+import { todayInIsrael } from "../times";
 import styles from "./Phone.module.css";
 
 type Details = Schemas["SignUpRequest"];
@@ -131,6 +132,8 @@ export function SignUpForm({
         {field("date_of_birth", "תאריך לידה", {
           type: "date",
           autoComplete: "bday",
+          // The picker offers no future dates; the server checks anyway.
+          max: todayInIsrael(),
         })}
         <button type="submit" className={styles.wide} disabled={sending}>
           הרשמה

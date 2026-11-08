@@ -2,16 +2,15 @@
 types are generated from these (through the OpenAPI spec), so a change
 here that breaks the frontend fails its build."""
 
-import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, BeforeValidator, Field, StrictBool, StringConstraints
+from pydantic import BaseModel, Field, StrictBool, StringConstraints
 
 from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
-from app.core.http import Answer
+from app.core.http import Answer, DateOfBirth
 from app.core.models import AgeGroup, ChosenBy, Plan
 from app.core.permissions import Role
 
@@ -124,18 +123,6 @@ class SetupRefused(Answer):
 # which answers a broken one with a field code, not a 422.
 
 CustomerField = Literal["first_name", "last_name", "phone", "date_of_birth", "notes"]
-_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
-
-
-def _iso_date_text(value: object) -> object:
-    # Pydantic would also take a number (a Unix time) or a date-time with
-    # a zero time; a date of birth is only ever "YYYY-MM-DD".
-    if not (isinstance(value, str) and _ISO_DATE.fullmatch(value)):
-        raise ValueError("a date is YYYY-MM-DD")
-    return value
-
-
-DateOfBirth = Annotated[date, BeforeValidator(_iso_date_text)]
 
 
 class CustomerSummary(Answer):

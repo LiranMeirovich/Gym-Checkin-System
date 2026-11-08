@@ -1,22 +1,15 @@
 """Request and response shapes of the public API. The public React app's
 TypeScript types are generated from these (through the OpenAPI spec)."""
 
-import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import (
-    BaseModel,
-    BeforeValidator,
-    Field,
-    StrictBool,
-    StringConstraints,
-)
+from pydantic import BaseModel, Field, StrictBool, StringConstraints
 
 from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
-from app.core.http import Answer
+from app.core.http import Answer, DateOfBirth
 from app.core.models import Plan
 
 # Base64 grows bytes by 4/3, plus the "data:image/png;base64," prefix.
@@ -60,27 +53,17 @@ class LinkRefused(Answer):
 
 
 # ── Signing up (decision 0035) ──────────────────────────────────────────
-# As in the admin API's schemas, which this app must not import. The caps
-# on text only keep a huge value out; app.core.customers has the real
-# rules and answers a broken field with a code, not a 422.
+# The caps on text only keep a huge value out; app.core.customers has the
+# real rules and answers a broken field with a code, not a 422.
 
 SignUpField = Literal["first_name", "last_name", "phone", "date_of_birth"]
-_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
-
-
-def _iso_date_text(value: object) -> object:
-    # Pydantic would also take a number (a Unix time) or a date-time with
-    # a zero time; a date of birth is only ever "YYYY-MM-DD".
-    if not (isinstance(value, str) and _ISO_DATE.fullmatch(value)):
-        raise ValueError("a date is YYYY-MM-DD")
-    return value
 
 
 class SignUpRequest(BaseModel):
     first_name: str = Field(max_length=200)
     last_name: str = Field(max_length=200)
     phone: str = Field(max_length=50)
-    date_of_birth: Annotated[date, BeforeValidator(_iso_date_text)]
+    date_of_birth: DateOfBirth
 
 
 class SignUpRefused(Answer):
