@@ -108,7 +108,7 @@ def idle_timeout(settings: GymSettings, role: Role) -> timedelta:
     while instructors mostly watch the desk screen."""
     minutes = (
         settings.lock_screen_minutes
-        if Role(role) is Role.MANAGER
+        if Role(role) in (Role.OWNER, Role.MANAGER)
         else settings.instructor_lock_screen_minutes
     )
     return timedelta(minutes=minutes)

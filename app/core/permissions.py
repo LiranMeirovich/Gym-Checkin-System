@@ -6,7 +6,8 @@ so moving an action from one role to the other is a one-line change in
 ``ROLE_PERMISSIONS``. Every check happens on the server; hiding a button is
 never the only protection.
 
-The split below is the design doc's proposed one; the manager still has to
+The split below is the design doc's proposed one, plus the owner
+(decision 0039); the manager still has to
 confirm it (design doc: "Open questions").
 """
 
@@ -16,8 +17,14 @@ from types import MappingProxyType
 
 class Role(StrEnum):
     """A staff member's role. The values are what ``staff_users.role``
-    stores."""
+    stores.
 
+    The owner is the gym's main manager: there is one, created at first-run
+    setup, and nobody else can change their account. Other managers help
+    run the gym but don't manage managers (``STAFF_MANAGE_MANAGERS``).
+    """
+
+    OWNER = "owner"
     MANAGER = "manager"
     INSTRUCTOR = "instructor"
 
@@ -66,6 +73,10 @@ class Permission(StrEnum):
     BACKUPS_MANAGE = "backups.manage"
     # Create staff accounts, reset PINs, change roles, deactivate.
     STAFF_MANAGE = "staff.manage"
+    # The same for managers' accounts (adding one, making someone a
+    # manager or not, their PINs). The owner's own account is nobody's to
+    # change but the owner's (app.core.staff).
+    STAFF_MANAGE_MANAGERS = "staff.manage_managers"
     ACTIVITY_LOG_VIEW = "activity_log.view"
 
 
@@ -87,7 +98,8 @@ _INSTRUCTOR = frozenset(
 # grant a permission at runtime.
 ROLE_PERMISSIONS: MappingProxyType[Role, frozenset[Permission]] = MappingProxyType(
     {
-        Role.MANAGER: frozenset(Permission),
+        Role.OWNER: frozenset(Permission),
+        Role.MANAGER: frozenset(Permission) - {Permission.STAFF_MANAGE_MANAGERS},
         Role.INSTRUCTOR: _INSTRUCTOR,
     }
 )

@@ -16,7 +16,7 @@ from app.core import pins
 from app.core.db import get_engine
 from app.core.models import ActivityLogEntry, Customer, StaffUser
 from app.core.permissions import Role
-from app.core.staff import create_first_manager, create_staff_user
+from app.core.staff import create_owner, create_staff_user
 
 ORIGIN = "http://127.0.0.1:8000"
 SAME_ORIGIN = {"Origin": ORIGIN, "Sec-Fetch-Site": "same-origin"}
@@ -50,7 +50,7 @@ def db(client: TestClient) -> Iterator[Session]:
 
 @pytest.fixture
 def manager(db: Session) -> StaffUser:
-    staff = create_first_manager(db, "מנהלת", PIN)
+    staff = create_owner(db, "מנהלת", PIN)
     db.commit()
     return staff
 

@@ -85,7 +85,7 @@ def test_setup_saves_the_manager_and_gym_name_and_logs_in(
     assert response.status_code == 200
     manager = db.scalars(select(StaffUser)).one()
     assert manager.display_name == "נועה"
-    assert manager.role is Role.MANAGER
+    assert manager.role is Role.OWNER
     assert pins.pin_matches(manager.pin_hash, PIN)
     assert load_gym_settings(db).gym_name == "מכון הדוגמה"
 
@@ -94,7 +94,7 @@ def test_setup_saves_the_manager_and_gym_name_and_logs_in(
     assert session is not None
     assert session.staff_user_id == manager.id
     assert response.json() == {
-        "staff": {"id": manager.id, "display_name": "נועה", "role": "manager"},
+        "staff": {"id": manager.id, "display_name": "נועה", "role": "owner"},
         "csrf_token": csrf_token(token),
         "lock_after_seconds": 300,
         "permissions": sorted(Permission),
@@ -116,7 +116,7 @@ def test_setup_logs_the_manager_as_making_both_changes(
         (
             manager.id,
             "staff.create",
-            {"display_name": "נועה", "role": "manager", "active": True},
+            {"display_name": "נועה", "role": "owner", "active": True},
         ),
         (manager.id, "settings.update", {"gym_name": "מכון הדוגמה"}),
     ]

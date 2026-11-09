@@ -1,7 +1,11 @@
 """Staff accounts as JSON (design doc: "Users and roles"; decisions 0018,
-0037).
+0037, 0039).
 
-Manager only (``staff.manage``), checked on the server whatever React shows:
+Owner and managers (``staff.manage``), checked on the server whatever React
+shows. Which accounts they may change is ``app.core.staff``'s rule: only
+the owner changes managers' accounts (a 403 for a manager), and nobody
+demotes or deactivates the owner or resets their PIN for them (a 409
+``owner``).
 
 - ``GET /api/staff``: every staff account, active or not, and who is
   locked out after too many wrong PINs.
@@ -9,12 +13,13 @@ Manager only (``staff.manage``), checked on the server whatever React shows:
 - ``PUT /api/staff/{id}/pin``: reset their PIN. It lifts a lockout and
   logs them out everywhere, except the manager's own session when they
   reset their own PIN.
-- ``PUT /api/staff/{id}/role``: make them a manager or an instructor.
+- ``PUT /api/staff/{id}/role``: make them a manager or an instructor
+  (nobody is made the owner here).
 - ``POST /api/staff/{id}/deactivate`` / ``reactivate``.
 
 The changes answer with the changed member. A broken field is a 400; a
-rule that refuses the change (a taken name, the last manager, your own
-account) is a 409. The rules themselves live in ``app.core.staff``.
+rule that refuses the change (a taken name, the owner's account) is a 409.
+The rules themselves live in ``app.core.staff``.
 """
 
 from typing import Annotated
@@ -44,8 +49,8 @@ from app.core.pins import InvalidPinError
 from app.core.staff import (
     DuplicateDisplayNameError,
     InvalidDisplayNameError,
-    LastManagerError,
-    OwnAccountError,
+    NeedsOwnerError,
+    OwnerAccountError,
     change_role,
     create_staff_user,
     deactivate,
@@ -67,6 +72,9 @@ CanManage = Annotated[StaffLogin, Depends(require_permission(Permission.STAFF_MA
 StaffId = Annotated[int, Path(ge=1, le=MAX_ID)]
 
 NOT_FOUND = {status.HTTP_404_NOT_FOUND: {}}
+# Not refused by require_permission but by the account's rule: a manager
+# changing a manager's account. The same answer, a plain 403.
+NEEDS_OWNER = HTTPException(status.HTTP_403_FORBIDDEN)
 REFUSED = {status.HTTP_400_BAD_REQUEST: {"model": StaffRefused}}
 CONFLICT = {status.HTTP_409_CONFLICT: {"model": StaffConflict}}
 
@@ -95,13 +103,15 @@ def add(
         return _refused("pin")
     except DuplicateDisplayNameError:
         return _conflict("name_taken")
+    except NeedsOwnerError:
+        raise NEEDS_OWNER from None
     return member(added)
 
 
 @router.put(
     "/{staff_id}/pin",
     response_model=StaffMember,
-    responses={**NOT_FOUND, **REFUSED},
+    responses={**NOT_FOUND, **REFUSED, **CONFLICT},
 )
 def new_pin(
     staff_id: StaffId, body: PinReset, db: DbSession, login: CanManage
@@ -111,6 +121,10 @@ def new_pin(
         reset_pin(db, staff, body.pin, by=login.staff, keep_session=login.session)
     except InvalidPinError:
         return _refused("pin")
+    except OwnerAccountError:
+        return _conflict("owner")
+    except NeedsOwnerError:
+        raise NEEDS_OWNER from None
     return member(staff)
 
 
@@ -125,10 +139,10 @@ def new_role(
     staff = staff_or_404(db, staff_id)
     try:
         change_role(db, staff, body.role, by=login.staff)
-    except LastManagerError:
-        return _conflict("last_manager")
-    except OwnAccountError:
-        return _conflict("own_account")
+    except OwnerAccountError:
+        return _conflict("owner")
+    except NeedsOwnerError:
+        raise NEEDS_OWNER from None
     return member(staff)
 
 
@@ -143,10 +157,10 @@ def make_inactive(
     staff = staff_or_404(db, staff_id)
     try:
         deactivate(db, staff, by=login.staff)
-    except LastManagerError:
-        return _conflict("last_manager")
-    except OwnAccountError:
-        return _conflict("own_account")
+    except OwnerAccountError:
+        return _conflict("owner")
+    except NeedsOwnerError:
+        raise NEEDS_OWNER from None
     return member(staff)
 
 
@@ -163,6 +177,8 @@ def make_active(
         reactivate(db, staff, by=login.staff)
     except DuplicateDisplayNameError:
         return _conflict("name_taken")
+    except NeedsOwnerError:
+        raise NEEDS_OWNER from None
     return member(staff)
 
 

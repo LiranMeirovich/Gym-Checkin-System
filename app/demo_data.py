@@ -47,7 +47,7 @@ from app.core.months import Month
 from app.core.permissions import Role
 from app.core.plans import choose_plan
 from app.core.prices import PriceChange, set_prices
-from app.core.staff import any_staff_exists, create_first_manager, create_staff_user
+from app.core.staff import any_staff_exists, create_owner, create_staff_user
 from app.core.startup import check_database_is_current
 
 GYM_NAME = "מכון הדוגמה"
@@ -124,7 +124,7 @@ def _customer(
 
 
 def fill(db: Session) -> None:
-    manager = create_first_manager(db, *MANAGER)
+    manager = create_owner(db, *MANAGER)
     update_gym_settings(db, {"gym_name": GYM_NAME}, by=manager)
     instructor = create_staff_user(
         db, INSTRUCTOR[0], Role.INSTRUCTOR, INSTRUCTOR[1], by=manager

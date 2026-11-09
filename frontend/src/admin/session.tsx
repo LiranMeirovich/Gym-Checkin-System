@@ -40,6 +40,7 @@ type SessionState =
   | { loggedIn: false; setupNeeded: boolean };
 
 export const ROLE_NAMES: Record<Session["staff"]["role"], string> = {
+  owner: "בעלים",
   manager: "מנהל/ת",
   instructor: "מדריך/ה",
 };

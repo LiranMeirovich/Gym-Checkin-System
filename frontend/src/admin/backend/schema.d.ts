@@ -1129,7 +1129,11 @@ export interface components {
         NewStaffMember: {
             /** Display Name */
             display_name: string;
-            role: components["schemas"]["Role"];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "manager" | "instructor";
             /** Pin */
             pin: string;
         };
@@ -1159,7 +1163,7 @@ export interface components {
          * @description Everything a role can be allowed to do, named ``<area>.<action>``.
          * @enum {string}
          */
-        Permission: "customers.view" | "customers.add" | "customers.edit" | "customers.edit_birth_date" | "customers.archive" | "checkins.manual" | "phones.link" | "plans.choose" | "plans.correct" | "plans.freeze" | "health_forms.view_status" | "health_forms.view_contents" | "health_forms.add_doctor_note" | "health_forms.fill_in" | "prices.view" | "prices.edit" | "reports.manage" | "settings.edit" | "backups.manage" | "staff.manage" | "activity_log.view";
+        Permission: "customers.view" | "customers.add" | "customers.edit" | "customers.edit_birth_date" | "customers.archive" | "checkins.manual" | "phones.link" | "plans.choose" | "plans.correct" | "plans.freeze" | "health_forms.view_status" | "health_forms.view_contents" | "health_forms.add_doctor_note" | "health_forms.fill_in" | "prices.view" | "prices.edit" | "reports.manage" | "settings.edit" | "backups.manage" | "staff.manage" | "staff.manage_managers" | "activity_log.view";
         /** PinReset */
         PinReset: {
             /** Pin */
@@ -1347,12 +1351,20 @@ export interface components {
          * Role
          * @description A staff member's role. The values are what ``staff_users.role``
          *     stores.
+         *
+         *     The owner is the gym's main manager: there is one, created at first-run
+         *     setup, and nobody else can change their account. Other managers help
+         *     run the gym but don't manage managers (``STAFF_MANAGE_MANAGERS``).
          * @enum {string}
          */
-        Role: "manager" | "instructor";
+        Role: "owner" | "manager" | "instructor";
         /** RoleChange */
         RoleChange: {
-            role: components["schemas"]["Role"];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "manager" | "instructor";
         };
         /**
          * SessionInfo
@@ -1406,16 +1418,15 @@ export interface components {
         /**
          * StaffConflict
          * @description 409. ``name_taken``: another active staff member has the name.
-         *     ``last_manager``: there must always be an active manager.
-         *     ``own_account``: nobody demotes or deactivates themselves; another
-         *     manager has to. Nothing was saved.
+         *     ``owner``: the owner's account can't be demoted or deactivated, and
+         *     only the owner resets their own PIN. Nothing was saved.
          */
         StaffConflict: {
             /**
              * Error
              * @enum {string}
              */
-            error: "name_taken" | "last_manager" | "own_account";
+            error: "name_taken" | "owner";
         };
         /** StaffInfo */
         StaffInfo: {
@@ -3255,6 +3266,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffConflict"];
+                };
             };
             /** @description Validation Error */
             422: {

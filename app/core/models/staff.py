@@ -3,7 +3,7 @@
 
 Rows are deactivated, never deleted: check-ins, health forms and the
 activity log will point at them. The rules the database can't check (the
-last active manager, PIN format, the lockout) live in ``app.core.staff``.
+owner's account, PIN format, the lockout) live in ``app.core.staff``.
 """
 
 from datetime import datetime
@@ -31,7 +31,8 @@ class StaffUser(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # Shown on the lock screen, where staff tap their name to log in.
     display_name: Mapped[str] = mapped_column(Text)
-    # Stored as "manager" / "instructor", with a CHECK constraint.
+    # Stored as "owner" / "manager" / "instructor", with a CHECK
+    # constraint; at most one owner (the index below).
     role: Mapped[Role] = mapped_column(
         Enum(
             Role,
@@ -65,4 +66,13 @@ Index(
     func.lower(StaffUser.display_name),
     unique=True,
     sqlite_where=StaffUser.active,
+)
+
+# At most one owner, the gym's main manager (decision 0039). The rules that
+# keep there being exactly one live in app.core.staff.
+Index(
+    "uq_staff_users_one_owner",
+    StaffUser.role,
+    unique=True,
+    sqlite_where=StaffUser.role == Role.OWNER,
 )

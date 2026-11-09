@@ -320,3 +320,71 @@ def test_the_one_price_downgrade_marks_everything_adult(
     assert trigger_names() == triggers
     with get_engine().begin() as connection, pytest.raises(IntegrityError):
         connection.exec_driver_sql("DELETE FROM plan_choices")
+
+
+# ── The owner role (23b9f8717ccd) ───────────────────────────────────────
+
+BEFORE_OWNER = "c3e4bdafa3d3"
+
+# Made-up staff at BEFORE_OWNER: a deactivated manager first (lowest id),
+# then two active managers and an instructor.
+SEED_STAFF = (
+    "INSERT INTO staff_users (id, display_name, role, pin_hash,"
+    " failed_attempts, active, created_at) VALUES"
+    " (1, 'Gil', 'manager', '$argon2id$x', 0, 0, '2026-10-25 09:00:00.000000'),"
+    " (2, 'Noa', 'manager', '$argon2id$x', 0, 1, '2026-10-25 09:00:00.000000'),"
+    " (3, 'Dana', 'instructor', '$argon2id$x', 0, 1, '2026-10-25 09:00:00.000000'),"
+    " (4, 'Yael', 'manager', '$argon2id$x', 0, 1, '2026-10-25 09:00:00.000000')",
+)
+
+
+def staff_roles() -> list[tuple[object, ...]]:
+    with get_engine().connect() as connection:
+        return connection.exec_driver_sql(
+            "SELECT id, role FROM staff_users ORDER BY id"
+        ).fetchall()
+
+
+def test_the_oldest_active_manager_becomes_the_owner(alembic_config: Config) -> None:
+    command.upgrade(alembic_config, BEFORE_OWNER)
+    with get_engine().begin() as connection:
+        for statement in SEED_STAFF:
+            connection.exec_driver_sql(statement)
+
+    command.upgrade(alembic_config, "head")
+
+    assert staff_roles() == [
+        (1, "manager"),
+        (2, "owner"),
+        (3, "instructor"),
+        (4, "manager"),
+    ]
+    # The rebuild kept the name index: active names are still unique.
+    with get_engine().begin() as connection, pytest.raises(IntegrityError):
+        connection.exec_driver_sql(
+            "INSERT INTO staff_users (display_name, role, pin_hash,"
+            " failed_attempts, active, created_at) VALUES ('noa', 'instructor',"
+            " '$argon2id$x', 0, 1, '2026-10-25 09:00:00.000000')"
+        )
+    # And a second owner is refused.
+    with get_engine().begin() as connection, pytest.raises(IntegrityError):
+        connection.exec_driver_sql("UPDATE staff_users SET role = 'owner' WHERE id = 4")
+
+
+def test_the_owner_downgrade_makes_them_a_manager_again(
+    alembic_config: Config,
+) -> None:
+    command.upgrade(alembic_config, BEFORE_OWNER)
+    with get_engine().begin() as connection:
+        for statement in SEED_STAFF:
+            connection.exec_driver_sql(statement)
+    command.upgrade(alembic_config, "head")
+
+    command.downgrade(alembic_config, BEFORE_OWNER)
+
+    assert [role for _id, role in staff_roles()] == [
+        "manager",
+        "manager",
+        "instructor",
+        "manager",
+    ]

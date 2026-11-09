@@ -60,10 +60,19 @@ def test_a_new_row_gets_its_defaults(db: Session) -> None:
     assert row.created_at.tzinfo is UTC
 
 
+def test_there_is_at_most_one_owner(db: Session) -> None:
+    db.add(StaffUser(display_name="Noa", role=Role.OWNER, pin_hash=FAKE_HASH))
+    db.commit()
+
+    db.add(StaffUser(display_name="Gil", role=Role.OWNER, pin_hash=FAKE_HASH))
+    with pytest.raises(IntegrityError):
+        db.commit()
+
+
 @pytest.mark.parametrize(
     "values",
     [
-        {"role": "owner"},
+        {"role": "Owner"},
         {"role": "Manager"},
         {"pin_hash": "482913"},
         {"failed_attempts": -1},

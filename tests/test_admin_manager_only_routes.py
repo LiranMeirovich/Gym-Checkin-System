@@ -22,7 +22,7 @@ from app.core import pins
 from app.core.db import get_engine
 from app.core.http import API_PREFIX
 from app.core.permissions import ROLE_PERMISSIONS, Permission, Role
-from app.core.staff import create_first_manager, create_staff_user
+from app.core.staff import create_owner, create_staff_user
 
 ORIGIN = "http://127.0.0.1:8000"
 SAME_ORIGIN = {"Origin": ORIGIN, "Sec-Fetch-Site": "same-origin"}
@@ -89,7 +89,7 @@ def fast_hashing(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def as_instructor(migrated_db: Path) -> Iterator[tuple[TestClient, dict[str, str]]]:
     with Session(get_engine()) as db:
-        manager = create_first_manager(db, "מנהלת", PIN)
+        manager = create_owner(db, "מנהלת", PIN)
         instructor = create_staff_user(db, "מדריך", Role.INSTRUCTOR, PIN, by=manager)
         db.commit()
         instructor_id = instructor.id

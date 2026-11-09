@@ -1,16 +1,18 @@
-// The staff accounts, for the manager (staff.manage; decisions 0018,
-// 0037): who can log in, who is locked out, and the changes: add, reset a
-// PIN, change a role, deactivate and reactivate. The server checks every
-// rule (a free name, the PIN format, always an active manager, nobody
-// demoting or deactivating themselves); this screen only doesn't offer
-// what it would refuse.
+// The staff accounts, for the owner and managers (staff.manage; decisions
+// 0018, 0037, 0039): who can log in, who is locked out, and the changes:
+// add, reset a PIN, change a role, deactivate and reactivate. Managers'
+// accounts are the owner's to change (staff.manage_managers), and the
+// owner's account is nobody else's: only the owner resets their own PIN.
+// The server checks every rule; this screen only doesn't offer what it
+// would refuse.
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { formatDate, formatTime } from "../customers";
 import { Field, PageHead } from "../layout/ui";
 import ui from "../layout/ui.module.css";
-import { ROLE_NAMES, useSession } from "../session";
+import { can } from "../roles";
+import { ROLE_NAMES, useSession, type Session } from "../session";
 import {
   NoConnection,
   NO_CONNECTION_TRY_AGAIN,
@@ -19,7 +21,8 @@ import { StatusBadge } from "../../shared/Status";
 import styles from "./Staff.module.css";
 
 type Member = Schemas["StaffMember"];
-type Role = Member["role"];
+// The roles an account can be given; the owner is made only at setup.
+type Role = Schemas["RoleChange"]["role"];
 // The fields a 400 can name (the API types its errors as a plain map).
 type StaffField = "display_name" | "pin";
 type Conflict = Schemas["StaffConflict"]["error"];
@@ -35,10 +38,27 @@ const FIELD_ERRORS: Record<StaffField, string> = {
 
 const CONFLICTS: Record<Conflict, string> = {
   name_taken: "לאיש צוות פעיל אחר כבר יש את השם הזה.",
-  last_manager: "חייב להישאר לפחות מנהל/ת פעיל/ה אחד/ת.",
-  own_account:
-    "אי אפשר להוריד או להשבית את החשבון של עצמך. מנהל/ת אחר/ת יכול/ה.",
+  owner:
+    "את חשבון הבעלים אי אפשר להוריד בתפקיד או להשבית, ורק הבעלים מאפסים את הקוד שלהם.",
 };
+
+/** What the logged-in staff member may do to ``member``'s account: the
+ * same rules the server checks (app/core/staff.py). */
+function allowed(session: Session, member: Member) {
+  const self = member.id === session.staff.id;
+  const managesManagers = can(session, "staff.manage_managers");
+  if (member.role === "owner") {
+    return { resetPin: self, changeRole: false, toggleActive: false };
+  }
+  const mayChange = member.role !== "manager" || managesManagers;
+  return {
+    // Your own PIN is always yours to reset.
+    resetPin: mayChange || self,
+    // Either way the change involves the manager role.
+    changeRole: managesManagers,
+    toggleActive: mayChange && !self,
+  };
+}
 
 class Forbidden extends Error {}
 
@@ -64,6 +84,9 @@ function outcomeOf(answer: Answer, done: string): Outcome {
   const error = answer.error as { error?: Conflict } | undefined;
   if (answer.response.status === 409 && error?.error) {
     return { ok: false, text: CONFLICTS[error.error] };
+  }
+  if (answer.response.status === 403) {
+    return { ok: false, text: "רק הבעלים יכולים לשנות חשבונות של מנהלים." };
   }
   if (answer.response.status === 404) {
     return { ok: false, text: "איש הצוות לא נמצא. רעננו את הדף." };
@@ -228,6 +251,7 @@ function StaffTable({
         <tbody>
           {staff.map((member) => {
             const self = member.id === session.staff.id;
+            const may = allowed(session, member);
             return (
               <tr
                 key={member.id}
@@ -243,15 +267,16 @@ function StaffTable({
                 </td>
                 <td className={ui.rowAction}>
                   <div className={styles.rowButtons}>
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={() => onReset(member)}
-                    >
-                      איפוס קוד
-                    </button>
-                    {/* Nobody demotes or deactivates themselves. */}
-                    {!(self && member.role === "manager") && (
+                    {may.resetPin && (
+                      <button
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => onReset(member)}
+                      >
+                        איפוס קוד
+                      </button>
+                    )}
+                    {may.changeRole && (
                       <button
                         type="button"
                         disabled={busy !== null}
@@ -262,7 +287,7 @@ function StaffTable({
                           : "הפיכה למנהל/ת"}
                       </button>
                     )}
-                    {!self && (
+                    {may.toggleActive && (
                       <button
                         type="button"
                         className={member.active ? styles.quiet : undefined}
@@ -396,6 +421,8 @@ function ResetPinForm({
 }
 
 function AddForm({ onAdded }: { onAdded: (member: Member) => void }) {
+  const session = useSession();
+  const managesManagers = can(session, "staff.manage_managers");
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("instructor");
   const [pin, setPin] = useState("");
@@ -459,16 +486,19 @@ function AddForm({ onAdded }: { onAdded: (member: Member) => void }) {
               required
             />
           </Field>
-          <Field id="new_role" label="תפקיד">
-            <select
-              id="new_role"
-              value={role}
-              onChange={(event) => setRole(event.target.value as Role)}
-            >
-              <option value="instructor">{ROLE_NAMES.instructor}</option>
-              <option value="manager">{ROLE_NAMES.manager}</option>
-            </select>
-          </Field>
+          {/* Only the owner adds managers; a manager adds instructors. */}
+          {managesManagers && (
+            <Field id="new_role" label="תפקיד">
+              <select
+                id="new_role"
+                value={role}
+                onChange={(event) => setRole(event.target.value as Role)}
+              >
+                <option value="instructor">{ROLE_NAMES.instructor}</option>
+                <option value="manager">{ROLE_NAMES.manager}</option>
+              </select>
+            </Field>
+          )}
           <Field id="new_pin" label="קוד (6 עד 12 ספרות)" error={errors.pin}>
             <PinInput id="new_pin" value={pin} onChange={setPin} />
           </Field>

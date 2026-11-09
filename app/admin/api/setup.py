@@ -38,7 +38,7 @@ from app.core.staff import (
     InvalidDisplayNameError,
     SetupAlreadyDoneError,
     any_staff_exists,
-    create_first_manager,
+    create_owner,
 )
 from app.core.staff_sessions import idle_timeout, lock_settings, start_session
 
@@ -104,7 +104,7 @@ def create_manager(
     except InvalidSettingsChangeError:
         errors["gym_name"] = "invalid"
     try:
-        manager = create_first_manager(db, display_name, pin)
+        manager = create_owner(db, display_name, pin)
     except (InvalidDisplayNameError, DuplicateDisplayNameError):
         # A duplicate can't happen on an empty table; kept so a wrong guess
         # about that shows as a field error, not a crash.

@@ -616,11 +616,16 @@ class StaffList(Answer):
     staff: list[StaffMember]
 
 
+# The roles a staff account can be given; the owner is made only at
+# first-run setup (decision 0039).
+AssignableRole = Literal["manager", "instructor"]
+
+
 class NewStaffMember(BaseModel):
     # Generous limits so a long value reaches app.core.staff's own rules
     # (a field code), not a 422.
     display_name: str = Field(max_length=200)
-    role: Role
+    role: AssignableRole
     pin: str = Field(max_length=100)
 
 
@@ -629,7 +634,7 @@ class PinReset(BaseModel):
 
 
 class RoleChange(BaseModel):
-    role: Role
+    role: AssignableRole
 
 
 StaffField = Literal["display_name", "pin"]
@@ -641,14 +646,13 @@ class StaffRefused(Answer):
     errors: dict[StaffField, Literal["invalid"]]
 
 
-StaffConflictReason = Literal["name_taken", "last_manager", "own_account"]
+StaffConflictReason = Literal["name_taken", "owner"]
 
 
 class StaffConflict(Answer):
     """409. ``name_taken``: another active staff member has the name.
-    ``last_manager``: there must always be an active manager.
-    ``own_account``: nobody demotes or deactivates themselves; another
-    manager has to. Nothing was saved."""
+    ``owner``: the owner's account can't be demoted or deactivated, and
+    only the owner resets their own PIN. Nothing was saved."""
 
     error: StaffConflictReason
 

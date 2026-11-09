@@ -20,7 +20,7 @@ from app.core.permissions import Role
 from app.core.staff import (
     PinCheck,
     check_pin,
-    create_first_manager,
+    create_owner,
     create_staff_user,
 )
 
@@ -50,15 +50,15 @@ def db(client: TestClient) -> Iterator[Session]:
 
 
 @pytest.fixture
-def manager(db: Session) -> StaffUser:
-    member = create_first_manager(db, "מנהלת", PIN)
+def owner(db: Session) -> StaffUser:
+    member = create_owner(db, "מנהלת", PIN)
     db.commit()
     return member
 
 
 @pytest.fixture
-def instructor(db: Session, manager: StaffUser) -> StaffUser:
-    member = create_staff_user(db, "מדריך", Role.INSTRUCTOR, PIN, by=manager)
+def instructor(db: Session, owner: StaffUser) -> StaffUser:
+    member = create_staff_user(db, "מדריך", Role.INSTRUCTOR, PIN, by=owner)
     db.commit()
     return member
 
@@ -76,8 +76,8 @@ def log_in(member: StaffUser) -> TestClient:
 
 
 @pytest.fixture
-def as_manager(manager: StaffUser) -> TestClient:
-    return log_in(manager)
+def as_owner(owner: StaffUser) -> TestClient:
+    return log_in(owner)
 
 
 def reloaded(db: Session, member: StaffUser) -> StaffUser:
@@ -92,8 +92,8 @@ def staff_count(db: Session) -> int:
 # ── Adding ──────────────────────────────────────────────────────────────
 
 
-def test_adding_a_member(as_manager: TestClient, db: Session) -> None:
-    answer = as_manager.post(
+def test_adding_a_member(as_owner: TestClient, db: Session) -> None:
+    answer = as_owner.post(
         "/api/staff", json={"display_name": " יעל ", "role": "instructor", "pin": PIN}
     )
 
@@ -118,11 +118,11 @@ def test_adding_a_member(as_manager: TestClient, db: Session) -> None:
     ],
 )
 def test_a_broken_field_is_named(
-    as_manager: TestClient, db: Session, body: dict[str, str], field: str
+    as_owner: TestClient, db: Session, body: dict[str, str], field: str
 ) -> None:
     before = staff_count(db)
 
-    answer = as_manager.post("/api/staff", json={**body, "role": "instructor"})
+    answer = as_owner.post("/api/staff", json={**body, "role": "instructor"})
 
     assert answer.status_code == 400
     assert answer.json() == {"errors": {field: "invalid"}}
@@ -130,9 +130,9 @@ def test_a_broken_field_is_named(
 
 
 def test_a_taken_name_is_a_conflict(
-    as_manager: TestClient, instructor: StaffUser
+    as_owner: TestClient, instructor: StaffUser
 ) -> None:
-    answer = as_manager.post(
+    answer = as_owner.post(
         "/api/staff", json={"display_name": "מדריך", "role": "manager", "pin": PIN}
     )
 
@@ -144,16 +144,16 @@ def test_a_taken_name_is_a_conflict(
 
 
 def test_a_pin_reset_lifts_the_lockout_and_logs_them_out(
-    as_manager: TestClient, db: Session, instructor: StaffUser
+    as_owner: TestClient, db: Session, instructor: StaffUser
 ) -> None:
     instructors_browser = log_in(instructor)
     for _ in range(staff.MAX_FAILED_ATTEMPTS):
         check_pin(db, instructor, NEW_PIN)
     db.commit()
-    listed = as_manager.get("/api/staff").json()["staff"]
+    listed = as_owner.get("/api/staff").json()["staff"]
     assert next(m for m in listed if m["id"] == instructor.id)["locked_until"]
 
-    answer = as_manager.put(f"/api/staff/{instructor.id}/pin", json={"pin": NEW_PIN})
+    answer = as_owner.put(f"/api/staff/{instructor.id}/pin", json={"pin": NEW_PIN})
 
     assert answer.status_code == 200
     assert answer.json()["locked_until"] is None
@@ -162,18 +162,18 @@ def test_a_pin_reset_lifts_the_lockout_and_logs_them_out(
 
 
 def test_resetting_your_own_pin_keeps_you_logged_in(
-    as_manager: TestClient, manager: StaffUser
+    as_owner: TestClient, owner: StaffUser
 ) -> None:
-    answer = as_manager.put(f"/api/staff/{manager.id}/pin", json={"pin": NEW_PIN})
+    answer = as_owner.put(f"/api/staff/{owner.id}/pin", json={"pin": NEW_PIN})
 
     assert answer.status_code == 200
-    assert as_manager.get("/api/session").status_code == 200
+    assert as_owner.get("/api/session").status_code == 200
 
 
 def test_a_bad_new_pin_is_refused(
-    as_manager: TestClient, db: Session, instructor: StaffUser
+    as_owner: TestClient, db: Session, instructor: StaffUser
 ) -> None:
-    answer = as_manager.put(f"/api/staff/{instructor.id}/pin", json={"pin": "000000"})
+    answer = as_owner.put(f"/api/staff/{instructor.id}/pin", json={"pin": "000000"})
 
     assert answer.status_code == 400
     assert answer.json() == {"errors": {"pin": "invalid"}}
@@ -183,77 +183,167 @@ def test_a_bad_new_pin_is_refused(
 # ── Roles ───────────────────────────────────────────────────────────────
 
 
-def test_promoting_an_instructor(as_manager: TestClient, instructor: StaffUser) -> None:
-    answer = as_manager.put(
-        f"/api/staff/{instructor.id}/role", json={"role": "manager"}
-    )
+def test_promoting_an_instructor(as_owner: TestClient, instructor: StaffUser) -> None:
+    answer = as_owner.put(f"/api/staff/{instructor.id}/role", json={"role": "manager"})
 
     assert answer.status_code == 200
     assert answer.json()["role"] == "manager"
 
 
-def test_the_only_manager_cannot_demote_themselves(
-    as_manager: TestClient, manager: StaffUser
-) -> None:
-    answer = as_manager.put(
-        f"/api/staff/{manager.id}/role", json={"role": "instructor"}
-    )
-
-    assert answer.status_code == 409
-    assert answer.json() == {"error": "last_manager"}
+@pytest.fixture
+def manager(db: Session, owner: StaffUser) -> StaffUser:
+    member = create_staff_user(db, "יעל", Role.MANAGER, PIN, by=owner)
+    db.commit()
+    return member
 
 
 @pytest.mark.parametrize(
     ("method", "action", "body"),
-    [("PUT", "role", {"role": "instructor"}), ("POST", "deactivate", None)],
+    [
+        ("PUT", "role", {"role": "manager"}),
+        ("POST", "deactivate", None),
+    ],
 )
-def test_a_manager_cannot_demote_or_deactivate_themselves(
-    as_manager: TestClient,
+@pytest.mark.parametrize("by_owner", [True, False], ids=["by_owner", "by_manager"])
+def test_nobody_demotes_or_deactivates_the_owner(
     db: Session,
+    owner: StaffUser,
+    manager: StaffUser,
+    by_owner: bool,
+    method: str,
+    action: str,
+    body: dict[str, str] | None,
+) -> None:
+    browser = log_in(owner if by_owner else manager)
+
+    answer = browser.request(method, f"/api/staff/{owner.id}/{action}", json=body)
+
+    assert answer.status_code == 409
+    assert answer.json() == {"error": "owner"}
+    member = reloaded(db, owner)
+    assert (member.role, member.active) == (Role.OWNER, True)
+
+
+def test_only_the_owner_resets_the_owners_pin(
+    as_owner: TestClient, owner: StaffUser, manager: StaffUser
+) -> None:
+    answer = log_in(manager).put(f"/api/staff/{owner.id}/pin", json={"pin": NEW_PIN})
+
+    assert answer.status_code == 409
+    assert answer.json() == {"error": "owner"}
+    assert as_owner.put(f"/api/staff/{owner.id}/pin", json={"pin": NEW_PIN}).is_success
+
+
+def test_nobody_is_made_the_owner(as_owner: TestClient, instructor: StaffUser) -> None:
+    role = as_owner.put(f"/api/staff/{instructor.id}/role", json={"role": "owner"})
+    added = as_owner.post(
+        "/api/staff", json={"display_name": "גיל", "role": "owner", "pin": PIN}
+    )
+
+    assert (role.status_code, added.status_code) == (422, 422)
+
+
+@pytest.mark.parametrize(
+    ("method", "action", "body"),
+    [
+        ("PUT", "role", {"role": "instructor"}),
+        ("PUT", "pin", {"pin": NEW_PIN}),
+        ("POST", "deactivate", None),
+    ],
+)
+def test_a_manager_cannot_change_a_managers_account(
+    db: Session,
+    owner: StaffUser,
     manager: StaffUser,
     method: str,
     action: str,
     body: dict[str, str] | None,
 ) -> None:
-    create_staff_user(db, "יעל", Role.MANAGER, PIN, by=manager)
+    other = create_staff_user(db, "גיל", Role.MANAGER, PIN, by=owner)
     db.commit()
+    browser = log_in(manager)
 
-    answer = as_manager.request(method, f"/api/staff/{manager.id}/{action}", json=body)
+    answer = browser.request(method, f"/api/staff/{other.id}/{action}", json=body)
 
-    assert answer.status_code == 409
-    assert answer.json() == {"error": "own_account"}
-    member = reloaded(db, manager)
+    assert answer.status_code == 403
+    member = reloaded(db, other)
     assert (member.role, member.active) == (Role.MANAGER, True)
+    assert check_pin(db, member, PIN) is PinCheck.OK
+
+
+def test_a_manager_cannot_add_or_promote_managers(
+    db: Session, manager: StaffUser, instructor: StaffUser
+) -> None:
+    browser = log_in(manager)
+    before = staff_count(db)
+
+    added = browser.post(
+        "/api/staff", json={"display_name": "גיל", "role": "manager", "pin": NEW_PIN}
+    )
+    promoted = browser.put(f"/api/staff/{instructor.id}/role", json={"role": "manager"})
+
+    assert (added.status_code, promoted.status_code) == (403, 403)
+    assert staff_count(db) == before
+    assert reloaded(db, instructor).role is Role.INSTRUCTOR
+
+
+def test_a_manager_manages_instructors(
+    db: Session, manager: StaffUser, instructor: StaffUser
+) -> None:
+    browser = log_in(manager)
+
+    added = browser.post(
+        "/api/staff", json={"display_name": "גיל", "role": "instructor", "pin": PIN}
+    )
+    reset = browser.put(f"/api/staff/{instructor.id}/pin", json={"pin": NEW_PIN})
+    deactivated = browser.post(f"/api/staff/{instructor.id}/deactivate")
+
+    assert [added.status_code, reset.status_code, deactivated.status_code] == [
+        201,
+        200,
+        200,
+    ]
+
+
+def test_the_owner_deactivates_a_manager(
+    as_owner: TestClient, manager: StaffUser
+) -> None:
+    managers_browser = log_in(manager)
+
+    answer = as_owner.post(f"/api/staff/{manager.id}/deactivate")
+
+    assert answer.status_code == 200
+    assert managers_browser.get("/api/session").status_code == 401
 
 
 # ── Deactivating and reactivating ───────────────────────────────────────
 
 
 def test_deactivating_logs_them_out_and_reactivating_brings_them_back(
-    as_manager: TestClient, instructor: StaffUser
+    as_owner: TestClient, instructor: StaffUser
 ) -> None:
     instructors_browser = log_in(instructor)
 
-    answer = as_manager.post(f"/api/staff/{instructor.id}/deactivate")
+    answer = as_owner.post(f"/api/staff/{instructor.id}/deactivate")
 
     assert answer.status_code == 200
     assert answer.json()["active"] is False
     assert instructors_browser.get("/api/session").status_code == 401
 
-    answer = as_manager.post(f"/api/staff/{instructor.id}/reactivate")
+    answer = as_owner.post(f"/api/staff/{instructor.id}/reactivate")
 
     assert answer.status_code == 200
     assert answer.json()["active"] is True
 
 
 def test_reactivating_into_a_taken_name_is_a_conflict(
-    as_manager: TestClient, db: Session, manager: StaffUser, instructor: StaffUser
+    as_owner: TestClient, db: Session, owner: StaffUser, instructor: StaffUser
 ) -> None:
-    as_manager.post(f"/api/staff/{instructor.id}/deactivate")
-    create_staff_user(db, "מדריך", Role.INSTRUCTOR, NEW_PIN, by=manager)
+    as_owner.post(f"/api/staff/{instructor.id}/deactivate")
+    create_staff_user(db, "מדריך", Role.INSTRUCTOR, NEW_PIN, by=owner)
     db.commit()
 
-    answer = as_manager.post(f"/api/staff/{instructor.id}/reactivate")
+    answer = as_owner.post(f"/api/staff/{instructor.id}/reactivate")
 
     assert answer.status_code == 409
     assert answer.json() == {"error": "name_taken"}
@@ -269,17 +359,17 @@ def test_reactivating_into_a_taken_name_is_a_conflict(
     ],
 )
 def test_an_unknown_member_is_not_found(
-    as_manager: TestClient, method: str, path: str, body: dict[str, str] | None
+    as_owner: TestClient, method: str, path: str, body: dict[str, str] | None
 ) -> None:
-    assert as_manager.request(method, path, json=body).status_code == 404
+    assert as_owner.request(method, path, json=body).status_code == 404
 
 
-def test_every_change_is_logged_as_the_manager(
-    as_manager: TestClient, db: Session, manager: StaffUser, instructor: StaffUser
+def test_every_change_is_logged_as_the_owner(
+    as_owner: TestClient, db: Session, owner: StaffUser, instructor: StaffUser
 ) -> None:
-    as_manager.put(f"/api/staff/{instructor.id}/pin", json={"pin": NEW_PIN})
-    as_manager.put(f"/api/staff/{instructor.id}/role", json={"role": "manager"})
-    as_manager.post(f"/api/staff/{instructor.id}/deactivate")
+    as_owner.put(f"/api/staff/{instructor.id}/pin", json={"pin": NEW_PIN})
+    as_owner.put(f"/api/staff/{instructor.id}/role", json={"role": "manager"})
+    as_owner.post(f"/api/staff/{instructor.id}/deactivate")
 
     entries = db.scalars(
         select(ActivityLogEntry)
@@ -287,7 +377,7 @@ def test_every_change_is_logged_as_the_manager(
         .order_by(ActivityLogEntry.id)
     ).all()
     assert [(e.staff_user_id, e.action) for e in entries][-3:] == [
-        (manager.id, "staff.reset_pin"),
-        (manager.id, "staff.change_role"),
-        (manager.id, "staff.deactivate"),
+        (owner.id, "staff.reset_pin"),
+        (owner.id, "staff.change_role"),
+        (owner.id, "staff.deactivate"),
     ]
