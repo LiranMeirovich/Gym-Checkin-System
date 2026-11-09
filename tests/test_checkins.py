@@ -22,6 +22,7 @@ from app.core.checkins import (
     PlanRequiredError,
     check_in_by_phone,
     check_in_manually,
+    recent_checkins,
 )
 from app.core.customers import CustomerInactiveError
 from app.core.db import get_engine
@@ -855,3 +856,64 @@ def test_the_single_entry_fallback_is_for_the_check_ins_own_month(
 
     assert result.plan is not None
     assert result.plan.start_month == THIS_MONTH
+
+
+# --- The customer page's history ------------------------------------------
+
+
+def add_checkin(
+    db: Session, customer: Customer, at: datetime, **source: object
+) -> CheckIn:
+    checkin = CheckIn(customer_id=customer.id, checked_in_at=at, **source)
+    db.add(checkin)
+    db.flush()
+    return checkin
+
+
+def test_recent_check_ins_are_newest_first_by_any_method(
+    db: Session, customer: Customer, phone: DeviceSession, instructor: StaffUser
+) -> None:
+    at_desk = add_checkin(
+        db,
+        customer,
+        START - timedelta(days=2),
+        method=CheckInMethod.MANUAL,
+        staff_user_id=instructor.id,
+    )
+    by_phone = add_checkin(
+        db,
+        customer,
+        START - timedelta(days=1),
+        method=CheckInMethod.PHONE,
+        device_session_id=phone.id,
+    )
+    other = add_customer(db, "+972521234567", date(1990, 5, 1))
+    add_checkin(
+        db, other, START, method=CheckInMethod.MANUAL, staff_user_id=instructor.id
+    )
+
+    assert recent_checkins(db, customer) == [by_phone, at_desk]
+
+
+def test_recent_check_ins_stop_at_the_limit(
+    db: Session, customer: Customer, instructor: StaffUser
+) -> None:
+    made = [
+        add_checkin(
+            db,
+            customer,
+            START - timedelta(days=days),
+            method=CheckInMethod.MANUAL,
+            staff_user_id=instructor.id,
+        )
+        for days in range(12)
+    ]
+
+    assert recent_checkins(db, customer) == made[:10]
+    assert recent_checkins(db, customer, limit=3) == made[:3]
+    with pytest.raises(ValueError):
+        recent_checkins(db, customer, limit=0)
+
+
+def test_no_check_ins_is_an_empty_history(db: Session, customer: Customer) -> None:
+    assert recent_checkins(db, customer) == []

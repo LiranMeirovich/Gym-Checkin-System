@@ -401,6 +401,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/{customer_id}/checkins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History */
+        get: operations["history_api_customers__customer_id__checkins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/customers/{customer_id}/check-in": {
         parameters: {
             query?: never;
@@ -611,6 +628,12 @@ export interface components {
             has_logo: boolean;
         };
         /**
+         * CameIn
+         * @description Which customers, by their latest check-in. The values are the API's.
+         * @enum {string}
+         */
+        CameIn: "any" | "7d" | "30d" | "not_30d";
+        /**
          * CheckInForbidden
          * @description 403: a plan was sent by staff who may not choose plans.
          */
@@ -635,6 +658,35 @@ export interface components {
             error: "health_form_required";
             health_form: components["schemas"]["HealthFormStatus"];
         };
+        /**
+         * CheckInHistory
+         * @description The customer's latest check-ins, newest first.
+         */
+        CheckInHistory: {
+            /** Checkins */
+            checkins: components["schemas"]["CheckInHistoryEntry"][];
+        };
+        /**
+         * CheckInHistoryEntry
+         * @description ``checked_in_at`` is the gym's local time; ``method`` is ``phone``
+         *     or ``manual`` (at the desk).
+         */
+        CheckInHistoryEntry: {
+            /** Id */
+            id: number;
+            /**
+             * Checked In At
+             * Format: date-time
+             */
+            checked_in_at: string;
+            method: components["schemas"]["CheckInMethod"];
+        };
+        /**
+         * CheckInMethod
+         * @description How a check-in was made. The values are what the database stores.
+         * @enum {string}
+         */
+        CheckInMethod: "phone" | "manual";
         /**
          * CheckInPlanRequired
          * @description 409: no plan covers ``month`` and the manager didn't pick one;
@@ -798,10 +850,42 @@ export interface components {
             /** Notes */
             notes?: string | null;
         };
-        /** CustomerList */
+        /**
+         * CustomerList
+         * @description One page of the list. ``total`` counts every match on all pages;
+         *     ``page`` is the page answered (the last one, for a page past the end)
+         *     and ``page_count`` is at least 1.
+         */
         CustomerList: {
             /** Customers */
-            customers: components["schemas"]["CustomerSummary"][];
+            customers: components["schemas"]["CustomerListRow"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Page Count */
+            page_count: number;
+        };
+        /**
+         * CustomerListRow
+         * @description A row of the customer list. ``last_check_in_at`` is the gym's local
+         *     time, or null if they never checked in.
+         */
+        CustomerListRow: {
+            /** Id */
+            id: number;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Phone */
+            phone: string;
+            /** Active */
+            active: boolean;
+            /** Last Check In At */
+            last_check_in_at: string | null;
         };
         /**
          * CustomerRefused
@@ -813,23 +897,6 @@ export interface components {
             errors: {
                 [key: string]: "invalid";
             };
-        };
-        /**
-         * CustomerSummary
-         * @description A row of the customer list. ``phone`` is the stored E.164 form
-         *     (``+972501234567``); React formats it for display.
-         */
-        CustomerSummary: {
-            /** Id */
-            id: number;
-            /** First Name */
-            first_name: string;
-            /** Last Name */
-            last_name: string;
-            /** Phone */
-            phone: string;
-            /** Active */
-            active: boolean;
         };
         /** DateOfBirthChange */
         DateOfBirthChange: {
@@ -1493,6 +1560,12 @@ export interface components {
             needed: true;
         };
         /**
+         * SortBy
+         * @description The list's order. The values are the API's.
+         * @enum {string}
+         */
+        SortBy: "name" | "last_check_in";
+        /**
          * StaffConflict
          * @description 409. ``name_taken``: another active staff member has the name.
          *     ``owner``: the owner's account can't be demoted or deactivated, and
@@ -1803,6 +1876,10 @@ export interface operations {
         parameters: {
             query?: {
                 active?: boolean;
+                q?: string;
+                came_in?: components["schemas"]["CameIn"];
+                sort?: components["schemas"]["SortBy"];
+                page?: number;
             };
             header?: never;
             path?: never;
@@ -3105,6 +3182,53 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_api_customers__customer_id__checkins_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckInHistory"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
             };
             /** @description Not Found */
             404: {

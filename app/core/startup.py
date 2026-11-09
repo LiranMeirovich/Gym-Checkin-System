@@ -16,6 +16,7 @@ from fastapi import FastAPI
 
 from app.core.config import get_settings
 from app.core.db import get_engine
+from app.core.http import drop_query_strings_from_access_log
 
 ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
 
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """The ``lifespan`` both apps pass to ``FastAPI``."""
     get_settings()
     check_database_is_current()
+    drop_query_strings_from_access_log()
     yield
     get_engine().dispose()
 

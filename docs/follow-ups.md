@@ -17,7 +17,6 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Health form renewal for customers without a phone (an expired form blocks their manual check-in): left for later by the developer. The PC form screen from feature 4 can serve it.
 
 ## Milestone 4: admin screens (from Customers)
-- Customer list: search, and sorting / filtering by recent check-ins (e.g. who came in the past month), as queries.
 - Dashboard: the latest sign-ups are the newest customers by `created_at` (no column, decision 0035). They include phone sign-ups, which no one at the desk has seen, so the manager can spot a fake one before the report.
 
 ## Milestone 4: admin screens
@@ -26,6 +25,8 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Customer page, Phones: the list doesn't refresh itself while a code is on screen, because every React request counts as activity for the auto-lock. Once background refreshes skip the idle timer (the server already allows a request that doesn't `touch`), poll the list and hide the code once a phone links. The device name is a rough guess from the user agent (iPhone / Android / iPad); iPadOS sends a Mac user agent, so iPads show as "other device".
 - Dashboard: show the instructor the customers whose form needs a doctor's note, and the forms expiring in the next 30 days (design doc "Validity and access").
 - Dashboard: today's check-ins live, from `checkins` (the instructor's answer to fake check-ins, design doc "Fake check-ins").
+- Customer list search: names in other alphabets (Cyrillic, accented Latin) match only in the case typed, since SQLite's `LIKE` folds English letters only. If staff need it, a lowercased search column (schema change) fixes it. Name search reads the whole `customers` table (`LIKE '%…%'`); fine at hundreds of customers, FTS5 if it ever gets slow.
+- Customer list: the search text sits in the desk PC's address bar and browser history (the server log drops it). Acceptable on a staff-only PC; revisit if the admin app is ever used elsewhere.
 - Styling pass leftovers (decision 0034): the phone's "needs a doctor's note" message was styled only by `base.css` and not checked in the browser; the health form's yes/no answers hide their radio buttons visually (the labels are the controls), so check them with a real screen reader (NVDA on the desk PC, VoiceOver on a phone).
 
 ## Milestone 5: report (from Plan corrections)

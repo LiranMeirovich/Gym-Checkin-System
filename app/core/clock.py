@@ -6,7 +6,7 @@ Code gets "now" from ``utc_now()``, never ``datetime.now()`` (which is
 naive local time) or ``datetime.utcnow()`` (naive, and deprecated).
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time
 
 from app.core.config import get_settings
 
@@ -25,3 +25,9 @@ def to_local(moment: datetime) -> datetime:
     if moment.tzinfo is None:
         raise ValueError("naive datetime: attach a timezone first")
     return moment.astimezone(get_settings().tz)
+
+
+def start_of_local_day(day: date) -> datetime:
+    """The UTC moment the local day ``day`` starts (midnight in the
+    configured timezone), for comparing stored times against local days."""
+    return datetime.combine(day, time(), tzinfo=get_settings().tz).astimezone(UTC)

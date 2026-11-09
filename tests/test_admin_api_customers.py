@@ -3,6 +3,7 @@ each role may do, the answers and error codes, and that refused requests
 save nothing. Names and phone numbers are made up."""
 
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,15 @@ from sqlalchemy.orm import Session
 
 from app.admin.main import app
 from app.core import pins
+from app.core.clock import to_local, utc_now
 from app.core.db import get_engine
-from app.core.models import ActivityLogEntry, Customer, StaffUser
+from app.core.models import (
+    ActivityLogEntry,
+    CheckIn,
+    CheckInMethod,
+    Customer,
+    StaffUser,
+)
 from app.core.permissions import Role
 from app.core.staff import create_owner, create_staff_user
 
@@ -122,6 +130,7 @@ def test_every_customer_route_needs_a_login(
     requests = [
         ("GET", "/api/customers"),
         ("GET", "/api/customers/1"),
+        ("GET", "/api/customers/1/checkins"),
         ("POST", "/api/customers"),
         ("PATCH", "/api/customers/1"),
         ("PUT", "/api/customers/1/date-of-birth"),
@@ -285,9 +294,134 @@ def test_the_list_shows_active_or_inactive_customers(
             "last_name": "לוי",
             "phone": "+972527654321",
             "active": True,
+            "last_check_in_at": None,
         }
     ]
     assert [c["id"] for c in inactive] == [noa_id]
+
+
+# ── Search, filters, paging and the check-in history ────────────────────
+
+
+def add_checkin(db: Session, customer_id: int, staff: StaffUser, at: datetime) -> None:
+    db.add(
+        CheckIn(
+            customer_id=customer_id,
+            checked_in_at=at,
+            method=CheckInMethod.MANUAL,
+            staff_user_id=staff.id,
+        )
+    )
+    db.commit()
+
+
+def add_many(as_manager: Staff, count: int) -> list[int]:
+    return [
+        as_manager.send(
+            "POST",
+            "/api/customers",
+            {**NOA, "first_name": f"לקוח{i:02}", "phone": f"05211111{i:02}"},
+        ).json()["customer"]["id"]
+        for i in range(count)
+    ]
+
+
+def test_the_list_answers_its_first_page_with_the_paging(
+    as_manager: Staff, noa_id: int
+) -> None:
+    answer = as_manager.get("/api/customers").json()
+
+    assert {k: v for k, v in answer.items() if k != "customers"} == {
+        "total": 1,
+        "page": 1,
+        "page_size": 25,
+        "page_count": 1,
+    }
+
+
+def test_the_list_pages_by_25(as_instructor: Staff, as_manager: Staff) -> None:
+    ids = add_many(as_manager, 27)
+
+    second = as_instructor.get("/api/customers", params={"page": 2}).json()
+    past_the_end = as_instructor.get("/api/customers", params={"page": 99}).json()
+
+    assert [c["id"] for c in second["customers"]] == ids[25:]
+    assert (second["total"], second["page"], second["page_count"]) == (27, 2, 2)
+    assert past_the_end["page"] == 2
+
+
+def test_the_list_searches_by_name_or_phone(as_manager: Staff, noa_id: int) -> None:
+    dana = as_manager.send(
+        "POST", "/api/customers", {**NOA, "first_name": "דנה", "phone": "0527654321"}
+    ).json()["customer"]["id"]
+
+    def search(text: str) -> list[int]:
+        answer = as_manager.get("/api/customers", params={"q": text}).json()
+        return [c["id"] for c in answer["customers"]]
+
+    assert search("נועה לו") == [noa_id]
+    assert search("765") == [dana]
+    assert search("לוי") == [dana, noa_id]
+    assert search("מזרחי") == []
+
+
+def test_the_list_filters_and_sorts_by_check_ins(
+    as_manager: Staff, db: Session, manager: StaffUser, noa_id: int
+) -> None:
+    dana = as_manager.send(
+        "POST", "/api/customers", {**NOA, "first_name": "דנה", "phone": "0527654321"}
+    ).json()["customer"]["id"]
+    at = utc_now() - timedelta(hours=1)
+    add_checkin(db, noa_id, manager, at)
+
+    def listed(**params: str) -> list:
+        answer = as_manager.get("/api/customers", params=params).json()
+        return [(c["id"], c["last_check_in_at"]) for c in answer["customers"]]
+
+    noa = (noa_id, to_local(at).isoformat())
+    assert listed(came_in="7d") == [noa]
+    assert listed(came_in="not_30d") == [(dana, None)]
+    assert listed(sort="last_check_in") == [noa, (dana, None)]
+    assert listed(sort="name") == [(dana, None), noa]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"came_in": "yesterday"},
+        {"sort": "phone"},
+        {"page": "0"},
+        {"page": str(2**63)},
+        {"q": "x" * 101},
+    ],
+)
+def test_bad_list_parameters_are_a_422(as_manager: Staff, params: dict) -> None:
+    assert as_manager.get("/api/customers", params=params).status_code == 422
+
+
+def test_the_check_in_history_is_newest_first(
+    as_instructor: Staff, db: Session, manager: StaffUser, noa_id: int
+) -> None:
+    older = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
+    newer = datetime(2026, 11, 3, 10, 0, tzinfo=UTC)
+    add_checkin(db, noa_id, manager, older)
+    add_checkin(db, noa_id, manager, newer)
+
+    answer = as_instructor.get(f"/api/customers/{noa_id}/checkins")
+
+    assert answer.status_code == 200
+    assert [(c["checked_in_at"], c["method"]) for c in answer.json()["checkins"]] == [
+        ("2026-11-03T12:00:00+02:00", "manual"),
+        ("2026-11-02T12:00:00+02:00", "manual"),
+    ]
+    ids = [c["id"] for c in answer.json()["checkins"]]
+    assert ids[0] > ids[1]
+
+
+def test_the_check_in_history_of_an_unknown_customer_is_a_404(
+    as_manager: Staff,
+) -> None:
+    assert as_manager.get("/api/customers/999/checkins").status_code == 404
 
 
 @pytest.mark.parametrize(

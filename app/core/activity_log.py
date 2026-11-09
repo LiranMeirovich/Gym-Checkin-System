@@ -17,14 +17,14 @@ or passwords. A change to one is recorded without its values.
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.clock import start_of_local_day
 from app.core.models import ActivityLogEntry, Customer, StaffUser
 
 
@@ -204,10 +204,10 @@ def list_entries(
     if staff_user_id is not None:
         query = query.where(ActivityLogEntry.staff_user_id == staff_user_id)
     if from_date is not None:
-        query = query.where(ActivityLogEntry.at >= _start_of(from_date))
+        query = query.where(ActivityLogEntry.at >= start_of_local_day(from_date))
     if to_date is not None:
         query = query.where(
-            ActivityLogEntry.at < _start_of(to_date + timedelta(days=1))
+            ActivityLogEntry.at < start_of_local_day(to_date + timedelta(days=1))
         )
     if target_type is not None:
         query = query.where(ActivityLogEntry.target_type == target_type)
@@ -236,11 +236,6 @@ def list_entries(
         for entry, staff_name in rows
     ]
     return LogPage(entries, entries[-1].id if more else None)
-
-
-def _start_of(day: date) -> datetime:
-    """The UTC moment a local day starts."""
-    return datetime.combine(day, time(), tzinfo=get_settings().tz).astimezone(UTC)
 
 
 def _target_names(
