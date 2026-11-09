@@ -20,6 +20,7 @@ const SCREENS: Screen[] = [
   { to: "/", label: "ראשי", end: true },
   { to: "/customers", label: "לקוחות", end: false },
   { to: "/prices", label: "מחירון", end: true },
+  { to: "/staff", label: "צוות", end: true, permission: "staff.manage" },
   {
     to: "/activity-log",
     label: "יומן פעולות",
