@@ -11,7 +11,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, type Schemas } from "../backend/client";
-import { formatTime, healthFormKey, planKey } from "../customers";
+import {
+  CUSTOMER_LIST_KEY,
+  checkinsKey,
+  formatTime,
+  healthFormKey,
+  planKey,
+} from "../customers";
 import { can } from "../roles";
 import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
 import { useSession } from "../session";
@@ -138,8 +144,12 @@ function CheckInBody({
       if (data) {
         setResult(data);
         // A check-in can choose this month's plan (single entry, or the
-        // manager's pick).
+        // manager's pick), and changes the customer's last visit.
         void queryClient.invalidateQueries({ queryKey: planKey(customerId) });
+        void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
+        void queryClient.invalidateQueries({
+          queryKey: checkinsKey(customerId),
+        });
         return;
       }
       if (response.status === 409 && error && "error" in error) {

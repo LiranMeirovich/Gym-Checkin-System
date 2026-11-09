@@ -1,0 +1,50 @@
+/* The search and filters: a row of fields that wraps on a narrow screen. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0 var(--space-4);
+  padding-block-end: 0;
+}
+
+.filters select {
+  min-width: 10rem;
+}
+
+.search {
+  flex: 1 1 16rem;
+}
+
+.search input {
+  width: 100%;
+}
+
+.inactive {
+  margin-block-end: var(--space-4);
+  white-space: nowrap;
+}
+
+/* The previous page while the next one loads. */
+.loading {
+  opacity: 0.6;
+}
+
+.when {
+  white-space: nowrap;
+}
+
+/* The count at the start, the page buttons at the end. */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-block-start: var(--space-4);
+}
+
+.pages {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}

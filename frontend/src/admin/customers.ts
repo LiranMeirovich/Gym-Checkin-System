@@ -34,6 +34,27 @@ export function healthFormsKey(id: number) {
   return ["customers", id, "health-forms"] as const;
 }
 
+// The customer's latest check-ins. A check-in at the desk refreshes it.
+export function checkinsKey(id: number) {
+  return ["customers", id, "checkins"] as const;
+}
+
+export type CameIn = Schemas["CameIn"];
+export type SortBy = Schemas["SortBy"];
+
+// The list's "came in" filter, in the order the select shows them.
+export const CAME_IN_LABELS: Record<CameIn, string> = {
+  any: "בכל זמן",
+  "7d": "ב-7 הימים האחרונים",
+  "30d": "ב-30 הימים האחרונים",
+  not_30d: "לא הגיעו 30 יום",
+};
+
+export const SORT_LABELS: Record<SortBy, string> = {
+  name: "לפי שם",
+  last_check_in: "לפי כניסה אחרונה",
+};
+
 // The customer's linked phones. An unlink answers with the new list, which
 // goes straight into the cache.
 export function phonesKey(id: number) {
