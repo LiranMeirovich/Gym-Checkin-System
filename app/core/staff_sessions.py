@@ -19,7 +19,7 @@ import hashlib
 import secrets
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, contains_eager
 
 from app.core.clock import utc_now
@@ -108,7 +108,7 @@ def idle_timeout(settings: GymSettings, role: Role) -> timedelta:
     while instructors mostly watch the desk screen."""
     minutes = (
         settings.lock_screen_minutes
-        if Role(role) is Role.MANAGER
+        if Role(role) in (Role.OWNER, Role.MANAGER)
         else settings.instructor_lock_screen_minutes
     )
     return timedelta(minutes=minutes)
@@ -126,6 +126,20 @@ def end_session(db: Session, session: StaffSession) -> None:
     if session.ended_at is None:
         session.ended_at = utc_now()
         db.flush()
+
+
+def end_sessions_of(
+    db: Session, staff: StaffUser, *, keep: StaffSession | None = None
+) -> None:
+    """End every open session of ``staff`` except ``keep`` (a PIN reset:
+    whoever knew the old PIN is logged out)."""
+    query = update(StaffSession).where(
+        StaffSession.staff_user_id == staff.id, StaffSession.ended_at.is_(None)
+    )
+    if keep is not None:
+        query = query.where(StaffSession.id != keep.id)
+    db.execute(query.values(ended_at=utc_now()))
+    db.flush()
 
 
 def hash_token(token: str) -> str:

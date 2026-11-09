@@ -2,21 +2,33 @@
 deactivating, and checking a PIN with the lockout (design doc: "Staff login
 and lock screen"; decision 0018).
 
-These are the rules the database can't check on its own: there's always at
-least one active manager, PINs follow the format rules, and 5 wrong PINs in
-a row, each within 15 minutes of the last, lock the account for 5 minutes.
-Every function works inside the
-caller's transaction and never commits.
+These are the rules the database can't check on its own: PINs follow the
+format rules, 5 wrong PINs in a row, each within 15 minutes of the last,
+lock the account for 5 minutes, and who may change whose account (decision
+0039):
+
+- The owner, the gym's main manager, is made only at first-run setup. Their
+  account can't be demoted or deactivated, and nobody else can reset their
+  PIN (``OwnerAccountError``). So there is always an active owner, who can
+  do everything.
+- Managers' accounts (adding one, making someone a manager or not, their
+  PINs, deactivating) are only for someone with
+  ``Permission.STAFF_MANAGE_MANAGERS``, the owner (``NeedsOwnerError``).
+  Anyone may reset their own PIN.
+
+Every function works inside the caller's transaction and never commits.
 
 Every change is written to the activity log in the same transaction, with
 ``by``, the staff member making it, as the actor. A change that changes
-nothing (the same role again) writes no entry. Whether ``by`` may make the
-change is the route's check (``require_permission``), not this module's.
-Logins aren't changes: ``check_pin`` records nothing.
+nothing (the same role again) writes no entry. Whether ``by`` may manage
+staff at all is the route's check (``require_permission``); which accounts
+they may change depends on the account, so it's checked here. Logins aren't
+changes: ``check_pin`` records nothing.
 """
 
 import unicodedata
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from sqlalchemy import func, select
@@ -24,9 +36,10 @@ from sqlalchemy.orm import Session
 
 from app.core.activity_log import Action, Target, record
 from app.core.clock import utc_now
-from app.core.models import StaffUser
-from app.core.permissions import Role
+from app.core.models import StaffSession, StaffUser
+from app.core.permissions import Permission, Role, has_permission
 from app.core.pins import hash_pin, needs_rehash, pin_matches, rehash_pin
+from app.core.staff_sessions import end_sessions_of
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT = timedelta(minutes=5)
@@ -44,13 +57,20 @@ class DuplicateDisplayNameError(ValueError):
 
 
 class SetupAlreadyDoneError(RuntimeError):
-    """``create_first_manager`` was called when staff accounts already
-    exist. First-run setup must never become a way to add a manager."""
+    """``create_owner`` was called when staff accounts already
+    exist. First-run setup must never become a way to add an owner."""
 
 
-class LastManagerError(ValueError):
-    """The change would leave no active manager, and with it nobody who
-    could manage staff, prices or settings."""
+class OwnerAccountError(ValueError):
+    """The change touches the owner's account (demoting, deactivating,
+    someone else resetting their PIN) or would make someone the owner.
+    There is one owner, made at first-run setup, and only they change
+    their own PIN."""
+
+
+class NeedsOwnerError(PermissionError):
+    """The change concerns a manager's account, and ``by`` may not manage
+    managers (``Permission.STAFF_MANAGE_MANAGERS``): only the owner can."""
 
 
 class PinCheck(StrEnum):
@@ -64,9 +84,38 @@ class PinCheck(StrEnum):
     INACTIVE = "inactive"
 
 
+@dataclass(frozen=True)
+class StaffActions:
+    """What a staff member may do to one account, by the rules below, so
+    the Staff screen offers only what these functions would allow."""
+
+    reset_pin: bool
+    change_role: bool
+    # Deactivate, or reactivate an inactive account.
+    toggle_active: bool
+
+
+def actions_for(by: StaffUser, staff: StaffUser) -> StaffActions:
+    """What ``by`` may do to ``staff``'s account: the same rules
+    ``reset_pin``, ``change_role``, ``deactivate`` and ``reactivate``
+    enforce (whether ``by`` may manage staff at all is the route's check)."""
+    if staff.role == Role.OWNER:
+        return StaffActions(
+            reset_pin=staff.id == by.id, change_role=False, toggle_active=False
+        )
+    may_change = _may_change(by, staff.role)
+    # manager <-> instructor: either way the manager role is involved.
+    other_role = Role.INSTRUCTOR if staff.role == Role.MANAGER else Role.MANAGER
+    return StaffActions(
+        reset_pin=may_change or staff.id == by.id,
+        change_role=may_change and _may_change(by, other_role),
+        toggle_active=may_change,
+    )
+
+
 def any_staff_exists(db: Session) -> bool:
     """Whether any staff account exists, active or not. Until one does, the
-    admin app is waiting for first-run setup to create the first manager."""
+    admin app is waiting for first-run setup to create the owner."""
     return db.scalar(select(StaffUser.id).limit(1)) is not None
 
 
@@ -83,52 +132,93 @@ def list_staff(db: Session) -> list[StaffUser]:
     )
 
 
-def create_first_manager(db: Session, display_name: str, pin: str) -> StaffUser:
-    """Add the first manager at first-run setup. Nobody is logged in yet,
-    so the activity log records the new manager as creating themselves.
+def locked_until(staff: StaffUser) -> datetime | None:
+    """Until when ``staff`` is locked out after too many wrong PINs, or
+    ``None`` if they aren't locked now. A past ``locked_until`` on the row
+    is an old lockout that has already ended."""
+    if staff.locked_until is not None and staff.locked_until > utc_now():
+        return staff.locked_until
+    return None
+
+
+def create_owner(db: Session, display_name: str, pin: str) -> StaffUser:
+    """Add the owner, the gym's main manager, at first-run setup: the only
+    way an owner is made. Nobody is logged in yet, so the activity log
+    records the owner as creating themselves.
 
     Raises ``SetupAlreadyDoneError`` if any staff account exists, and the
     same errors as ``create_staff_user``.
     """
     if any_staff_exists(db):
         raise SetupAlreadyDoneError("first-run setup has already been done")
-    manager = _add_staff(db, display_name, Role.MANAGER, pin)
-    _record_creation(db, manager, by=manager)
-    return manager
+    owner = _add_staff(db, display_name, Role.OWNER, pin)
+    _record_creation(db, owner, by=owner)
+    return owner
 
 
 def create_staff_user(
     db: Session, display_name: str, role: Role, pin: str, *, by: StaffUser
 ) -> StaffUser:
     """Add an active staff member. Raises ``InvalidDisplayNameError``,
-    ``DuplicateDisplayNameError`` or ``pins.InvalidPinError``."""
+    ``DuplicateDisplayNameError`` or ``pins.InvalidPinError``;
+    ``OwnerAccountError`` for a second owner, and ``NeedsOwnerError`` if
+    ``by`` adds a manager without being allowed to."""
+    role = Role(role)
+    if role is Role.OWNER:
+        raise OwnerAccountError("the owner is made only at first-run setup")
+    _ensure_may_change(by, role)
     staff = _add_staff(db, display_name, role, pin)
     _record_creation(db, staff, by=by)
     return staff
 
 
-def reset_pin(db: Session, staff: StaffUser, pin: str, *, by: StaffUser) -> None:
+def reset_pin(
+    db: Session,
+    staff: StaffUser,
+    pin: str,
+    *,
+    by: StaffUser,
+    keep_session: StaffSession | None = None,
+) -> None:
     """Give ``staff`` a new PIN. It also lifts a lockout, so a manager can
     let a locked-out instructor straight back in. Raises
-    ``pins.InvalidPinError``.
+    ``pins.InvalidPinError``; ``OwnerAccountError`` if someone else resets
+    the owner's PIN, and ``NeedsOwnerError`` for another manager's PIN
+    without being allowed to manage managers. Your own PIN is always
+    yours to reset.
+
+    A reset usually means the old PIN got out, so it ends every open
+    session of ``staff``: whoever is logged in as them must log in again
+    with the new PIN. ``keep_session`` is spared, so a manager resetting
+    their own PIN stays logged in on this browser.
 
     The log records that the PIN was reset, never the PIN or its hash.
     """
+    if staff.id != by.id:
+        _ensure_not_owner(staff)
+        _ensure_may_change(by, staff.role)
     staff.pin_hash = hash_pin(pin)
     _clear_failures(staff)
     db.flush()
+    end_sessions_of(db, staff, keep=keep_session)
     record(db, by, Action.STAFF_RESET_PIN, Target.STAFF_USER, staff.id)
 
 
 def change_role(db: Session, staff: StaffUser, role: Role, *, by: StaffUser) -> None:
     """Make ``staff`` a manager or an instructor. Raises
-    ``LastManagerError`` if this demotes the last active manager."""
+    ``OwnerAccountError`` for the owner or for making someone the owner,
+    and ``NeedsOwnerError`` if a manager is involved (either role) and
+    ``by`` may not manage managers."""
     role = Role(role)
-    # ==, not "is": see _ensure_not_last_manager.
+    # ==, not "is": a row built with role="manager" holds the plain string
+    # until it's reloaded.
     if staff.role == role:
         return
-    if role is not Role.MANAGER:
-        _ensure_not_last_manager(db, staff)
+    _ensure_not_owner(staff)
+    if role is Role.OWNER:
+        raise OwnerAccountError("the owner is made only at first-run setup")
+    _ensure_may_change(by, staff.role)
+    _ensure_may_change(by, role)
     before = Role(staff.role)
     staff.role = role
     db.flush()
@@ -145,10 +235,14 @@ def change_role(db: Session, staff: StaffUser, role: Role, *, by: StaffUser) -> 
 
 def deactivate(db: Session, staff: StaffUser, *, by: StaffUser) -> None:
     """Stop ``staff`` from logging in. The row stays, since other records
-    point at it. Raises ``LastManagerError`` for the last active manager."""
+    point at it. Its sessions stop counting from the next request
+    (``find_session`` checks ``active``). Raises ``OwnerAccountError`` for
+    the owner, and ``NeedsOwnerError`` for a manager if ``by`` may not
+    manage managers."""
     if not staff.active:
         return
-    _ensure_not_last_manager(db, staff)
+    _ensure_not_owner(staff)
+    _ensure_may_change(by, staff.role)
     staff.active = False
     db.flush()
     _record_active_change(db, staff, by=by)
@@ -157,9 +251,11 @@ def deactivate(db: Session, staff: StaffUser, *, by: StaffUser) -> None:
 def reactivate(db: Session, staff: StaffUser, *, by: StaffUser) -> None:
     """Let a deactivated staff member log in again. Raises
     ``DuplicateDisplayNameError`` if an active member took the name
-    meanwhile."""
+    meanwhile, and ``NeedsOwnerError`` for a manager if ``by`` may not
+    manage managers."""
     if staff.active:
         return
+    _ensure_may_change(by, staff.role)
     _ensure_name_is_free(db, staff.display_name)
     staff.active = True
     db.flush()
@@ -284,17 +380,20 @@ def _ensure_name_is_free(db: Session, name: str) -> None:
         raise DuplicateDisplayNameError("another active staff member has this name")
 
 
-def _ensure_not_last_manager(db: Session, staff: StaffUser) -> None:
-    # ==, not "is": a row built with role="manager" holds the plain string
-    # until it's reloaded, and "is" would skip this guard for it.
-    if not (staff.active and staff.role == Role.MANAGER):
-        return
-    other_managers = db.scalar(
-        select(func.count()).where(
-            StaffUser.active,
-            StaffUser.role == Role.MANAGER,
-            StaffUser.id != staff.id,
-        )
+def _ensure_not_owner(staff: StaffUser) -> None:
+    # ==, not "is": see change_role.
+    if staff.role == Role.OWNER:
+        raise OwnerAccountError("the owner's account can't be changed this way")
+
+
+def _may_change(by: StaffUser, role: Role | str) -> bool:
+    """Whether ``by`` may change an account with ``role`` (or give it
+    that role): a manager's needs ``STAFF_MANAGE_MANAGERS``."""
+    return Role(role) is not Role.MANAGER or has_permission(
+        by.role, Permission.STAFF_MANAGE_MANAGERS
     )
-    if not other_managers:
-        raise LastManagerError("there must be at least one active manager")
+
+
+def _ensure_may_change(by: StaffUser, role: Role | str) -> None:
+    if not _may_change(by, role):
+        raise NeedsOwnerError("only the owner manages managers")

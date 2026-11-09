@@ -599,16 +599,68 @@ class CheckInForbidden(Answer):
 
 
 class StaffMember(Answer):
+    """``locked_until`` (the gym's local time, with its offset): locked out
+    after too many wrong PINs until then; ``None`` if not locked now. A
+    PIN reset lifts it. The ``can_*`` fields say what the logged-in staff
+    member may do to this account (decision 0039), so the screen offers
+    only that; the routes check the same rules."""
+
     id: int
     display_name: str
     role: Role
     active: bool
+    locked_until: datetime | None
+    can_reset_pin: bool
+    can_change_role: bool
+    # Deactivate, or reactivate an inactive account.
+    can_toggle_active: bool
 
 
 class StaffList(Answer):
     """Every staff account, active ones first."""
 
     staff: list[StaffMember]
+
+
+# The roles a staff account can be given; the owner is made only at
+# first-run setup (decision 0039).
+AssignableRole = Literal["manager", "instructor"]
+
+
+class NewStaffMember(BaseModel):
+    # Generous limits so a long value reaches app.core.staff's own rules
+    # (a field code), not a 422.
+    display_name: str = Field(max_length=200)
+    role: AssignableRole
+    pin: str = Field(max_length=100)
+
+
+class PinReset(BaseModel):
+    pin: str = Field(max_length=100)
+
+
+class RoleChange(BaseModel):
+    role: AssignableRole
+
+
+StaffField = Literal["display_name", "pin"]
+
+
+class StaffRefused(Answer):
+    """400: the field that breaks its rule. Nothing was saved."""
+
+    errors: dict[StaffField, Literal["invalid"]]
+
+
+StaffConflictReason = Literal["name_taken", "owner"]
+
+
+class StaffConflict(Answer):
+    """409. ``name_taken``: another active staff member has the name.
+    ``owner``: the owner's account can't be demoted or deactivated, and
+    only the owner resets their own PIN. Nothing was saved."""
+
+    error: StaffConflictReason
 
 
 # ── Activity log ────────────────────────────────────────────────────────

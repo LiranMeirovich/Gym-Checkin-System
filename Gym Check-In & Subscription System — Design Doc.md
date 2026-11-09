@@ -40,7 +40,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 
 | Role | How they use it | Can do |
 | --- | --- | --- |
-| Manager | Admin app on the gym PC, own login | Everything, including prices, reports, settings and staff accounts |
+| Manager | Admin app on the gym PC, own login | Everything, including prices, reports, settings and staff accounts. One manager is the **owner** (the gym's main manager): only the owner manages other managers' accounts (decision 0039) |
 | Instructor | Admin app on the gym PC, own login | Day-to-day desk work: check-ins, new customers, linking phones (see table below) |
 | Customer | Own phone browser, via the wall QR | Sign themselves up; see their own status; choose their own plan once a month |
 
@@ -63,7 +63,7 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | Edit prices | No | Yes |
 | View, regenerate, approve and send reports | No | Yes |
 | Settings, backups and restore | No | Yes |
-| Manage staff accounts and reset their PINs | No | Yes |
+| Manage staff accounts and reset their PINs (managers' accounts: the owner only; anyone may reset their own PIN; nobody else changes the owner's account, decision 0039) | No | Yes |
 | View the activity log | No | Yes |
 
 Permissions are defined in code as named permissions (e.g. `prices.edit`, `plans.correct`) mapped to roles in one place, so moving an action from one role to the other is a one-line change. Every action is checked on the server; hiding a button in the interface is never the only protection.
@@ -72,7 +72,7 @@ Permissions are defined in code as named permissions (e.g. `prices.edit`, `plans
 
 **Activity log.** Every change made by staff (who, what, when, before and after) is recorded, so the manager can see what instructors did. It records changes and the few sensitive reads the doc calls out (opening a health form's contents), not logins (`staff_sessions` is the login history), and it is append-only: entries are never changed or deleted, also because it may be needed as evidence, for example by the insurer (decision 0021).
 
-**First run.** The app asks for the first manager account; the manager then creates instructor accounts. There can be more than one manager.
+**First run.** The app asks for the first manager account, which becomes the **owner**; the owner then creates instructor accounts, and may add other managers to help. There can be more than one manager but only one owner, whose account nobody else can demote, deactivate or reset (decision 0039).
 
 **Windows account.** The PC itself has a Windows password and locks after 10 minutes idle. This is separate from the staff logins in the app.
 
@@ -247,7 +247,7 @@ One SQLite file (`gym.db`, WAL mode) with thirteen tables (fourteen once punch c
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable, phone only), staff\_user\_id (nullable, manual only) | Single-entry payments count these. Append-only (triggers refuse UPDATE and DELETE); no link to a plan choice, since a correction changes which one is active (decision 0032) |
 | `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
-| staff\_users | id, display\_name, role (manager / instructor), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
+| staff\_users | id, display\_name, role (owner / manager / instructor; at most one owner), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
 | staff\_sessions | id, staff\_user\_id, token\_hash (unique), created\_at, last\_seen\_at, ended\_at | One row per staff login; the `gym_staff` cookie holds the token, only its SHA-256 hash is stored. Ends on Lock, a new login, the role's idle time or 12 hours; ended, never deleted |
 | activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change, in the same transaction; append-only (database triggers refuse UPDATE and DELETE). Never holds PINs, hashes or tokens |
 | `doctor_notes` | id, health\_form\_id, image (blob, JPEG), content\_type, staff\_user\_id, created\_at | The note that makes a form with a "yes" answer count (decision 0033). Append-only; re-encoded on upload; opening one is manager-only and logged |

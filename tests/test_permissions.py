@@ -32,8 +32,14 @@ def test_every_role_has_an_entry_in_the_map() -> None:
     assert set(ROLE_PERMISSIONS) == set(Role)
 
 
-def test_the_manager_can_do_everything() -> None:
-    assert ROLE_PERMISSIONS[Role.MANAGER] == set(Permission)
+def test_the_owner_can_do_everything() -> None:
+    assert ROLE_PERMISSIONS[Role.OWNER] == set(Permission)
+
+
+def test_a_manager_can_do_everything_but_manage_managers() -> None:
+    assert ROLE_PERMISSIONS[Role.MANAGER] == set(Permission) - {
+        Permission.STAFF_MANAGE_MANAGERS
+    }
 
 
 def test_instructors_get_exactly_the_desk_work() -> None:
@@ -61,7 +67,7 @@ def test_the_stored_role_text_works_too() -> None:
     assert not has_permission("instructor", Permission.PRICES_EDIT)
 
 
-@pytest.mark.parametrize("role", ["owner", "Manager", ""])
+@pytest.mark.parametrize("role", ["Owner", "Manager", "admin", ""])
 def test_an_unknown_role_raises(role: str) -> None:
     with pytest.raises(ValueError):
         has_permission(role, Permission.CUSTOMERS_VIEW)
@@ -79,4 +85,5 @@ def test_permission_names_are_area_dot_action() -> None:
 
 def test_permissions_for_lists_the_roles_permissions_sorted() -> None:
     assert permissions_for(Role.INSTRUCTOR) == sorted(INSTRUCTOR_CAN)
-    assert permissions_for("manager") == sorted(Permission)
+    assert permissions_for("owner") == sorted(Permission)
+    assert "staff.manage_managers" not in permissions_for("manager")

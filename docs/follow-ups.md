@@ -21,8 +21,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Dashboard: the latest sign-ups are the newest customers by `created_at` (no column, decision 0035). They include phone sign-ups, which no one at the desk has seen, so the manager can spot a fake one before the report.
 
 ## Milestone 4: admin screens
-- Settings screen: load with `load_gym_settings_for_editing()`, convert form fields to their types before `update_gym_settings()`, and require a manager-only permission on the server. Email addresses are ASCII-only for now (decision 0016).
-- Staff accounts: `GET /api/staff` (manager only, `staff.manage`) was built with the activity log for its staff filter; the Staff screen builds on it. React learns a role change only at the next `/api/session` fetch (reload or login); the server applies it from the next request.
+- Settings screen: load with `load_gym_settings_for_editing()`, convert form fields to their types before `update_gym_settings()`, and require a manager-only permission on the server. Email addresses are ASCII-only for now (decision 0016). Since the owner role (decision 0039), ask whether some settings (e.g. lock times, report recipients) should be owner-only; that would be a new permission held only by the owner.
 - Activity log: the target filter is exact, so a customer's plan choices, check-ins and forms (other target types) don't show under that customer. A full customer history would need a `customer_id` column or a JSON search.
 - Lock screen: a polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
 - Customer page, Phones: the list doesn't refresh itself while a code is on screen, because every React request counts as activity for the auto-lock. Once background refreshes skip the idle timer (the server already allows a request that doesn't `touch`), poll the list and hide the code once a phone links. The device name is a rough guess from the user agent (iPhone / Android / iPad); iPadOS sends a Mac user agent, so iPads show as "other device".
@@ -50,6 +49,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Page weight: both builds bundle the whole Heebo TTF (122 KB). If the phone's first load is slow on mobile data, ship a Hebrew + Latin WOFF2 subset instead.
 - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config.
 - Dependabot for the SHA-pinned GitHub Actions.
+- Owner account (decision 0039): nobody else can reset the owner's PIN, so a forgotten one needs a command run on the PC itself (e.g. `python -m app.reset_owner_pin`, with both apps stopped, logged as the owner). No ownership transfer either (the gym changing hands); add one if it's ever needed.
 - Staff sessions (decision 0019): if the admin app moves behind HTTPS on a real hostname, change `ALLOWED_HOSTS` in `app/admin/main.py` and add `Secure` to the `gym_staff` cookie. Prod needs `GYM_SECRET_KEY` (both apps and `alembic`).
 
 ## Before launch: confirm with the manager

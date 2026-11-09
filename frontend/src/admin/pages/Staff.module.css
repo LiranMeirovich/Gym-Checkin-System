@@ -1,0 +1,35 @@
+/* The message a change came back with, above the table. */
+.outcome {
+  margin-block: 0 var(--space-4);
+}
+
+/* A deactivated member: still listed, but quieter. */
+.inactive > td {
+  color: var(--muted);
+}
+
+/* "(you)" after the logged-in manager's own name. */
+.self {
+  color: var(--muted);
+}
+
+.rowButtons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.pin {
+  max-width: 12rem;
+}
+
+/* A header read by screen readers only: the actions column has no
+   visible title. */
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

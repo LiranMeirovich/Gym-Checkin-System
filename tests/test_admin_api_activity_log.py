@@ -16,7 +16,7 @@ from app.core import pins
 from app.core.db import get_engine
 from app.core.models import ActivityLogEntry, StaffUser
 from app.core.permissions import Role
-from app.core.staff import create_first_manager, create_staff_user, deactivate
+from app.core.staff import create_owner, create_staff_user, deactivate
 
 ORIGIN = "http://127.0.0.1:8000"
 SAME_ORIGIN = {"Origin": ORIGIN, "Sec-Fetch-Site": "same-origin"}
@@ -44,7 +44,7 @@ def db(client: TestClient) -> Iterator[Session]:
 
 @pytest.fixture
 def manager(db: Session) -> StaffUser:
-    staff = create_first_manager(db, "מנהלת", PIN)
+    staff = create_owner(db, "מנהלת", PIN)
     db.commit()
     return staff
 
@@ -243,7 +243,29 @@ def test_the_staff_list_has_everyone_active_first(
             "display_name": "מדריך",
             "role": "instructor",
             "active": True,
+            "locked_until": None,
+            "can_reset_pin": True,
+            "can_change_role": True,
+            "can_toggle_active": True,
         },
-        {"id": manager.id, "display_name": "מנהלת", "role": "manager", "active": True},
-        {"id": other.id, "display_name": "אורי", "role": "instructor", "active": False},
+        {
+            "id": manager.id,
+            "display_name": "מנהלת",
+            "role": "owner",
+            "active": True,
+            "locked_until": None,
+            "can_reset_pin": True,
+            "can_change_role": False,
+            "can_toggle_active": False,
+        },
+        {
+            "id": other.id,
+            "display_name": "אורי",
+            "role": "instructor",
+            "active": False,
+            "locked_until": None,
+            "can_reset_pin": True,
+            "can_change_role": True,
+            "can_toggle_active": True,
+        },
     ]

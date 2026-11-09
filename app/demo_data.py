@@ -5,7 +5,7 @@ add to a real gym's data.
 
 Everything goes through the real ``app.core`` functions, in one
 transaction, so the data obeys the same rules as data entered on the
-screens (and the activity log records it, as the demo manager). Every
+screens (and the activity log records it, as the demo owner). Every
 name and phone number is invented (decision 0007: the repo is public).
 
 Use a separate database file, never ``gym.db``. From the project root::
@@ -47,11 +47,13 @@ from app.core.months import Month
 from app.core.permissions import Role
 from app.core.plans import choose_plan
 from app.core.prices import PriceChange, set_prices
-from app.core.staff import any_staff_exists, create_first_manager, create_staff_user
+from app.core.staff import any_staff_exists, create_owner, create_staff_user
 from app.core.startup import check_database_is_current
 
 GYM_NAME = "מכון הדוגמה"
-MANAGER = ("נועה", "246810")
+OWNER = ("נועה", "246810")
+# A manager helping the owner (decision 0039): manages instructors only.
+MANAGER = ("רון", "570318")
 INSTRUCTOR = ("איתי", "135790")
 
 # The form's gender question, given for each demo customer.
@@ -124,10 +126,11 @@ def _customer(
 
 
 def fill(db: Session) -> None:
-    manager = create_first_manager(db, *MANAGER)
-    update_gym_settings(db, {"gym_name": GYM_NAME}, by=manager)
+    owner = create_owner(db, *OWNER)
+    update_gym_settings(db, {"gym_name": GYM_NAME}, by=owner)
+    create_staff_user(db, MANAGER[0], Role.MANAGER, MANAGER[1], by=owner)
     instructor = create_staff_user(
-        db, INSTRUCTOR[0], Role.INSTRUCTOR, INSTRUCTOR[1], by=manager
+        db, INSTRUCTOR[0], Role.INSTRUCTOR, INSTRUCTOR[1], by=owner
     )
 
     month = Month.current()
@@ -135,12 +138,12 @@ def fill(db: Session) -> None:
         db,
         month,
         [PriceChange(plan, amount) for plan, amount in PRICES.items()],
-        by=manager,
+        by=owner,
     )
     first_question = FORMS[CURRENT_VERSION].questions[0].key
 
     def add(first: str, last: str, phone: str, born: date) -> Customer:
-        return _customer(db, first, last, phone, born, manager)
+        return _customer(db, first, last, phone, born, owner)
 
     # Valid form, a plan, in today.
     for first, last, phone, born, gender, plan in [
@@ -150,7 +153,7 @@ def fill(db: Session) -> None:
     ]:
         customer = add(first, last, phone, born)
         _sign_form(db, customer, gender)
-        choose_plan(db, customer, plan, month, by=manager)
+        choose_plan(db, customer, plan, month, by=owner)
         check_in_manually(db, customer, by=instructor)
 
     # Valid form, checked in by an instructor with no plan: single entry.
@@ -161,7 +164,7 @@ def fill(db: Session) -> None:
     # Under 18: the form is signed by a parent.
     eitan = add("איתן", "גולן", "050-555-0105", date(2011, 2, 14))
     _sign_form(db, eitan, MALE, signer="אבי גולן")
-    choose_plan(db, eitan, Plan.MONTHLY, month, by=manager)
+    choose_plan(db, eitan, Plan.MONTHLY, month, by=owner)
 
     # Valid form, no plan yet: the phone's plan page.
     for first, last, phone, born, gender in [
@@ -178,9 +181,9 @@ def fill(db: Session) -> None:
     shira = add("שירה", "אברהם", "050-555-0109", date(1982, 12, 1))
     _sign_form(db, shira, FEMALE, yes=(first_question,))
     add_doctor_note(
-        db, shira, check_note_image(_doctor_note()), by=manager, today=local_today()
+        db, shira, check_note_image(_doctor_note()), by=owner, today=local_today()
     )
-    choose_plan(db, shira, Plan.SINGLE_ENTRY, month, by=manager)
+    choose_plan(db, shira, Plan.SINGLE_ENTRY, month, by=owner)
 
     # No form yet: no check-in until they fill it in.
     add("תמר", "דהן", "050-555-0110", date(1999, 5, 25))
@@ -188,7 +191,7 @@ def fill(db: Session) -> None:
 
     # A customer who left.
     ronit = add("רונית", "אלון", "050-555-0112", date(1970, 8, 19))
-    deactivate_customer(db, ronit, by=manager)
+    deactivate_customer(db, ronit, by=owner)
 
 
 def main() -> None:
@@ -205,6 +208,7 @@ def main() -> None:
         fill(db)
     print(f"Demo data added to {settings.database_path}.")
     # Roles, not the Hebrew names: a Windows console may not print them.
+    print(f"Owner PIN: {OWNER[1]}")
     print(f"Manager PIN: {MANAGER[1]}")
     print(f"Instructor PIN: {INSTRUCTOR[1]}")
 

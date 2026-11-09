@@ -20,7 +20,7 @@ from app.core.models import Setting, StaffSession, StaffUser
 from app.core.permissions import ROLE_PERMISSIONS, Permission, Role
 from app.core.staff import (
     MAX_FAILED_ATTEMPTS,
-    create_first_manager,
+    create_owner,
     create_staff_user,
     deactivate,
 )
@@ -52,7 +52,7 @@ def db(client: TestClient) -> Iterator[Session]:
 
 @pytest.fixture
 def noa(db: Session) -> StaffUser:
-    staff = create_first_manager(db, "נועה", PIN)
+    staff = create_owner(db, "נועה", PIN)
     db.commit()
     return staff
 
@@ -146,7 +146,7 @@ def test_the_right_pin_logs_in_and_returns_the_session(
     assert response.status_code == 200
     token = response.cookies[SESSION_COOKIE]
     assert response.json() == {
-        "staff": {"id": noa.id, "display_name": "נועה", "role": "manager"},
+        "staff": {"id": noa.id, "display_name": "נועה", "role": "owner"},
         "csrf_token": csrf_token(token),
         "lock_after_seconds": 300,
         "permissions": sorted(Permission),

@@ -36,10 +36,3 @@
 .inline input {
   max-width: 12rem;
 }
-
-/* Deactivating is rare and reversible: a quieter button. */
-.quiet {
-  border-color: var(--line-strong);
-  color: var(--muted);
-  font-weight: 500;
-}

@@ -21,6 +21,7 @@ import { formatDate, formatTime } from "../customers";
 import { PageHead } from "../layout/ui";
 import ui from "../layout/ui.module.css";
 import { NoConnection } from "../../shared/NoConnection";
+import { STAFF_KEY, fetchStaff } from "../staff";
 import styles from "./ActivityLog.module.css";
 
 type Filters = {
@@ -72,12 +73,6 @@ async function fetchPage(filters: Filters, beforeId: number | undefined) {
   if (response.status === 403) throw new Forbidden();
   if (response.status === 400 || response.status === 422) throw new BadFilter();
   throw new Error(`GET /api/activity-log failed: ${response.status}`);
-}
-
-async function fetchStaff() {
-  const { data, response } = await api.GET("/api/staff");
-  if (data) return data.staff;
-  throw new Error(`GET /api/staff failed: ${response.status}`);
 }
 
 export function ActivityLog() {
@@ -186,7 +181,7 @@ function FilterForm({
   // No retries: a refusal won't change, and each request counts as
   // activity for the auto-lock.
   const staff = useQuery({
-    queryKey: ["staff"],
+    queryKey: STAFF_KEY,
     queryFn: fetchStaff,
     retry: false,
   });
