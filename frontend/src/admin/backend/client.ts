@@ -10,7 +10,6 @@
 // hold is the session's CSRF token, in this module's memory only (never
 // localStorage or the like): it's gone on a reload and fetched again from
 // GET /api/session.
-import type { QueryFunctionContext } from "@tanstack/react-query";
 import createClient, { type Middleware } from "openapi-fetch";
 import type { components, paths } from "./schema";
 
@@ -25,27 +24,20 @@ export function setCsrfToken(token: string | null): void {
   csrfToken = token;
 }
 
-// A screen polling on its own (the dashboard) marks its refreshes with
-// this header. The server answers them as usual but doesn't count them as
-// activity, and neither does the auto-lock timer in session.tsx, so a
-// screen left polling still locks on time. Only GETs: the server ignores
-// it on anything that changes data.
+// A screen refreshing itself on a timer (the dashboard) marks each timed
+// refresh with this header (`usePolledQuery`, polling.ts). The server
+// answers it as usual but doesn't count it as activity, and neither does
+// the auto-lock timer in session.tsx, so a screen left refreshing still
+// locks on time. Only GETs: the server ignores it on anything that
+// changes data.
 const BACKGROUND_HEADER = "X-Background-Refresh";
 
-/** Headers for a polled query's GET: the first load counts as activity
- * (someone opened the screen); every later refresh of the same query is
- * marked as a background refresh.
- *
- * `queryFn: (context) => api.GET(path, { headers: refreshHeaders(context) })` */
-export function refreshHeaders({
-  client,
-  queryKey,
-}: QueryFunctionContext): Record<string, string> {
-  const loaded = client.getQueryState(queryKey)?.data !== undefined;
-  return loaded ? { [BACKGROUND_HEADER]: "1" } : {};
-}
+/** The headers of a timed refresh's GET. */
+export const BACKGROUND_REFRESH: Readonly<Record<string, string>> = {
+  [BACKGROUND_HEADER]: "1",
+};
 
-/** Whether a request was a background refresh (see `refreshHeaders`). */
+/** Whether a request was a timed background refresh. */
 export function isBackgroundRefresh(request: Request): boolean {
   return request.headers.get(BACKGROUND_HEADER) === "1";
 }

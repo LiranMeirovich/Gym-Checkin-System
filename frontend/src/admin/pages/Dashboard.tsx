@@ -4,19 +4,18 @@
 // spots a check-in or sign-up that doesn't match who's in the gym.
 //
 // Each list refreshes itself: today's check-ins every 15 seconds, the rest
-// every minute (they change a few times a day). The first load counts as
-// activity; every refresh after it is a background refresh
-// (`refreshHeaders`), so a dashboard left open still locks on time.
-// TanStack Query pauses the refreshes while the window is hidden.
-import { useQuery, type QueryFunctionContext } from "@tanstack/react-query";
+// every minute (they change a few times a day). Only the timed refreshes
+// are background refreshes (`usePolledQuery`), so a dashboard left open
+// still locks on time; they wait while the window is hidden.
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { NoConnection } from "../../shared/NoConnection";
 import { StatusBadge } from "../../shared/Status";
-import { api, refreshHeaders, type Schemas } from "../backend/client";
+import { api, type Schemas } from "../backend/client";
 import { formatDate, formatPhone, formatTime } from "../customers";
 import { PageHead } from "../layout/ui";
 import ui from "../layout/ui.module.css";
+import { usePolledQuery } from "../polling";
 import { can } from "../roles";
 import { useSession } from "../session";
 import styles from "./Dashboard.module.css";
@@ -26,44 +25,15 @@ const LISTS_EVERY_MS = 60_000;
 
 type CustomerName = Schemas["CustomerName"];
 
-function failed(path: string, response: Response): Error {
-  return new Error(`GET ${path} failed: ${response.status}`);
-}
-
-async function fetchTodaysCheckins(context: QueryFunctionContext) {
-  const path = "/api/checkins/today";
-  const { data, response } = await api.GET(path, {
-    headers: refreshHeaders(context),
-  });
-  if (data) return data.checkins;
-  throw failed(path, response);
-}
-
-async function fetchNeedingNote(context: QueryFunctionContext) {
-  const path = "/api/health-forms/needing-note";
-  const { data, response } = await api.GET(path, {
-    headers: refreshHeaders(context),
-  });
-  if (data) return data.forms;
-  throw failed(path, response);
-}
-
-async function fetchExpiring(context: QueryFunctionContext) {
-  const path = "/api/health-forms/expiring";
-  const { data, response } = await api.GET(path, {
-    headers: refreshHeaders(context),
-  });
-  if (data) return data.forms;
-  throw failed(path, response);
-}
-
-async function fetchLatestCustomers(context: QueryFunctionContext) {
-  const path = "/api/customers/latest";
-  const { data, response } = await api.GET(path, {
-    headers: refreshHeaders(context),
-  });
-  if (data) return data.customers;
-  throw failed(path, response);
+/** A list route's answer, picked out of its JSON; anything else throws. */
+async function listOf<Answer, Row>(
+  path: string,
+  request: Promise<{ data?: Answer; response: Response }>,
+  pick: (answer: Answer) => Row[],
+): Promise<Row[]> {
+  const { data, response } = await request;
+  if (data) return pick(data);
+  throw new Error(`GET ${path} failed: ${response.status}`);
 }
 
 export function Dashboard() {
@@ -131,10 +101,12 @@ function CustomerLink({ customer }: { customer: CustomerName }) {
 }
 
 function TodaysCheckins() {
-  const query = useQuery({
+  const path = "/api/checkins/today";
+  const query = usePolledQuery({
     queryKey: ["dashboard", "checkins-today"],
-    queryFn: fetchTodaysCheckins,
-    refetchInterval: CHECKINS_EVERY_MS,
+    fetch: (headers) =>
+      listOf(path, api.GET(path, { headers }), (answer) => answer.checkins),
+    everyMs: CHECKINS_EVERY_MS,
   });
   return (
     <ListPanel title="כניסות היום" query={query} empty="עוד אין כניסות היום.">
@@ -167,10 +139,12 @@ function TodaysCheckins() {
 }
 
 function NeedingNote() {
-  const query = useQuery({
+  const path = "/api/health-forms/needing-note";
+  const query = usePolledQuery({
     queryKey: ["dashboard", "forms-needing-note"],
-    queryFn: fetchNeedingNote,
-    refetchInterval: LISTS_EVERY_MS,
+    fetch: (headers) =>
+      listOf(path, api.GET(path, { headers }), (answer) => answer.forms),
+    everyMs: LISTS_EVERY_MS,
   });
   return (
     <ListPanel
@@ -198,10 +172,12 @@ function NeedingNote() {
 }
 
 function Expiring() {
-  const query = useQuery({
+  const path = "/api/health-forms/expiring";
+  const query = usePolledQuery({
     queryKey: ["dashboard", "forms-expiring"],
-    queryFn: fetchExpiring,
-    refetchInterval: LISTS_EVERY_MS,
+    fetch: (headers) =>
+      listOf(path, api.GET(path, { headers }), (answer) => answer.forms),
+    everyMs: LISTS_EVERY_MS,
   });
   return (
     <ListPanel
@@ -228,10 +204,12 @@ function Expiring() {
 }
 
 function LatestCustomers() {
-  const query = useQuery({
+  const path = "/api/customers/latest";
+  const query = usePolledQuery({
     queryKey: ["dashboard", "latest-customers"],
-    queryFn: fetchLatestCustomers,
-    refetchInterval: LISTS_EVERY_MS,
+    fetch: (headers) =>
+      listOf(path, api.GET(path, { headers }), (answer) => answer.customers),
+    everyMs: LISTS_EVERY_MS,
   });
   return (
     <ListPanel title="לקוחות חדשים" query={query} empty="עדיין אין לקוחות.">

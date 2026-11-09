@@ -18,7 +18,7 @@ from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
 from app.core.http import Answer, DateOfBirth
-from app.core.models import CheckInMethod, ChosenBy, Plan
+from app.core.models import CheckInMethod, ChosenBy, Customer, Plan
 from app.core.permissions import Permission, Role
 
 # SQLite's integer range. A bigger id can't exist, and SQLite would refuse
@@ -172,6 +172,14 @@ class CustomerName(Answer):
     id: int
     first_name: str
     last_name: str
+
+    @classmethod
+    def of(cls, customer: Customer) -> "CustomerName":
+        return cls(
+            id=customer.id,
+            first_name=customer.first_name,
+            last_name=customer.last_name,
+        )
 
 
 class LatestCustomer(CustomerSummary):

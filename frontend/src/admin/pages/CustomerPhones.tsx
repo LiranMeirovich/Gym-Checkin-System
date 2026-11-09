@@ -4,21 +4,20 @@
 //
 // While a code is on screen (until it expires), the list refreshes itself
 // every few seconds as background refreshes, which don't hold off the
-// auto-lock. When a phone that wasn't there before shows up, the customer
-// has used the code: it's hidden and the new phone is in the list.
+// auto-lock (`usePolledQuery`). When a phone that wasn't there before shows
+// up, the customer has used the code: it's hidden and the new phone is in
+// the list. A code is issued only once the list has loaded, so "before" is
+// known.
 import { useState } from "react";
-import {
-  useQuery,
-  useQueryClient,
-  type QueryFunctionContext,
-} from "@tanstack/react-query";
-import { api, refreshHeaders, type Schemas } from "../backend/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { api, type Schemas } from "../backend/client";
 import { formatDate, formatTime, phonesKey, type Customer } from "../customers";
 import {
   NoConnection,
   NO_CONNECTION_TRY_AGAIN,
 } from "../../shared/NoConnection";
 import ui from "../layout/ui.module.css";
+import { usePolledQuery } from "../polling";
 import styles from "./CustomerPhones.module.css";
 
 type LinkedPhone = Schemas["LinkedPhone"];
@@ -29,14 +28,11 @@ const WHILE_CODE_SHOWS_MS = 4_000;
 
 async function fetchPhones(
   id: number,
-  context: QueryFunctionContext,
+  headers: Record<string, string>,
 ): Promise<LinkedPhone[]> {
   const { data, response } = await api.GET(
     "/api/customers/{customer_id}/phones",
-    {
-      params: { path: { customer_id: id } },
-      headers: refreshHeaders(context),
-    },
+    { params: { path: { customer_id: id } }, headers },
   );
   if (data) return data.phones;
   throw new Error(`GET /api/customers/${id}/phones failed: ${response.status}`);
@@ -49,20 +45,18 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
   const [linkedBefore, setLinkedBefore] = useState<Set<number>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const { data, isPending, isError, refetch } = useQuery({
+  const { data, isPending, isError, refetch } = usePolledQuery({
     queryKey: phonesKey(customer.id),
-    queryFn: (context) => fetchPhones(customer.id, context),
-    refetchInterval: (query) =>
-      issued &&
-      !codeUsed(query.state.data, linkedBefore) &&
-      Date.now() < Date.parse(issued.expires_at)
-        ? WHILE_CODE_SHOWS_MS
-        : false,
+    fetch: (headers) => fetchPhones(customer.id, headers),
+    everyMs: (phones) =>
+      issued && !codeUsed(phones, linkedBefore) ? WHILE_CODE_SHOWS_MS : false,
+    until: issued ? Date.parse(issued.expires_at) : undefined,
   });
   const linked = issued !== null && codeUsed(data, linkedBefore);
   const shownCode = linked ? null : issued;
 
   async function issue() {
+    if (data === undefined) return;
     setSending(true);
     setMessage(null);
     try {
@@ -71,7 +65,7 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
         { params: { path: { customer_id: customer.id } } },
       );
       if (code) {
-        setLinkedBefore(new Set(data?.map((phone) => phone.id)));
+        setLinkedBefore(new Set(data.map((phone) => phone.id)));
         setIssued(code);
       } else if (response.status === 409) {
         setMessage("הלקוח לא פעיל. יש להפעיל אותו מחדש קודם.");
@@ -136,7 +130,9 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
               type="button"
               className={shownCode ? undefined : ui.primary}
               onClick={issue}
-              disabled={sending}
+              // The phones linked now must be known, to tell when a new
+              // one appears.
+              disabled={sending || data === undefined}
             >
               {shownCode ? "קוד חדש" : "קישור טלפון"}
             </button>

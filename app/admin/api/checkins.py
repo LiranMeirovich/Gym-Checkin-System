@@ -62,10 +62,9 @@ from app.core.checkins import (
     checkins_on,
     recent_checkins,
 )
-from app.core.clock import to_local
+from app.core.clock import local_today, to_local
 from app.core.customers import CustomerInactiveError
 from app.core.db import DbSession
-from app.core.health_forms import local_today
 from app.core.permissions import Permission
 from app.core.plans import PriceNotSetError
 
@@ -111,11 +110,7 @@ def today(db: DbSession, _login: CanView) -> TodaysCheckIns:
                 id=checkin.id,
                 checked_in_at=to_local(checkin.checked_in_at),
                 method=checkin.method,
-                customer=CustomerName(
-                    id=checkin.customer.id,
-                    first_name=checkin.customer.first_name,
-                    last_name=checkin.customer.last_name,
-                ),
+                customer=CustomerName.of(checkin.customer),
             )
             for checkin in checkins_on(db, local_today())
         ]

@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.admin.main import app
-from app.core import health_forms, pins
+from app.core import clock, pins
 from app.core.db import get_engine
 from app.core.models import (
     CheckIn,
@@ -43,9 +43,9 @@ LISTS = [
 
 
 @pytest.fixture(autouse=True)
-def clock(monkeypatch: pytest.MonkeyPatch) -> None:
-    # "Today" for every list comes from health_forms.local_today().
-    monkeypatch.setattr(health_forms, "utc_now", lambda: NOW)
+def fixed_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    # "Today" for every list comes from clock.local_today().
+    monkeypatch.setattr(clock, "utc_now", lambda: NOW)
 
 
 @pytest.fixture(autouse=True)

@@ -8,7 +8,7 @@
 // - the auto-lock timer goes to the lock screen once the role's idle time
 //   has passed without an API request (only requests count as activity,
 //   as on the server, which enforces the timeout either way). A polled
-//   screen's background refreshes don't count (`refreshHeaders`);
+//   screen's timed refreshes don't count (`usePolledQuery`);
 // - any later 401 (the session ended or timed out) goes there too.
 //
 // Hiding something here is never the protection: every API route checks

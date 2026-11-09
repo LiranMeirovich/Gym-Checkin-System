@@ -71,6 +71,7 @@ from app.admin.api.schemas import (
 )
 from app.admin.security import StaffLogin, require_permission
 from app.core import doctor_notes, health_forms
+from app.core.clock import local_today
 from app.core.customers import CustomerInactiveError
 from app.core.db import DbSession
 from app.core.http import JPEG_DATA_URL, PNG_DATA_URL, data_url_bytes
@@ -118,11 +119,7 @@ def customer_forms(found: list[health_forms.CustomerForm]) -> CustomerForms:
     return CustomerForms(
         forms=[
             CustomerFormEntry(
-                customer=CustomerName(
-                    id=entry.customer.id,
-                    first_name=entry.customer.first_name,
-                    last_name=entry.customer.last_name,
-                ),
+                customer=CustomerName.of(entry.customer),
                 signed_on=entry.form.signed_on,
                 valid_until=entry.form.expires_on,
             )
@@ -133,14 +130,12 @@ def customer_forms(found: list[health_forms.CustomerForm]) -> CustomerForms:
 
 @gym_router.get("/needing-note")
 def needing_doctor_note(db: DbSession, _login: CanViewStatus) -> CustomerForms:
-    return customer_forms(
-        health_forms.forms_needing_doctor_note(db, health_forms.local_today())
-    )
+    return customer_forms(health_forms.forms_needing_doctor_note(db, local_today()))
 
 
 @gym_router.get("/expiring")
 def expiring(db: DbSession, _login: CanViewStatus) -> CustomerForms:
-    return customer_forms(health_forms.forms_expiring(db, health_forms.local_today()))
+    return customer_forms(health_forms.forms_expiring(db, local_today()))
 
 
 @router.get("/health-form")
