@@ -5,7 +5,12 @@ roles"; decision 0023).
 Every route needs its own named permission, checked on the server whatever
 React shows:
 
-- ``GET /api/customers?active=true``: the list (``customers.view``).
+- ``GET /api/customers``: one page of the list (``customers.view``),
+  searched and filtered on the server (``app.core.customer_search``):
+  ``active`` (default true), ``q`` (a name, or a phone's digits),
+  ``came_in`` (``any``, ``7d``, ``30d``, ``not_30d``), ``sort`` (``name``,
+  ``last_check_in``) and ``page`` (from 1; 25 a page). The search text
+  is in the URL, so the access log drops query strings (``app.core.http``).
 - ``GET /api/customers/{id}``: one customer (``customers.view``).
 - ``POST /api/customers``: add one (``customers.add``). A phone that
   belongs to an inactive customer brings them back instead (201 either
@@ -24,7 +29,7 @@ A broken field is a 400 naming every such field; nothing is saved.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import JSONResponse
 
 from app.admin.api.schemas import (
@@ -34,14 +39,20 @@ from app.admin.api.schemas import (
     CustomerDetails,
     CustomerEdit,
     CustomerList,
+    CustomerListRow,
     CustomerRefused,
-    CustomerSummary,
     DateOfBirthChange,
     NewCustomer,
     NotLoggedIn,
 )
 from app.admin.security import StaffLogin, require_permission
 from app.core.clock import to_local
+from app.core.customer_search import (
+    SEARCH_MAX_LENGTH,
+    CameIn,
+    SortBy,
+    search_customers,
+)
 from app.core.customers import (
     CustomerInactiveError,
     InvalidCustomerError,
@@ -50,7 +61,6 @@ from app.core.customers import (
     change_date_of_birth,
     deactivate_customer,
     edit_customer,
-    list_customers,
     reactivate_customer,
 )
 from app.core.db import DbSession
@@ -82,18 +92,38 @@ CONFLICT = {status.HTTP_409_CONFLICT: {"model": CustomerConflict}}
 
 
 @router.get("")
-def customer_list(db: DbSession, _login: CanView, active: bool = True) -> CustomerList:
+def customer_list(
+    db: DbSession,
+    _login: CanView,
+    active: bool = True,
+    q: Annotated[str, Query(max_length=SEARCH_MAX_LENGTH)] = "",
+    came_in: CameIn = CameIn.ANY,
+    sort: SortBy = SortBy.NAME,
+    page: Annotated[int, Query(ge=1, le=MAX_ID)] = 1,
+) -> CustomerList:
+    found = search_customers(
+        db, active=active, text=q, came_in=came_in, sort=sort, page=page
+    )
     return CustomerList(
         customers=[
-            CustomerSummary(
-                id=c.id,
-                first_name=c.first_name,
-                last_name=c.last_name,
-                phone=c.phone,
-                active=c.active,
+            CustomerListRow(
+                id=row.customer.id,
+                first_name=row.customer.first_name,
+                last_name=row.customer.last_name,
+                phone=row.customer.phone,
+                active=row.customer.active,
+                last_check_in_at=(
+                    None
+                    if row.last_check_in_at is None
+                    else to_local(row.last_check_in_at)
+                ),
             )
-            for c in list_customers(db, active=active)
-        ]
+            for row in found.rows
+        ],
+        total=found.total,
+        page=found.page,
+        page_size=found.page_size,
+        page_count=found.page_count,
     )
 
 

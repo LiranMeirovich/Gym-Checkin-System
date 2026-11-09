@@ -16,6 +16,10 @@ choice"; decisions 0004, 0017, 0032).
     it.
   - 409 ``price_not_set`` or ``customer_inactive``.
 
+- ``GET /api/customers/{id}/checkins`` (``customers.view``, every role):
+  the customer's latest 10 check-ins, newest first, for the customer page.
+  Who checked them in at the desk is in the activity log, not here.
+
 The dialog reads what it shows beforehand from ``GET .../health-form`` and
 ``GET .../plan``; this route only acts.
 """
@@ -25,12 +29,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
-from app.admin.api.customers import NOT_FOUND, CustomerId, customer_or_404
+from app.admin.api.customers import NOT_FOUND, CanView, CustomerId, customer_or_404
 from app.admin.api.health_forms import status_answer
 from app.admin.api.schemas import (
     CheckedIn,
     CheckInForbidden,
     CheckInHealthFormRequired,
+    CheckInHistory,
+    CheckInHistoryEntry,
     CheckInPlanRequired,
     CheckInRefused,
     CheckInRefusedOther,
@@ -45,6 +51,7 @@ from app.core.checkins import (
     PlanNotAllowedError,
     PlanRequiredError,
     check_in_manually,
+    recent_checkins,
 )
 from app.core.clock import to_local
 from app.core.customers import CustomerInactiveError
@@ -63,6 +70,19 @@ router = APIRouter(
 CanCheckIn = Annotated[
     StaffLogin, Depends(require_permission(Permission.CHECKINS_MANUAL))
 ]
+
+
+@router.get("/checkins")
+def history(customer_id: CustomerId, db: DbSession, _login: CanView) -> CheckInHistory:
+    customer = customer_or_404(db, customer_id)
+    return CheckInHistory(
+        checkins=[
+            CheckInHistoryEntry(
+                checked_in_at=to_local(checkin.checked_in_at), method=checkin.method
+            )
+            for checkin in recent_checkins(db, customer)
+        ]
+    )
 
 
 @router.post(

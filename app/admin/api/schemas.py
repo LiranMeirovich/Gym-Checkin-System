@@ -18,7 +18,7 @@ from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
 from app.core.http import Answer, DateOfBirth
-from app.core.models import ChosenBy, Plan
+from app.core.models import CheckInMethod, ChosenBy, Plan
 from app.core.permissions import Permission, Role
 
 # SQLite's integer range. A bigger id can't exist, and SQLite would refuse
@@ -136,8 +136,8 @@ CustomerField = Literal["first_name", "last_name", "phone", "date_of_birth", "no
 
 
 class CustomerSummary(Answer):
-    """A row of the customer list. ``phone`` is the stored E.164 form
-    (``+972501234567``); React formats it for display."""
+    """A customer's name, phone and whether they're active. ``phone`` is the
+    stored E.164 form (``+972501234567``); React formats it for display."""
 
     id: int
     first_name: str
@@ -146,8 +146,23 @@ class CustomerSummary(Answer):
     active: bool
 
 
+class CustomerListRow(CustomerSummary):
+    """A row of the customer list. ``last_check_in_at`` is the gym's local
+    time, or null if they never checked in."""
+
+    last_check_in_at: datetime | None
+
+
 class CustomerList(Answer):
-    customers: list[CustomerSummary]
+    """One page of the list. ``total`` counts every match on all pages;
+    ``page`` is the page answered (the last one, for a page past the end)
+    and ``page_count`` is at least 1."""
+
+    customers: list[CustomerListRow]
+    total: int
+    page: int
+    page_size: int
+    page_count: int
 
 
 class CustomerDetails(CustomerSummary):
@@ -594,6 +609,20 @@ class CheckInForbidden(Answer):
     """403: a plan was sent by staff who may not choose plans."""
 
     error: Literal["plan_not_allowed"] = "plan_not_allowed"
+
+
+class CheckInHistoryEntry(Answer):
+    """``checked_in_at`` is the gym's local time; ``method`` is ``phone``
+    or ``manual`` (at the desk)."""
+
+    checked_in_at: datetime
+    method: CheckInMethod
+
+
+class CheckInHistory(Answer):
+    """The customer's latest check-ins, newest first."""
+
+    checkins: list[CheckInHistoryEntry]
 
 
 # ── Staff accounts ──────────────────────────────────────────────────────

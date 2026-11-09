@@ -23,7 +23,6 @@ from app.core.customers import (
     deactivate_customer,
     edit_customer,
     find_by_phone,
-    list_customers,
     normalise_phone,
     reactivate_customer,
 )
@@ -414,29 +413,6 @@ def test_deactivating_and_reactivating(
         ("customer.deactivate", noa.id, {"active": True}, {"active": False}),
         ("customer.reactivate", noa.id, {"active": False}, {"active": True}),
     ]
-
-
-def test_the_list_shows_active_or_inactive_customers_by_name(
-    db: Session, staff: StaffUser
-) -> None:
-    def add(first: str, last: str, phone: str) -> Customer:
-        return add_customer(
-            db,
-            first_name=first,
-            last_name=last,
-            phone=phone,
-            date_of_birth=date(2000, 1, 1),
-            by=staff,
-        ).customer
-
-    yael = add("Yael", "Mizrahi", "0501111111")
-    dana_l = add("Dana", "Levi", "0502222222")
-    dana_c = add("Dana", "Cohen", "0503333333")
-    gone = add("Avi", "Peretz", "0504444444")
-    deactivate_customer(db, gone, by=staff)
-
-    assert list_customers(db) == [dana_c, dana_l, yael]
-    assert list_customers(db, active=False) == [gone]
 
 
 def test_the_age_limit_on_29_february(

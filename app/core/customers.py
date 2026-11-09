@@ -143,17 +143,6 @@ def find_by_phone(db: Session, phone: str) -> Customer | None:
     return db.scalar(select(Customer).where(Customer.phone == stored))
 
 
-def list_customers(db: Session, *, active: bool = True) -> list[Customer]:
-    """Active (or only inactive) customers, by first and then last name."""
-    return list(
-        db.scalars(
-            select(Customer)
-            .where(Customer.active.is_(active))
-            .order_by(Customer.first_name, Customer.last_name, Customer.id)
-        )
-    )
-
-
 def add_customer(
     db: Session,
     *,
