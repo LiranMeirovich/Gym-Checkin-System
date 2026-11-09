@@ -1,12 +1,15 @@
 """Smoke tests: both apps start and answer, and the public app exposes
 nothing beyond what it should."""
 
+import logging
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.admin.main import app as admin_app
+from app.core.http import ACCESS_LOGGER, DropQueryStrings
 from app.core.spa import FRONTEND_DIST
 from app.public.main import app as public_app
 
@@ -24,6 +27,33 @@ def test_health_returns_ok(app: FastAPI) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+@both_apps
+@pytest.mark.usefixtures("migrated_db")
+def test_the_access_log_drops_query_strings(app: FastAPI) -> None:
+    access = logging.getLogger(ACCESS_LOGGER)
+    for installed in [f for f in access.filters if isinstance(f, DropQueryStrings)]:
+        access.removeFilter(installed)
+
+    # Starting twice (as both apps share the logger) installs it once.
+    for _ in range(2):
+        with TestClient(app, base_url="http://127.0.0.1:8000"):
+            pass
+
+    assert sum(isinstance(f, DropQueryStrings) for f in access.filters) == 1
+    # uvicorn's own access record.
+    record = logging.LogRecord(
+        ACCESS_LOGGER,
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:5000", "GET", "/api/customers?q=Noa%20Levi&page=2", "1.1", 200),
+        None,
+    )
+    assert access.filter(record)
+    assert record.getMessage() == '127.0.0.1:5000 - "GET /api/customers HTTP/1.1" 200'
 
 
 @both_apps

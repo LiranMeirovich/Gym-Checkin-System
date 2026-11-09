@@ -1,7 +1,7 @@
 """HTTP plumbing both apps share: the ``/api`` prefix, the base of every API
 answer, ``no-store`` on every API answer, the same-origin check on every
-unsafe request, reading an image sent as a data URL, and the date-of-birth
-field type.
+unsafe request, reading an image sent as a data URL, the date-of-birth
+field type, and keeping query strings out of the access log.
 
 Here rather than in ``app.admin`` so the public app, the one reachable
 from the internet, never imports admin code.
@@ -9,6 +9,7 @@ from the internet, never imports admin code.
 
 import base64
 import binascii
+import logging
 import re
 from datetime import date
 from typing import Annotated
@@ -131,3 +132,31 @@ def _from_this_origin(request: Request) -> bool:
         return False
     site = request.headers.get("sec-fetch-site")
     return site is None or site == "same-origin"
+
+
+# uvicorn's access log, one line per request.
+ACCESS_LOGGER = "uvicorn.access"
+
+
+class DropQueryStrings(logging.Filter):
+    """Logs a request's path without its query string.
+
+    Some GETs carry customer data in the query string (the customer list's
+    search text is a name or a phone number), and real customer data never
+    goes in a log. uvicorn's access record is ``(client, method, path with
+    query, HTTP version, status)``; anything else passes untouched.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str):
+            record.args = (args[0], args[1], args[2].partition("?")[0], *args[3:])
+        return True
+
+
+def drop_query_strings_from_access_log() -> None:
+    """Install ``DropQueryStrings`` on uvicorn's access logger, once. Called
+    at startup, after uvicorn has set up its logging."""
+    logger = logging.getLogger(ACCESS_LOGGER)
+    if not any(isinstance(f, DropQueryStrings) for f in logger.filters):
+        logger.addFilter(DropQueryStrings())
