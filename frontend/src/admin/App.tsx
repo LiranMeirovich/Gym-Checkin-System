@@ -11,6 +11,7 @@ import { Home } from "./pages/Home";
 import { LockScreen } from "./pages/LockScreen";
 import { NewCustomer } from "./pages/NewCustomer";
 import { Prices } from "./pages/Prices";
+import { Settings } from "./pages/Settings";
 import { Setup } from "./pages/Setup";
 import { Staff } from "./pages/Staff";
 import { RequireSession } from "./session";
@@ -28,6 +29,7 @@ export function App() {
         <Route path="/prices" element={<Prices />} />
         <Route path="/staff" element={<Staff />} />
         <Route path="/activity-log" element={<ActivityLog />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
       {/* Screens the customer uses at the desk: no staff header. */}
       <Route element={<RequireSession bare />}>
