@@ -27,6 +27,7 @@ const SCREENS: Screen[] = [
     end: true,
     permission: "activity_log.view",
   },
+  { to: "/settings", label: "הגדרות", end: true, permission: "settings.edit" },
 ];
 
 export function AppHeader({

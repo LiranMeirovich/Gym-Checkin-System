@@ -16,6 +16,7 @@ from app.admin.api import health_forms as api_health_forms
 from app.admin.api import phones as api_phones
 from app.admin.api import plans as api_plans
 from app.admin.api import prices as api_prices
+from app.admin.api import settings as api_settings
 from app.admin.api import setup as api_setup
 from app.admin.api import staff as api_staff
 from app.core.branding import BRANDING_DIR, serve_logo
@@ -49,6 +50,7 @@ app.include_router(api_health_forms.router, prefix=API_PREFIX)
 app.include_router(api_checkins.router, prefix=API_PREFIX)
 app.include_router(api_staff.router, prefix=API_PREFIX)
 app.include_router(api_activity_log.router, prefix=API_PREFIX)
+app.include_router(api_settings.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

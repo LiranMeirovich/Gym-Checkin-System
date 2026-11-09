@@ -1,0 +1,60 @@
+/* The message a save came back with, beside the Save button. */
+.outcome {
+  margin: 0;
+}
+
+/* The report recipients: one address per row, with its remove button. */
+.recipients {
+  border: none;
+  padding: 0;
+  margin: var(--space-5) 0 0;
+}
+
+.recipients legend {
+  padding: 0;
+  margin-block-end: var(--space-2);
+  font-weight: 600;
+}
+
+.recipient {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-block-end: var(--space-2);
+}
+
+.recipient input {
+  flex: 1 1 16rem;
+}
+
+/* A refused address, under its own row. */
+.rowError {
+  flex-basis: 100%;
+  font-size: var(--text-s);
+}
+
+/* The list's own error (an address listed twice). */
+.listError {
+  font-size: var(--text-s);
+  margin-block: 0 var(--space-2);
+}
+
+.minutes {
+  max-width: 8rem;
+}
+
+/* A label read by screen readers only: each row's "recipient N". */
+.hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A stored row the code no longer knows: above the form. */
+.warning {
+  margin-block: 0 var(--space-4);
+}

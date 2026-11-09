@@ -21,7 +21,6 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Dashboard: the latest sign-ups are the newest customers by `created_at` (no column, decision 0035). They include phone sign-ups, which no one at the desk has seen, so the manager can spot a fake one before the report.
 
 ## Milestone 4: admin screens
-- Settings screen: load with `load_gym_settings_for_editing()`, convert form fields to their types before `update_gym_settings()`, and require a manager-only permission on the server. Email addresses are ASCII-only for now (decision 0016). Since the owner role (decision 0039), ask whether some settings (e.g. lock times, report recipients) should be owner-only; that would be a new permission held only by the owner.
 - Activity log: the target filter is exact, so a customer's plan choices, check-ins and forms (other target types) don't show under that customer. A full customer history would need a `customer_id` column or a JSON search.
 - Lock screen: a polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
 - Customer page, Phones: the list doesn't refresh itself while a code is on screen, because every React request counts as activity for the auto-lock. Once background refreshes skip the idle timer (the server already allows a request that doesn't `touch`), poll the list and hide the code once a phone links. The device name is a rough guess from the user agent (iPhone / Android / iPad); iPadOS sends a Mac user agent, so iPads show as "other device".
@@ -77,3 +76,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - `frontend/` has no test runner, so `shekelsToAgorot()` was only checked by hand, and the styling pass was checked only in the browser. Test them if one is added.
 - `app/demo_data.py` holds the demo staff PINs in code (public repo). They only open a throwaway dev database, and the script refuses prod and any database with data; generate them instead if that ever matters.
 - `ReadOnlyDbSession` (`app/core/db.py`) is used only by `/api/branding`. If more login-free, read-only routes appear, they can use it too; a route that touches a staff or device session writes and can't.
+- Settings: the screen sends the whole form, so two managers saving at once overwrite each other (last write wins; both are in the activity log). A version check would need a route contract change.
+- Settings: `app/admin/api/settings.py` reads the core's problem keys (`report_recipients.1`) to build its 400. If `gym_settings` returned structured problems (field, position, kind), the route wouldn't depend on that string format.
+- The screen-reader-only `.hidden` class is in both `Staff.module.css` and `Settings.module.css`, and each manager-only screen declares its own `Forbidden` (`staff.ts`, `pages/Settings.tsx`). Move them to `ui.module.css` and one shared helper.
+- Settings: lock times and report recipients are editable by every manager, not only the owner (developer's call, settings feature). An owner-only permission can be added later if that changes.

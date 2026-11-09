@@ -45,6 +45,8 @@ MANAGER_ONLY = {
     ("POST", "/api/staff/{staff_id}/deactivate"),
     ("POST", "/api/staff/{staff_id}/reactivate"),
     ("GET", "/api/activity-log"),
+    ("GET", "/api/settings"),
+    ("PUT", "/api/settings"),
 }
 
 
