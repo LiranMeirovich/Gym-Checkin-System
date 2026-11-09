@@ -10,6 +10,7 @@
 // hold is the session's CSRF token, in this module's memory only (never
 // localStorage or the like): it's gone on a reload and fetched again from
 // GET /api/session.
+import type { QueryFunctionContext } from "@tanstack/react-query";
 import createClient, { type Middleware } from "openapi-fetch";
 import type { components, paths } from "./schema";
 
@@ -22,6 +23,31 @@ let csrfToken: string | null = null;
 /** Set after login or GET /api/session; cleared on lock. */
 export function setCsrfToken(token: string | null): void {
   csrfToken = token;
+}
+
+// A screen polling on its own (the dashboard) marks its refreshes with
+// this header. The server answers them as usual but doesn't count them as
+// activity, and neither does the auto-lock timer in session.tsx, so a
+// screen left polling still locks on time. Only GETs: the server ignores
+// it on anything that changes data.
+const BACKGROUND_HEADER = "X-Background-Refresh";
+
+/** Headers for a polled query's GET: the first load counts as activity
+ * (someone opened the screen); every later refresh of the same query is
+ * marked as a background refresh.
+ *
+ * `queryFn: (context) => api.GET(path, { headers: refreshHeaders(context) })` */
+export function refreshHeaders({
+  client,
+  queryKey,
+}: QueryFunctionContext): Record<string, string> {
+  const loaded = client.getQueryState(queryKey)?.data !== undefined;
+  return loaded ? { [BACKGROUND_HEADER]: "1" } : {};
+}
+
+/** Whether a request was a background refresh (see `refreshHeaders`). */
+export function isBackgroundRefresh(request: Request): boolean {
+  return request.headers.get(BACKGROUND_HEADER) === "1";
 }
 
 type ResponseListener = (request: Request, response: Response) => void;

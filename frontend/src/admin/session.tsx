@@ -7,7 +7,8 @@
 // - the header shows who is logged in and their role, with Lock;
 // - the auto-lock timer goes to the lock screen once the role's idle time
 //   has passed without an API request (only requests count as activity,
-//   as on the server, which enforces the timeout either way);
+//   as on the server, which enforces the timeout either way). A polled
+//   screen's background refreshes don't count (`refreshHeaders`);
 // - any later 401 (the session ended or timed out) goes there too.
 //
 // Hiding something here is never the protection: every API route checks
@@ -23,6 +24,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, Outlet, useNavigate } from "react-router";
 import {
   api,
+  isBackgroundRefresh,
   onApiResponse,
   setCsrfToken,
   type Schemas,
@@ -131,11 +133,13 @@ function LoggedIn({
       // The lock screen ends the session on the server as it loads.
       navigate("/login", { replace: true });
     }
-    const unsubscribe = onApiResponse((_request, response) => {
+    const unsubscribe = onApiResponse((request, response) => {
       if (response.status === 401) {
         goToLockScreen();
         return;
       }
+      // A screen polling on its own isn't someone at the desk.
+      if (isBackgroundRefresh(request)) return;
       clearTimeout(timer);
       timer = setTimeout(goToLockScreen, lockAfterMs);
     });

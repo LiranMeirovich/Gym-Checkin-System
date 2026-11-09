@@ -17,7 +17,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Health form renewal for customers without a phone (an expired form blocks their manual check-in): left for later by the developer. The PC form screen from feature 4 can serve it.
 
 ## Milestone 4: admin screens (from Customers)
-- Dashboard: the latest sign-ups are the newest customers by `created_at` (no column, decision 0035). They include phone sign-ups, which no one at the desk has seen, so the manager can spot a fake one before the report.
+- Dashboard: the latest sign-ups are the newest customers by `created_at` (no column, decision 0035). They include phone sign-ups. The instructor at the desk knows the regulars and is the one who notices a check-in or sign-up that doesn't match who is in the gym; the manager doesn't verify them, so the list isn't marked phone/desk.
 
 ## Milestone 4: admin screens
 - Activity log: the target filter is exact, so a customer's plan choices, check-ins and forms (other target types) don't show under that customer. A full customer history would need a `customer_id` column or a JSON search.
