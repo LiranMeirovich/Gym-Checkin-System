@@ -55,7 +55,7 @@ export function CustomerCheckins({ customer }: { customer: Customer }) {
             </thead>
             <tbody>
               {data.map((checkin) => (
-                <tr key={checkin.checked_in_at + checkin.method}>
+                <tr key={checkin.id}>
                   <td>{formatDate(checkin.checked_in_at)}</td>
                   <td>{formatTime(checkin.checked_in_at)}</td>
                   <td className={ui.muted}>{METHOD_NAMES[checkin.method]}</td>

@@ -45,6 +45,7 @@ type Props = {
 
 /** A "Check in" button that opens the dialog. */
 export function CheckInButton({ customerId, name, primary = false }: Props) {
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -59,7 +60,14 @@ export function CheckInButton({ customerId, name, primary = false }: Props) {
         <CheckInDialog
           customerId={customerId}
           name={name}
-          onClose={() => setOpen(false)}
+          onClose={() => {
+            setOpen(false);
+            // The list's last visit is refreshed only once the dialog
+            // closes: the dialog sits in the list's row, and a refreshed
+            // list can drop that row (a "came in" filter, another page),
+            // taking the dialog and its answer with it.
+            void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
+          }}
         />
       )}
     </>
@@ -144,9 +152,9 @@ function CheckInBody({
       if (data) {
         setResult(data);
         // A check-in can choose this month's plan (single entry, or the
-        // manager's pick), and changes the customer's last visit.
+        // manager's pick). The list's last visit waits for the dialog to
+        // close (CheckInButton).
         void queryClient.invalidateQueries({ queryKey: planKey(customerId) });
-        void queryClient.invalidateQueries({ queryKey: CUSTOMER_LIST_KEY });
         void queryClient.invalidateQueries({
           queryKey: checkinsKey(customerId),
         });

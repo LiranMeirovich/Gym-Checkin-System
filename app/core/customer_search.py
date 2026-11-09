@@ -23,22 +23,20 @@ by id instead). A page past the end answers with the last page.
 import math
 import unicodedata
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 
-from sqlalchemy import ColumnElement, Select, String, and_, func, literal, or_, select
+from sqlalchemy import ColumnElement, String, and_, func, literal, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.clock import to_local, utc_now
-from app.core.config import get_settings
+from app.core.clock import start_of_local_day, to_local, utc_now
+from app.core.customers import COUNTRY_CODES, clean_phone_text
 from app.core.models import CheckIn, Customer
 
 PAGE_SIZE = 25
 # The text is cut here: no name or number is anywhere near this long.
 SEARCH_MAX_LENGTH = 100
 
-# Typed or pasted between a number's digits (as in customers.py), plus "+".
-_PHONE_SEPARATORS = frozenset("-.()/+")
 _LIKE_ESCAPE = "\\"
 
 
@@ -101,31 +99,33 @@ def search_customers(
     if page < 1 or page_size < 1:
         raise ValueError("page and page_size start at 1")
 
-    latest = (
-        select(
-            CheckIn.customer_id,
-            func.max(CheckIn.checked_in_at).label("at"),
-        )
-        .group_by(CheckIn.customer_id)
-        .subquery()
+    # Each customer's latest check-in: one index seek per customer row
+    # (the (customer_id, checked_in_at) index), never the whole table. The
+    # count only pays for it when the "came in" filter needs it.
+    last_at = (
+        select(func.max(CheckIn.checked_in_at))
+        .where(CheckIn.customer_id == Customer.id)
+        .correlate(Customer)
+        .scalar_subquery()
     )
-    matching: Select = (
-        select(Customer, latest.c.at)
-        .outerjoin(latest, latest.c.customer_id == Customer.id)
-        .where(Customer.active.is_(active), *_text_conditions(text))
-    )
+    conditions = [Customer.active.is_(active), *_text_conditions(text)]
     if came_in is not CameIn.ANY:
-        matching = matching.where(_came_in_condition(came_in, latest.c.at))
+        conditions.append(_came_in_condition(came_in, last_at))
 
-    total = db.scalar(select(func.count()).select_from(matching.subquery())) or 0
+    total = (
+        db.scalar(select(func.count()).select_from(Customer).where(*conditions)) or 0
+    )
     page = min(page, max(1, math.ceil(total / page_size)))
 
+    at = last_at.label("last_check_in_at")
     by_name = (Customer.first_name, Customer.last_name, Customer.id)
-    order = (
-        by_name if sort is SortBy.NAME else (latest.c.at.desc().nulls_last(), *by_name)
-    )
+    order = by_name if sort is SortBy.NAME else (at.desc().nulls_last(), *by_name)
     found = db.execute(
-        matching.order_by(*order).limit(page_size).offset((page - 1) * page_size)
+        select(Customer, at)
+        .where(*conditions)
+        .order_by(*order)
+        .limit(page_size)
+        .offset((page - 1) * page_size)
     )
     return CustomerPage(
         rows=[CustomerRow(customer, at) for customer, at in found],
@@ -148,14 +148,14 @@ def _text_conditions(text: str) -> list[ColumnElement[bool]]:
         # The stored form is "+972" and the number without its 0.
         written = literal("0", String) + func.substr(Customer.phone, 5, type_=String)
         return [written.like(_contains(digits), escape=_LIKE_ESCAPE)]
+    # SQLite's LIKE ignores case for English letters only; any other
+    # letter (Cyrillic, accented Latin) matches as typed. Lowering the text
+    # in Python wouldn't help: SQLite's lower() is ASCII-only too, so an
+    # exact "Анна" would stop matching.
     return [
         or_(
-            func.lower(Customer.first_name).like(
-                _contains(word.lower()), escape=_LIKE_ESCAPE
-            ),
-            func.lower(Customer.last_name).like(
-                _contains(word.lower()), escape=_LIKE_ESCAPE
-            ),
+            Customer.first_name.like(_contains(word), escape=_LIKE_ESCAPE),
+            Customer.last_name.like(_contains(word), escape=_LIKE_ESCAPE),
         )
         for word in cleaned.split()
     ]
@@ -164,20 +164,19 @@ def _text_conditions(text: str) -> list[ColumnElement[bool]]:
 def _phone_digits(text: str) -> str | None:
     """The digits to look for, as the number is written locally, if
     ``text`` is a phone search; ``None`` if it's a name search (or empty)."""
-    kept = "".join(
-        char for char in text if not (char.isspace() or char in _PHONE_SEPARATORS)
-    )
-    if not kept or not kept.isascii() or not kept.isdigit():
+    # The same cleaning as a phone being saved (customers.py).
+    kept = clean_phone_text(text)
+    digits = kept.removeprefix("+")
+    if not digits or not digits.isascii() or not digits.isdigit():
         return None
-    # "972" is a country code when "+" or "00" says so, or when a whole
-    # number follows it; otherwise it's three digits from inside a number.
-    country_code_typed = text.lstrip().startswith("+") or kept.startswith("00972")
-    for country_code in ("00972", "972"):
+    for country_code in COUNTRY_CODES:
         rest = kept.removeprefix(country_code)
-        if rest != kept and (country_code_typed or len(rest.lstrip("0")) >= 8):
+        # A bare "972" is a country code only when a whole number follows
+        # it; otherwise it's three digits from inside a number.
+        if rest != kept and (country_code != "972" or len(rest.lstrip("0")) >= 8):
             # "+972 050…" (the local 0 kept by mistake) is the same number.
-            return "0" + kept.removeprefix(country_code).removeprefix("0")
-    return kept
+            return "0" + rest.removeprefix("0")
+    return digits
 
 
 def _contains(value: str) -> str:
@@ -189,17 +188,13 @@ def _contains(value: str) -> str:
     return f"%{escaped}%"
 
 
-def _came_in_condition(came_in: CameIn, latest_at) -> ColumnElement[bool]:
+def _came_in_condition(
+    came_in: CameIn, last_at: ColumnElement[datetime | None]
+) -> ColumnElement[bool]:
     days = 7 if came_in is CameIn.LAST_7_DAYS else 30
-    since = _start_of_days_ago(days - 1)
-    if came_in is CameIn.NOT_IN_30_DAYS:
-        return or_(latest_at.is_(None), latest_at < since)
-    return and_(latest_at.is_not(None), latest_at >= since)
-
-
-def _start_of_days_ago(days: int) -> datetime:
-    """The UTC moment the local (Israel) day ``days`` days before today
-    started."""
+    # Today and the days before it, in Israel time.
     today = to_local(utc_now()).date()
-    start = datetime.combine(today - timedelta(days=days), time(), get_settings().tz)
-    return start.astimezone(UTC)
+    since = start_of_local_day(today - timedelta(days=days - 1))
+    if came_in is CameIn.NOT_IN_30_DAYS:
+        return or_(last_at.is_(None), last_at < since)
+    return and_(last_at.is_not(None), last_at >= since)

@@ -113,6 +113,20 @@ def test_latin_names_match_in_either_case(db: Session) -> None:
     assert found(db, text="noa LEVI") == [noa]
 
 
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [("Анна", "Анна"), ("Ив", "Анна"), ("Émile", "Émile"), ("анна", None)],
+)
+def test_other_alphabets_match_as_written(
+    db: Session, typed: str, expected: str | None
+) -> None:
+    add(db, "Анна", "Иванова", "+972501111111")
+    add(db, "Émile", "Roux", "+972502222222")
+
+    names = [customer.first_name for customer in found(db, text=typed)]
+    assert names == ([] if expected is None else [expected])
+
+
 def test_wildcards_are_plain_characters(db: Session) -> None:
     add(db, "Noa", "Levi", "+972501111111")
     odd = add(db, "A_b", "100%", "+972502222222")

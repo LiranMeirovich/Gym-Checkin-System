@@ -3,7 +3,7 @@
 // filters live in the address (?q=&came_in=&sort=&page=&inactive=1), so
 // coming back from a customer's page keeps them. The search box sends what
 // was typed after a short pause.
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router";
 import { api, type Schemas } from "../backend/client";
@@ -259,14 +259,17 @@ function SearchBox({
     setText(value);
   }
 
+  // The newest onSearch without restarting the wait: the list page renders
+  // again whenever an answer arrives, each time with a new function.
+  const search = useEffectEvent((q: string) => onSearch(q));
   useEffect(() => {
     if (text === synced) return;
     const timer = setTimeout(() => {
       setSynced(text);
-      onSearch(text);
+      search(text);
     }, SEARCH_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [text, synced, onSearch]);
+  }, [text, synced]);
 
   return (
     <div className={`${ui.field} ${styles.search}`}>

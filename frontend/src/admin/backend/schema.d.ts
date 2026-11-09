@@ -672,6 +672,8 @@ export interface components {
          *     or ``manual`` (at the desk).
          */
         CheckInHistoryEntry: {
+            /** Id */
+            id: number;
             /**
              * Checked In At
              * Format: date-time

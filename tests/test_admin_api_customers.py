@@ -410,12 +410,12 @@ def test_the_check_in_history_is_newest_first(
     answer = as_instructor.get(f"/api/customers/{noa_id}/checkins")
 
     assert answer.status_code == 200
-    assert answer.json() == {
-        "checkins": [
-            {"checked_in_at": "2026-11-03T12:00:00+02:00", "method": "manual"},
-            {"checked_in_at": "2026-11-02T12:00:00+02:00", "method": "manual"},
-        ]
-    }
+    assert [(c["checked_in_at"], c["method"]) for c in answer.json()["checkins"]] == [
+        ("2026-11-03T12:00:00+02:00", "manual"),
+        ("2026-11-02T12:00:00+02:00", "manual"),
+    ]
+    ids = [c["id"] for c in answer.json()["checkins"]]
+    assert ids[0] > ids[1]
 
 
 def test_the_check_in_history_of_an_unknown_customer_is_a_404(

@@ -41,6 +41,8 @@ MAX_AGE_YEARS = 120
 _NATIONAL_LENGTHS = {"5": 9, "7": 9, "2": 8, "3": 8, "4": 8, "8": 8, "9": 8}
 # Typed or pasted between the digits; removed before checking.
 _PHONE_SEPARATORS = frozenset("-.()/")
+# Israel's country code as it's typed, longest first.
+COUNTRY_CODES = ("+972", "00972", "972")
 
 
 class CustomerField(StrEnum):
@@ -90,18 +92,13 @@ class Added:
     reactivated: bool
 
 
-def normalise_phone(text: str) -> str:
-    """The one stored form of an Israeli phone number (E.164,
-    ``+972501234567``), however it was typed: ``050-123 4567``,
-    ``+972 50 123 4567``, ``972501234567``, ``00972-50-1234567`` and
-    ``+972 050…`` are all the same number. Raises ``InvalidPhoneError``.
-
-    Israel is assumed as the country (decision 0023).
-    """
-    # NFKC turns full-width digits into plain ones. Spaces, separators and
-    # invisible direction marks (which copying a number out of Hebrew text
-    # often adds) are dropped.
-    kept = "".join(
+def clean_phone_text(text: str) -> str:
+    """A typed phone number with only its digits and a "+" left (anything
+    else stays, for the caller's check to refuse). NFKC turns full-width
+    digits into plain ones; spaces, separators and invisible direction
+    marks (which copying a number out of Hebrew text often adds) are
+    dropped. Also used by the customer search (``customer_search``)."""
+    return "".join(
         char
         for char in unicodedata.normalize("NFKC", text)
         if not (
@@ -110,7 +107,18 @@ def normalise_phone(text: str) -> str:
             or unicodedata.category(char) == "Cf"
         )
     )
-    for country_code in ("+972", "00972", "972"):
+
+
+def normalise_phone(text: str) -> str:
+    """The one stored form of an Israeli phone number (E.164,
+    ``+972501234567``), however it was typed: ``050-123 4567``,
+    ``+972 50 123 4567``, ``972501234567``, ``00972-50-1234567`` and
+    ``+972 050…`` are all the same number. Raises ``InvalidPhoneError``.
+
+    Israel is assumed as the country (decision 0023).
+    """
+    kept = clean_phone_text(text)
+    for country_code in COUNTRY_CODES:
         if kept.startswith(country_code):
             # "+972 050…": the local 0 kept by mistake.
             national = kept.removeprefix(country_code).removeprefix("0")

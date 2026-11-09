@@ -615,6 +615,7 @@ class CheckInHistoryEntry(Answer):
     """``checked_in_at`` is the gym's local time; ``method`` is ``phone``
     or ``manual`` (at the desk)."""
 
+    id: int
     checked_in_at: datetime
     method: CheckInMethod
 

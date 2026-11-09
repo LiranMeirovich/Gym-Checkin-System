@@ -78,7 +78,9 @@ def history(customer_id: CustomerId, db: DbSession, _login: CanView) -> CheckInH
     return CheckInHistory(
         checkins=[
             CheckInHistoryEntry(
-                checked_in_at=to_local(checkin.checked_in_at), method=checkin.method
+                id=checkin.id,
+                checked_in_at=to_local(checkin.checked_in_at),
+                method=checkin.method,
             )
             for checkin in recent_checkins(db, customer)
         ]
