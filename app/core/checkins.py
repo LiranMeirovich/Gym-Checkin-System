@@ -68,6 +68,8 @@ from app.core.plans import (
 # A check-in this soon after the last one is "already checked in" (design
 # doc: "Rules the code and database enforce").
 REPEAT_WINDOW = timedelta(minutes=10)
+# How many check-ins the customer page shows (decision 0037).
+HISTORY_LENGTH = 10
 
 
 class HealthFormRequiredError(ValueError):
@@ -193,6 +195,24 @@ def check_in_manually(
         after={"customer_id": customer.id, "plan_choice_id": covering.id},
     )
     return CheckInResult(Outcome.CHECKED_IN, check_in, covering)
+
+
+def recent_checkins(
+    db: Session, customer: Customer, *, limit: int = HISTORY_LENGTH
+) -> list[CheckIn]:
+    """The customer's latest check-ins, newest first, by any method. Only
+    reads, and isn't logged: it's what every staff member sees on the
+    customer page."""
+    if limit < 1:
+        raise ValueError("limit must be at least 1")
+    return list(
+        db.scalars(
+            select(CheckIn)
+            .where(CheckIn.customer_id == customer.id)
+            .order_by(CheckIn.checked_in_at.desc(), CheckIn.id.desc())
+            .limit(limit)
+        )
+    )
 
 
 @dataclass(frozen=True)
