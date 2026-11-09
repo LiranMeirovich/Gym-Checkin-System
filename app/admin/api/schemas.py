@@ -730,7 +730,10 @@ SettingsField = Literal[
 class GymSettingsAnswer(Answer):
     """The current settings. ``problems`` lists the settings whose stored
     value is broken: each shows its default here, and saving the form
-    writes a good value over it (decision 0016)."""
+    writes a good value over it (decision 0016). ``unknown_settings`` says
+    the table holds a row for a setting the code no longer has: every other
+    screen refuses to load the settings until a migration removes it, and
+    this screen can't."""
 
     gym_name: str | None
     manager_email: str | None
@@ -738,6 +741,7 @@ class GymSettingsAnswer(Answer):
     lock_screen_minutes: int
     instructor_lock_screen_minutes: int
     problems: list[SettingsField]
+    unknown_settings: bool
 
 
 class SettingsChange(BaseModel):

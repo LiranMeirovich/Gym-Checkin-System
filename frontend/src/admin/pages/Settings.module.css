@@ -53,3 +53,8 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* A stored row the code no longer knows: above the form. */
+.warning {
+  margin-block: 0 var(--space-4);
+}

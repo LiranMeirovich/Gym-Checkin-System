@@ -98,6 +98,7 @@ def test_reading_shows_values_and_defaults(browser: TestClient) -> None:
         "lock_screen_minutes": 5,
         "instructor_lock_screen_minutes": 60,
         "problems": [],
+        "unknown_settings": False,
     }
 
 
@@ -105,7 +106,7 @@ def test_saving_the_form(browser: TestClient, db: Session) -> None:
     before = log_entries(db)
     answer = browser.put("/api/settings", json=FORM)
     assert answer.status_code == 200
-    assert answer.json() == {**FORM, "problems": []}
+    assert answer.json() == {**FORM, "problems": [], "unknown_settings": False}
 
     db.rollback()
     saved = load_gym_settings(db)
@@ -227,10 +228,11 @@ def test_a_broken_stored_row_is_reported_and_can_be_saved_over(
     assert load_gym_settings(db).lock_screen_minutes == 10
 
 
-def test_a_row_for_a_removed_setting_is_not_listed(
+def test_a_row_for_a_removed_setting_is_a_warning_not_a_field(
     browser: TestClient, db: Session
 ) -> None:
     store_raw(db, "old_setting", "1")
     answer = browser.get("/api/settings")
     assert answer.status_code == 200
     assert answer.json()["problems"] == []
+    assert answer.json()["unknown_settings"] is True

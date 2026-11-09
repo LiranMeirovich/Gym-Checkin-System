@@ -112,6 +112,9 @@ function SettingsForm({ settings }: { settings: Settings }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Draft>(() => draftOf(settings));
   const [problems, setProblems] = useState(settings.problems);
+  const [unknownSettings, setUnknownSettings] = useState(
+    settings.unknown_settings,
+  );
   const [errors, setErrors] = useState<Errors>({});
   // Positions in draft.recipients of the addresses the server refused.
   const [badRecipients, setBadRecipients] = useState<number[]>([]);
@@ -132,8 +135,12 @@ function SettingsForm({ settings }: { settings: Settings }) {
 
   function removeRecipient(position: number) {
     update({ recipients: draft.recipients.filter((_, i) => i !== position) });
-    // The rows after it move up; their marks would point at the wrong row.
-    setBadRecipients([]);
+    // The rows after it move up one, and so do their marks.
+    setBadRecipients((marks) =>
+      marks
+        .filter((p) => p !== position)
+        .map((p) => (p > position ? p - 1 : p)),
+    );
   }
 
   async function submit(event: FormEvent) {
@@ -180,6 +187,7 @@ function SettingsForm({ settings }: { settings: Settings }) {
         queryClient.setQueryData(SETTINGS_KEY, data);
         setDraft(draftOf(data));
         setProblems(data.problems);
+        setUnknownSettings(data.unknown_settings);
         setErrors({});
         setBadRecipients([]);
         setOutcome({ ok: true, text: "ההגדרות נשמרו." });
@@ -223,6 +231,16 @@ function SettingsForm({ settings }: { settings: Settings }) {
 
   return (
     <form className={ui.form} onSubmit={submit} noValidate>
+      {unknownSettings && (
+        // A row for a setting the code no longer has: the other screens
+        // can't load the settings (the gym's name in the header, the
+        // health form) until it's removed, and saving here doesn't remove
+        // it.
+        <p role="alert" className={styles.warning}>
+          במסד הנתונים שמורה הגדרה שהמערכת כבר לא מכירה, ולכן שם המכון לא נטען
+          במסכים אחרים. שמירה כאן לא תתקן את זה: פנו למי שמתחזק את המערכת.
+        </p>
+      )}
       <Panel title="המכון">
         <Field id="gym-name" label="שם המכון" error={errors.gym_name}>
           <input

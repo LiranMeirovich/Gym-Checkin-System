@@ -67,12 +67,14 @@ def save(
 
 def _answer(db: DbSession) -> GymSettingsAnswer:
     settings, problems = load_gym_settings_for_editing(db)
+    fields = {key.split(".")[0] for key in problems}
     return GymSettingsAnswer(
         **settings.model_dump(mode="json"),
         # A problem's key is the setting, or "setting.position" for one
-        # recipient. A row for a setting the code no longer has can't be
-        # repaired from this screen, so it isn't listed.
-        problems=sorted({key.split(".")[0] for key in problems} & _FIELDS),
+        # recipient; any other key is a row for a setting the code no
+        # longer has, which this screen can only warn about.
+        problems=sorted(fields & _FIELDS),
+        unknown_settings=bool(fields - _FIELDS),
     )
 
 
