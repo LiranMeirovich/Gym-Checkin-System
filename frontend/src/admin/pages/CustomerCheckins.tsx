@@ -1,8 +1,8 @@
-// The customer page's latest check-ins, newest first, and how each was
-// made (decision 0037). Who checked someone in at the desk is in the
-// activity log, not here. A check-in from the dialog refreshes it.
+// The customer page's latest check-ins, newest first: the day and time
+// (decision 0037). Who checked someone in at the desk is in the activity
+// log, not here. A check-in from the dialog refreshes it.
 import { useQuery } from "@tanstack/react-query";
-import { api, type Schemas } from "../backend/client";
+import { api } from "../backend/client";
 import {
   checkinsKey,
   formatDate,
@@ -11,13 +11,6 @@ import {
 } from "../customers";
 import { NoConnection } from "../../shared/NoConnection";
 import ui from "../layout/ui.module.css";
-
-type Method = Schemas["CheckInHistoryEntry"]["method"];
-
-const METHOD_NAMES: Record<Method, string> = {
-  phone: "בטלפון",
-  manual: "בדלפק",
-};
 
 async function fetchCheckins(id: number) {
   const { data, response } = await api.GET(
@@ -50,7 +43,6 @@ export function CustomerCheckins({ customer }: { customer: Customer }) {
               <tr>
                 <th>תאריך</th>
                 <th>שעה</th>
-                <th>איך</th>
               </tr>
             </thead>
             <tbody>
@@ -58,7 +50,6 @@ export function CustomerCheckins({ customer }: { customer: Customer }) {
                 <tr key={checkin.id}>
                   <td>{formatDate(checkin.checked_in_at)}</td>
                   <td>{formatTime(checkin.checked_in_at)}</td>
-                  <td className={ui.muted}>{METHOD_NAMES[checkin.method]}</td>
                 </tr>
               ))}
             </tbody>

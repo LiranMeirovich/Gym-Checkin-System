@@ -24,13 +24,7 @@ import styles from "./Dashboard.module.css";
 const CHECKINS_EVERY_MS = 15_000;
 const LISTS_EVERY_MS = 60_000;
 
-type Method = Schemas["TodaysCheckIn"]["method"];
 type CustomerName = Schemas["CustomerName"];
-
-const METHOD_NAMES: Record<Method, string> = {
-  phone: "בטלפון",
-  manual: "בדלפק",
-};
 
 function failed(path: string, response: Response): Error {
   return new Error(`GET ${path} failed: ${response.status}`);
@@ -151,7 +145,6 @@ function TodaysCheckins() {
               <tr>
                 <th>שעה</th>
                 <th>לקוח</th>
-                <th>איך</th>
               </tr>
             </thead>
             <tbody>
@@ -163,7 +156,6 @@ function TodaysCheckins() {
                   <td>
                     <CustomerLink customer={checkin.customer} />
                   </td>
-                  <td className={ui.muted}>{METHOD_NAMES[checkin.method]}</td>
                 </tr>
               ))}
             </tbody>
