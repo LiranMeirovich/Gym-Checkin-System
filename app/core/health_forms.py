@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import StrEnum
 
-from sqlalchemy import exists, select
+from sqlalchemy import Exists, Select, exists, func, select
 from sqlalchemy.orm import Session
 
 from app.core.activity_log import Action, Target, record
@@ -41,6 +41,9 @@ ADULT_AGE = 18
 VALIDITY_MONTHS = 12
 
 SIGNER_NAME_MAX_LENGTH = 100
+# The dashboard lists forms ending this many days from today or sooner
+# (design doc: "Validity and access").
+EXPIRING_WITHIN = timedelta(days=30)
 DETAILS_MAX_LENGTH = 200
 
 
@@ -459,6 +462,77 @@ def status_of(db: Session, form: HealthForm | None) -> HealthFormStatus:
     if form.needs_doctor_note and not has_doctor_note(db, form):
         return HealthFormStatus(FormState.NEEDS_DOCTOR_NOTE, form.expires_on)
     return HealthFormStatus(FormState.VALID, form.expires_on)
+
+
+@dataclass(frozen=True)
+class CustomerForm:
+    """A customer and the form that counts for them today."""
+
+    customer: Customer
+    form: HealthForm
+
+
+def forms_needing_doctor_note(db: Session, today: date) -> list[CustomerForm]:
+    """Active customers whose form that counts on ``today`` has a "yes"
+    answer and no doctor's note yet, so they can't check in until staff add
+    one. Oldest signature first: the longest wait at the top."""
+    return _customer_forms(
+        db,
+        _counting_forms(today)
+        .where(HealthForm.needs_doctor_note, ~_noted())
+        .order_by(HealthForm.signed_on, HealthForm.id),
+    )
+
+
+def forms_expiring(db: Session, today: date) -> list[CustomerForm]:
+    """Active customers whose form that counts on ``today`` is valid and
+    ends within ``EXPIRING_WITHIN`` (today included), soonest first. A
+    customer who has already signed a newer form isn't listed: the newer
+    one is the form that counts."""
+    return _customer_forms(
+        db,
+        _counting_forms(today)
+        .where(
+            HealthForm.expires_on <= today + EXPIRING_WITHIN,
+            ~HealthForm.needs_doctor_note | _noted(),
+        )
+        .order_by(HealthForm.expires_on, HealthForm.id),
+    )
+
+
+def _counting_forms(today: date) -> Select[tuple[HealthForm, Customer]]:
+    """Each active customer's form that counts on ``today``, the same
+    rule as ``counting_form()``: their newest form that hasn't expired."""
+    ranked = (
+        select(
+            HealthForm.id,
+            func.row_number()
+            .over(
+                partition_by=HealthForm.customer_id,
+                order_by=(HealthForm.signed_on.desc(), HealthForm.id.desc()),
+            )
+            .label("rank"),
+        )
+        .where(HealthForm.expires_on >= today)
+        .subquery()
+    )
+    return (
+        select(HealthForm, Customer)
+        .join(ranked, ranked.c.id == HealthForm.id)
+        .join(Customer, Customer.id == HealthForm.customer_id)
+        .where(ranked.c.rank == 1, Customer.active)
+    )
+
+
+def _noted() -> Exists:
+    """The form in the query has a doctor's note."""
+    return exists().where(DoctorNote.health_form_id == HealthForm.id)
+
+
+def _customer_forms(
+    db: Session, query: Select[tuple[HealthForm, Customer]]
+) -> list[CustomerForm]:
+    return [CustomerForm(customer, form) for form, customer in db.execute(query)]
 
 
 def has_doctor_note(db: Session, form: HealthForm) -> bool:

@@ -36,14 +36,14 @@ written to the activity log (decision 0021); a manual check-in is.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.activity_log import Action, Target, record
-from app.core.clock import to_local, utc_now
+from app.core.clock import start_of_local_day, to_local, utc_now
 from app.core.customers import CustomerInactiveError
 from app.core.health_forms import HealthFormStatus, health_form_status
 from app.core.models import (
@@ -211,6 +211,24 @@ def recent_checkins(
             .where(CheckIn.customer_id == customer.id)
             .order_by(CheckIn.checked_in_at.desc(), CheckIn.id.desc())
             .limit(limit)
+        )
+    )
+
+
+def checkins_on(db: Session, day: date) -> list[CheckIn]:
+    """Every check-in on the Israel-local ``day``, by any method and any
+    customer, newest first, each with its customer loaded. Only reads, and
+    isn't logged: it's what every staff member sees on the dashboard, the
+    instructor's answer to fake check-ins (design doc: "Fake check-ins")."""
+    return list(
+        db.scalars(
+            select(CheckIn)
+            .options(joinedload(CheckIn.customer))
+            .where(
+                CheckIn.checked_in_at >= start_of_local_day(day),
+                CheckIn.checked_in_at < start_of_local_day(day + timedelta(days=1)),
+            )
+            .order_by(CheckIn.checked_in_at.desc(), CheckIn.id.desc())
         )
     )
 
