@@ -20,6 +20,11 @@ choice"; decisions 0004, 0017, 0032).
   the customer's latest 10 check-ins, newest first, for the customer page.
   Who checked them in at the desk is in the activity log, not here.
 
+- ``GET /api/checkins/today`` (``customers.view``, every role): every
+  check-in on the gym's local day, newest first, with who checked in,
+  for the dashboard. A self-refreshing screen marks its repeats as
+  background refreshes, so they don't hold off the auto-lock.
+
 The dialog reads what it shows beforehand from ``GET .../health-form`` and
 ``GET .../plan``; this route only acts.
 """
@@ -41,9 +46,12 @@ from app.admin.api.schemas import (
     CheckInRefused,
     CheckInRefusedOther,
     CoveringPlan,
+    CustomerName,
     ManualCheckInRequest,
     NotLoggedIn,
     PlanOption,
+    TodaysCheckIn,
+    TodaysCheckIns,
 )
 from app.admin.security import StaffLogin, require_permission
 from app.core.checkins import (
@@ -51,11 +59,13 @@ from app.core.checkins import (
     PlanNotAllowedError,
     PlanRequiredError,
     check_in_manually,
+    checkins_on,
     recent_checkins,
 )
 from app.core.clock import to_local
 from app.core.customers import CustomerInactiveError
 from app.core.db import DbSession
+from app.core.health_forms import local_today
 from app.core.permissions import Permission
 from app.core.plans import PriceNotSetError
 
@@ -65,6 +75,12 @@ router = APIRouter(
         status.HTTP_401_UNAUTHORIZED: {"model": NotLoggedIn},
         **NOT_FOUND,
     },
+)
+
+# Every customer's check-ins, not one customer's.
+gym_router = APIRouter(
+    prefix="/checkins",
+    responses={status.HTTP_401_UNAUTHORIZED: {"model": NotLoggedIn}},
 )
 
 CanCheckIn = Annotated[
@@ -83,6 +99,25 @@ def history(customer_id: CustomerId, db: DbSession, _login: CanView) -> CheckInH
                 method=checkin.method,
             )
             for checkin in recent_checkins(db, customer)
+        ]
+    )
+
+
+@gym_router.get("/today", responses={status.HTTP_403_FORBIDDEN: {}})
+def today(db: DbSession, _login: CanView) -> TodaysCheckIns:
+    return TodaysCheckIns(
+        checkins=[
+            TodaysCheckIn(
+                id=checkin.id,
+                checked_in_at=to_local(checkin.checked_in_at),
+                method=checkin.method,
+                customer=CustomerName(
+                    id=checkin.customer.id,
+                    first_name=checkin.customer.first_name,
+                    last_name=checkin.customer.last_name,
+                ),
+            )
+            for checkin in checkins_on(db, local_today())
         ]
     )
 

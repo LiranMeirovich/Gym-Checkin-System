@@ -34,6 +34,15 @@ React shows:
 - ``POST /api/customers/{id}/doctor-notes/{note_id}/open``: a note's image
   (``health_forms.view_contents``), logged like opening a form. A note
   that isn't this customer's is a 404.
+
+Across all customers, for the dashboard (``health_forms.view_status``,
+every role: status and dates, never the answers). Only active customers,
+each by the form that counts for them today:
+
+- ``GET /api/health-forms/needing-note``: forms with a "yes" answer and no
+  doctor's note yet, oldest signature first.
+- ``GET /api/health-forms/expiring``: valid forms whose last day is within
+  30 days, soonest first.
 """
 
 from typing import Annotated
@@ -44,6 +53,9 @@ from fastapi.responses import JSONResponse
 from app.admin.api.customers import NOT_FOUND, CustomerId, customer_or_404
 from app.admin.api.schemas import (
     MAX_ID,
+    CustomerFormEntry,
+    CustomerForms,
+    CustomerName,
     DoctorNoteConflict,
     DoctorNoteRefused,
     DoctorNoteRequest,
@@ -73,6 +85,15 @@ router = APIRouter(
     },
 )
 
+# Every customer's forms, not one customer's.
+gym_router = APIRouter(
+    prefix="/health-forms",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": NotLoggedIn},
+        status.HTTP_403_FORBIDDEN: {},
+    },
+)
+
 CanViewStatus = Annotated[
     StaffLogin, Depends(require_permission(Permission.HEALTH_FORMS_VIEW_STATUS))
 ]
@@ -91,6 +112,35 @@ NoteId = Annotated[int, Path(ge=1, le=MAX_ID)]
 
 def status_answer(found: health_forms.HealthFormStatus) -> HealthFormStatus:
     return HealthFormStatus(state=found.state, valid_until=found.valid_until)
+
+
+def customer_forms(found: list[health_forms.CustomerForm]) -> CustomerForms:
+    return CustomerForms(
+        forms=[
+            CustomerFormEntry(
+                customer=CustomerName(
+                    id=entry.customer.id,
+                    first_name=entry.customer.first_name,
+                    last_name=entry.customer.last_name,
+                ),
+                signed_on=entry.form.signed_on,
+                valid_until=entry.form.expires_on,
+            )
+            for entry in found
+        ]
+    )
+
+
+@gym_router.get("/needing-note")
+def needing_doctor_note(db: DbSession, _login: CanViewStatus) -> CustomerForms:
+    return customer_forms(
+        health_forms.forms_needing_doctor_note(db, health_forms.local_today())
+    )
+
+
+@gym_router.get("/expiring")
+def expiring(db: DbSession, _login: CanViewStatus) -> CustomerForms:
+    return customer_forms(health_forms.forms_expiring(db, health_forms.local_today()))
 
 
 @router.get("/health-form")

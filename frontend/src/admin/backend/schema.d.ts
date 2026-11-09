@@ -125,6 +125,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest */
+        get: operations["latest_api_customers_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/customers/{customer_id}": {
         parameters: {
             query?: never;
@@ -401,6 +418,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/health-forms/needing-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Needing Doctor Note */
+        get: operations["needing_doctor_note_api_health_forms_needing_note_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/health-forms/expiring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Expiring */
+        get: operations["expiring_api_health_forms_expiring_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/customers/{customer_id}/checkins": {
         parameters: {
             query?: never;
@@ -429,6 +480,23 @@ export interface paths {
         put?: never;
         /** Check In */
         post: operations["check_in_api_customers__customer_id__check_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/checkins/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Today */
+        get: operations["today_api_checkins_today_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -851,6 +919,32 @@ export interface components {
             notes?: string | null;
         };
         /**
+         * CustomerFormEntry
+         * @description A customer and the form that counts for them today: when it was
+         *     signed and its last valid day. Never the answers.
+         */
+        CustomerFormEntry: {
+            customer: components["schemas"]["CustomerName"];
+            /**
+             * Signed On
+             * Format: date
+             */
+            signed_on: string;
+            /**
+             * Valid Until
+             * Format: date
+             */
+            valid_until: string;
+        };
+        /**
+         * CustomerForms
+         * @description Customers whose form needs attention, in the order the list gives.
+         */
+        CustomerForms: {
+            /** Forms */
+            forms: components["schemas"]["CustomerFormEntry"][];
+        };
+        /**
          * CustomerList
          * @description One page of the list. ``total`` counts every match on all pages;
          *     ``page`` is the page answered (the last one, for a page past the end)
@@ -886,6 +980,19 @@ export interface components {
             active: boolean;
             /** Last Check In At */
             last_check_in_at: string | null;
+        };
+        /**
+         * CustomerName
+         * @description Who a dashboard row is about: enough to show the name and link to
+         *     the customer's page.
+         */
+        CustomerName: {
+            /** Id */
+            id: number;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
         };
         /**
          * CustomerRefused
@@ -1135,6 +1242,37 @@ export interface components {
             needs_doctor_note: boolean;
             /** Doctor Note Ids */
             doctor_note_ids: number[];
+        };
+        /**
+         * LatestCustomer
+         * @description A newly added customer. ``created_at`` is the gym's local time, with
+         *     its offset.
+         */
+        LatestCustomer: {
+            /** Id */
+            id: number;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Phone */
+            phone: string;
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * LatestCustomers
+         * @description The newest active customers, newest first, whether added at the desk
+         *     or signed up on their phone (decision 0035).
+         */
+        LatestCustomers: {
+            /** Customers */
+            customers: components["schemas"]["LatestCustomer"][];
         };
         /**
          * LinkCodeIssued
@@ -1636,6 +1774,29 @@ export interface components {
                 [key: string]: "invalid";
             };
         };
+        /**
+         * TodaysCheckIn
+         * @description One of today's check-ins, with who checked in.
+         */
+        TodaysCheckIn: {
+            /** Id */
+            id: number;
+            /**
+             * Checked In At
+             * Format: date-time
+             */
+            checked_in_at: string;
+            method: components["schemas"]["CheckInMethod"];
+            customer: components["schemas"]["CustomerName"];
+        };
+        /**
+         * TodaysCheckIns
+         * @description Every check-in today (the gym's local day), newest first.
+         */
+        TodaysCheckIns: {
+            /** Checkins */
+            checkins: components["schemas"]["TodaysCheckIn"][];
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1987,6 +2148,42 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    latest_api_customers_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestCustomers"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3201,6 +3398,78 @@ export interface operations {
             };
         };
     };
+    needing_doctor_note_api_health_forms_needing_note_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerForms"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    expiring_api_health_forms_expiring_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerForms"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     history_api_customers__customer_id__checkins_get: {
         parameters: {
             query?: never;
@@ -3314,6 +3583,42 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    today_api_checkins_today_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TodaysCheckIns"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
