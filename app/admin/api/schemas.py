@@ -601,13 +601,19 @@ class CheckInForbidden(Answer):
 class StaffMember(Answer):
     """``locked_until`` (the gym's local time, with its offset): locked out
     after too many wrong PINs until then; ``None`` if not locked now. A
-    PIN reset lifts it."""
+    PIN reset lifts it. The ``can_*`` fields say what the logged-in staff
+    member may do to this account (decision 0039), so the screen offers
+    only that; the routes check the same rules."""
 
     id: int
     display_name: str
     role: Role
     active: bool
     locked_until: datetime | None
+    can_reset_pin: bool
+    can_change_role: bool
+    # Deactivate, or reactivate an inactive account.
+    can_toggle_active: bool
 
 
 class StaffList(Answer):

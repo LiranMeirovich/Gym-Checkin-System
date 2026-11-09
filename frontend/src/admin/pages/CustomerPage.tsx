@@ -430,7 +430,7 @@ function ActiveToggle({
       <OutcomeMessage outcome={outcome} />
       <button
         type="button"
-        className={active ? styles.quiet : ui.primary}
+        className={active ? ui.quiet : ui.primary}
         onClick={toggle}
         disabled={sending}
       >

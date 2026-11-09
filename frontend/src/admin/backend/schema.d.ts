@@ -1448,7 +1448,9 @@ export interface components {
          * StaffMember
          * @description ``locked_until`` (the gym's local time, with its offset): locked out
          *     after too many wrong PINs until then; ``None`` if not locked now. A
-         *     PIN reset lifts it.
+         *     PIN reset lifts it. The ``can_*`` fields say what the logged-in staff
+         *     member may do to this account (decision 0039), so the screen offers
+         *     only that; the routes check the same rules.
          */
         StaffMember: {
             /** Id */
@@ -1460,6 +1462,12 @@ export interface components {
             active: boolean;
             /** Locked Until */
             locked_until: string | null;
+            /** Can Reset Pin */
+            can_reset_pin: boolean;
+            /** Can Change Role */
+            can_change_role: boolean;
+            /** Can Toggle Active */
+            can_toggle_active: boolean;
         };
         /** StaffName */
         StaffName: {

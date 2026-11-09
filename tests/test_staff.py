@@ -23,6 +23,7 @@ from app.core.staff import (
     OwnerAccountError,
     PinCheck,
     SetupAlreadyDoneError,
+    actions_for,
     change_role,
     check_pin,
     create_owner,
@@ -744,3 +745,61 @@ def test_checking_a_pin_isnt_logged(
     check_pin(db, instructor, PIN)
 
     assert log(db) == before
+
+
+# ── What the Staff screen offers ────────────────────────────────────────
+
+
+def offered(by: StaffUser, member: StaffUser) -> tuple[bool, bool, bool]:
+    may = actions_for(by, member)
+    return (may.reset_pin, may.change_role, may.toggle_active)
+
+
+def test_the_owner_may_do_everything_but_change_their_own_account(
+    db: Session, owner: StaffUser, manager: StaffUser, instructor: StaffUser
+) -> None:
+    assert offered(owner, owner) == (True, False, False)
+    assert offered(owner, manager) == (True, True, True)
+    assert offered(owner, instructor) == (True, True, True)
+
+
+def test_a_manager_is_offered_instructors_and_their_own_pin(
+    db: Session, owner: StaffUser, manager: StaffUser, instructor: StaffUser
+) -> None:
+    other = create_staff_user(db, "Gil", Role.MANAGER, OTHER_PIN, by=owner)
+
+    assert offered(manager, owner) == (False, False, False)
+    assert offered(manager, other) == (False, False, False)
+    assert offered(manager, manager) == (True, False, False)
+    # Promoting an instructor makes a manager: the owner's to do.
+    assert offered(manager, instructor) == (True, False, True)
+
+
+def try_action(db: Session, action: str, by: StaffUser, member: StaffUser) -> bool:
+    """Whether the change behind ``action`` goes through; undone either way."""
+    savepoint = db.begin_nested()
+    try:
+        if action == "reset_pin":
+            reset_pin(db, member, OTHER_PIN, by=by)
+        elif action == "change_role":
+            other = Role.INSTRUCTOR if member.role == Role.MANAGER else Role.MANAGER
+            change_role(db, member, other, by=by)
+        else:
+            deactivate(db, member, by=by)
+    except (OwnerAccountError, NeedsOwnerError):
+        return False
+    finally:
+        savepoint.rollback()
+    return True
+
+
+def test_what_is_offered_matches_what_is_allowed(
+    db: Session, owner: StaffUser, manager: StaffUser, instructor: StaffUser
+) -> None:
+    other = create_staff_user(db, "Gil", Role.MANAGER, OTHER_PIN, by=owner)
+    for by in (owner, manager):
+        for member in (owner, manager, other, instructor):
+            may = actions_for(by, member)
+            for action in ("reset_pin", "change_role", "toggle_active"):
+                allowed = try_action(db, action, by, member)
+                assert allowed is getattr(may, action), (by.id, member.id, action)

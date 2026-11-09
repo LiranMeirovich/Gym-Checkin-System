@@ -388,3 +388,23 @@ def test_the_owner_downgrade_makes_them_a_manager_again(
         "instructor",
         "manager",
     ]
+
+
+def test_no_active_manager_stops_the_owner_upgrade(alembic_config: Config) -> None:
+    command.upgrade(alembic_config, BEFORE_OWNER)
+    with get_engine().begin() as connection:
+        connection.exec_driver_sql(SEED_STAFF[0])
+        connection.exec_driver_sql(
+            "UPDATE staff_users SET active = 0 WHERE role = 'manager'"
+        )
+
+    with pytest.raises(RuntimeError, match="no active manager"):
+        command.upgrade(alembic_config, "head")
+
+    assert current_revision() == BEFORE_OWNER
+    assert [role for _id, role in staff_roles()] == [
+        "manager",
+        "manager",
+        "instructor",
+        "manager",
+    ]

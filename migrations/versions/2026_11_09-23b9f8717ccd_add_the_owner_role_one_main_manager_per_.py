@@ -9,7 +9,8 @@ alone manages the other managers and whose account nobody else can change.
 A partial unique index lets at most one row be the owner.
 
 Existing databases get an owner straight away: the oldest active manager
-(lowest id). Without one, nobody could manage managers.
+(lowest id). Without one, nobody could manage managers, so a database that
+has staff but no active manager stops the upgrade before anything changes.
 
 The table is rebuilt (batch mode) to change the role CHECK; rows are copied
 unchanged. SQLite can't reflect the expression index on the name, so it's
@@ -57,6 +58,21 @@ def _replace_role_check(roles: Sequence[str]) -> None:
 
 
 def upgrade() -> None:
+    staff, active_managers = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "SELECT count(*), count(*) FILTER"
+                " (WHERE role = 'manager' AND active) FROM staff_users"
+            )
+        )
+        .one()
+    )
+    if staff and not active_managers:
+        raise RuntimeError(
+            "staff_users has staff but no active manager to make the owner."
+            " Reactivate a manager first; nothing was changed."
+        )
     _drop_name_index()
     _replace_role_check(("owner", "manager", "instructor"))
     _create_name_index()

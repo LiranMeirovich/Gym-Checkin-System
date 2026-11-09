@@ -29,7 +29,7 @@ def test_fills_a_fresh_database_with_every_kind_of_customer() -> None:
     demo_data.main()
 
     with Session(get_engine()) as db:
-        assert count(db, StaffUser) == 2
+        assert count(db, StaffUser) == 3
         assert count(db, Customer) == 12
         assert count(db, CheckIn) == 4
         customers = db.scalars(select(Customer)).all()

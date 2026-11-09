@@ -63,10 +63,22 @@ def instructor(db: Session, owner: StaffUser) -> StaffUser:
     return member
 
 
+# The browsers log_in() opened in this test, closed after it.
+_browsers: list[TestClient] = []
+
+
+@pytest.fixture(autouse=True)
+def close_browsers() -> Iterator[None]:
+    yield
+    while _browsers:
+        _browsers.pop().close()
+
+
 def log_in(member: StaffUser) -> TestClient:
     """A browser of its own, logged in as ``member``, sending its CSRF
     token with every request."""
     browser = TestClient(app, base_url=ORIGIN, follow_redirects=False)
+    _browsers.append(browser)
     answer = browser.post(
         "/api/login", json={"staff_id": member.id, "pin": PIN}, headers=SAME_ORIGIN
     )
@@ -105,6 +117,9 @@ def test_adding_a_member(as_owner: TestClient, db: Session) -> None:
         "role": "instructor",
         "active": True,
         "locked_until": None,
+        "can_reset_pin": True,
+        "can_change_role": True,
+        "can_toggle_active": True,
     }
     assert check_pin(db, db.get_one(StaffUser, added["id"]), PIN) is PinCheck.OK
 
@@ -303,6 +318,22 @@ def test_a_manager_manages_instructors(
         200,
         200,
     ]
+
+
+def test_the_list_says_what_the_viewer_may_do(
+    owner: StaffUser, manager: StaffUser, instructor: StaffUser
+) -> None:
+    listed = log_in(manager).get("/api/staff").json()["staff"]
+
+    offered = {
+        m["id"]: (m["can_reset_pin"], m["can_change_role"], m["can_toggle_active"])
+        for m in listed
+    }
+    assert offered == {
+        owner.id: (False, False, False),
+        manager.id: (True, False, False),
+        instructor.id: (True, False, True),
+    }
 
 
 def test_the_owner_deactivates_a_manager(

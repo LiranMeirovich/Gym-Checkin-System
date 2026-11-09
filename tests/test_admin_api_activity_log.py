@@ -244,6 +244,9 @@ def test_the_staff_list_has_everyone_active_first(
             "role": "instructor",
             "active": True,
             "locked_until": None,
+            "can_reset_pin": True,
+            "can_change_role": True,
+            "can_toggle_active": True,
         },
         {
             "id": manager.id,
@@ -251,6 +254,9 @@ def test_the_staff_list_has_everyone_active_first(
             "role": "owner",
             "active": True,
             "locked_until": None,
+            "can_reset_pin": True,
+            "can_change_role": False,
+            "can_toggle_active": False,
         },
         {
             "id": other.id,
@@ -258,5 +264,8 @@ def test_the_staff_list_has_everyone_active_first(
             "role": "instructor",
             "active": False,
             "locked_until": None,
+            "can_reset_pin": True,
+            "can_change_role": True,
+            "can_toggle_active": True,
         },
     ]

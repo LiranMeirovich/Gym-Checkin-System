@@ -27,6 +27,7 @@ changes: ``check_pin`` records nothing.
 """
 
 import unicodedata
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
@@ -81,6 +82,35 @@ class PinCheck(StrEnum):
     # ``locked_until`` on the row says until when.
     LOCKED = "locked"
     INACTIVE = "inactive"
+
+
+@dataclass(frozen=True)
+class StaffActions:
+    """What a staff member may do to one account, by the rules below, so
+    the Staff screen offers only what these functions would allow."""
+
+    reset_pin: bool
+    change_role: bool
+    # Deactivate, or reactivate an inactive account.
+    toggle_active: bool
+
+
+def actions_for(by: StaffUser, staff: StaffUser) -> StaffActions:
+    """What ``by`` may do to ``staff``'s account: the same rules
+    ``reset_pin``, ``change_role``, ``deactivate`` and ``reactivate``
+    enforce (whether ``by`` may manage staff at all is the route's check)."""
+    if staff.role == Role.OWNER:
+        return StaffActions(
+            reset_pin=staff.id == by.id, change_role=False, toggle_active=False
+        )
+    may_change = _may_change(by, staff.role)
+    # manager <-> instructor: either way the manager role is involved.
+    other_role = Role.INSTRUCTOR if staff.role == Role.MANAGER else Role.MANAGER
+    return StaffActions(
+        reset_pin=may_change or staff.id == by.id,
+        change_role=may_change and _may_change(by, other_role),
+        toggle_active=may_change,
+    )
 
 
 def any_staff_exists(db: Session) -> bool:
@@ -356,10 +386,14 @@ def _ensure_not_owner(staff: StaffUser) -> None:
         raise OwnerAccountError("the owner's account can't be changed this way")
 
 
-def _ensure_may_change(by: StaffUser, role: Role | str) -> None:
-    """``by`` may change an account with ``role`` (or give it that role):
-    a manager's needs ``STAFF_MANAGE_MANAGERS``."""
-    if Role(role) is Role.MANAGER and not has_permission(
+def _may_change(by: StaffUser, role: Role | str) -> bool:
+    """Whether ``by`` may change an account with ``role`` (or give it
+    that role): a manager's needs ``STAFF_MANAGE_MANAGERS``."""
+    return Role(role) is not Role.MANAGER or has_permission(
         by.role, Permission.STAFF_MANAGE_MANAGERS
-    ):
+    )
+
+
+def _ensure_may_change(by: StaffUser, role: Role | str) -> None:
+    if not _may_change(by, role):
         raise NeedsOwnerError("only the owner manages managers")

@@ -1,10 +1,10 @@
 // The staff accounts, for the owner and managers (staff.manage; decisions
 // 0018, 0037, 0039): who can log in, who is locked out, and the changes:
-// add, reset a PIN, change a role, deactivate and reactivate. Managers'
-// accounts are the owner's to change (staff.manage_managers), and the
-// owner's account is nobody else's: only the owner resets their own PIN.
-// The server checks every rule; this screen only doesn't offer what it
-// would refuse.
+// add, reset a PIN, change a role, deactivate and reactivate. Which
+// changes each account allows is the server's rule (app/core/staff.py):
+// every listed member comes with can_reset_pin, can_change_role and
+// can_toggle_active, and this screen offers only those.
+
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
@@ -12,7 +12,8 @@ import { formatDate, formatTime } from "../customers";
 import { Field, PageHead } from "../layout/ui";
 import ui from "../layout/ui.module.css";
 import { can } from "../roles";
-import { ROLE_NAMES, useSession, type Session } from "../session";
+import { ROLE_NAMES, useSession } from "../session";
+import { Forbidden, STAFF_KEY, fetchStaff } from "../staff";
 import {
   NoConnection,
   NO_CONNECTION_TRY_AGAIN,
@@ -27,10 +28,6 @@ type Role = Schemas["RoleChange"]["role"];
 type StaffField = "display_name" | "pin";
 type Conflict = Schemas["StaffConflict"]["error"];
 
-// The same key as the activity log's staff filter, so a change here shows
-// there too.
-const STAFF_KEY = ["staff"] as const;
-
 const FIELD_ERRORS: Record<StaffField, string> = {
   display_name: "שם: 1 עד 50 תווים, בלי תווים נסתרים",
   pin: "קוד: 6 עד 12 ספרות, לא ספרה אחת חוזרת ולא רצף (כמו 123456)",
@@ -42,35 +39,8 @@ const CONFLICTS: Record<Conflict, string> = {
     "את חשבון הבעלים אי אפשר להוריד בתפקיד או להשבית, ורק הבעלים מאפסים את הקוד שלהם.",
 };
 
-/** What the logged-in staff member may do to ``member``'s account: the
- * same rules the server checks (app/core/staff.py). */
-function allowed(session: Session, member: Member) {
-  const self = member.id === session.staff.id;
-  const managesManagers = can(session, "staff.manage_managers");
-  if (member.role === "owner") {
-    return { resetPin: self, changeRole: false, toggleActive: false };
-  }
-  const mayChange = member.role !== "manager" || managesManagers;
-  return {
-    // Your own PIN is always yours to reset.
-    resetPin: mayChange || self,
-    // Either way the change involves the manager role.
-    changeRole: managesManagers,
-    toggleActive: mayChange && !self,
-  };
-}
-
-class Forbidden extends Error {}
-
-async function fetchStaff() {
-  const { data, response } = await api.GET("/api/staff");
-  if (data) return data.staff;
-  if (response.status === 403) throw new Forbidden();
-  throw new Error(`GET /api/staff failed: ${response.status}`);
-}
-
 /** What a change came back with, for the message above the table. */
-type Outcome = { ok: true; text: string } | { ok: false; text: string };
+type Outcome = { ok: boolean; text: string };
 
 /** A change's answer: the changed member, or a refusal to show. */
 type Answer = {
@@ -101,7 +71,7 @@ export function Staff() {
   const staff = useQuery({
     queryKey: STAFF_KEY,
     queryFn: fetchStaff,
-    retry: (count, error) => !(error instanceof Forbidden) && count < 3,
+    retry: false,
   });
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [resetting, setResetting] = useState<Member | null>(null);
@@ -251,7 +221,6 @@ function StaffTable({
         <tbody>
           {staff.map((member) => {
             const self = member.id === session.staff.id;
-            const may = allowed(session, member);
             return (
               <tr
                 key={member.id}
@@ -267,7 +236,7 @@ function StaffTable({
                 </td>
                 <td className={ui.rowAction}>
                   <div className={styles.rowButtons}>
-                    {may.resetPin && (
+                    {member.can_reset_pin && (
                       <button
                         type="button"
                         disabled={busy !== null}
@@ -276,7 +245,7 @@ function StaffTable({
                         איפוס קוד
                       </button>
                     )}
-                    {may.changeRole && (
+                    {member.can_change_role && (
                       <button
                         type="button"
                         disabled={busy !== null}
@@ -287,10 +256,10 @@ function StaffTable({
                           : "הפיכה למנהל/ת"}
                       </button>
                     )}
-                    {may.toggleActive && (
+                    {member.can_toggle_active && (
                       <button
                         type="button"
-                        className={member.active ? styles.quiet : undefined}
+                        className={member.active ? ui.quiet : undefined}
                         disabled={busy !== null}
                         onClick={() => toggleActive(member)}
                       >

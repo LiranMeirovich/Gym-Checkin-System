@@ -51,6 +51,7 @@ from app.core.staff import (
     InvalidDisplayNameError,
     NeedsOwnerError,
     OwnerAccountError,
+    actions_for,
     change_role,
     create_staff_user,
     deactivate,
@@ -72,16 +73,13 @@ CanManage = Annotated[StaffLogin, Depends(require_permission(Permission.STAFF_MA
 StaffId = Annotated[int, Path(ge=1, le=MAX_ID)]
 
 NOT_FOUND = {status.HTTP_404_NOT_FOUND: {}}
-# Not refused by require_permission but by the account's rule: a manager
-# changing a manager's account. The same answer, a plain 403.
-NEEDS_OWNER = HTTPException(status.HTTP_403_FORBIDDEN)
 REFUSED = {status.HTTP_400_BAD_REQUEST: {"model": StaffRefused}}
 CONFLICT = {status.HTTP_409_CONFLICT: {"model": StaffConflict}}
 
 
 @router.get("")
-def staff_list(db: DbSession, _login: CanManage) -> StaffList:
-    return StaffList(staff=[member(s) for s in list_staff(db)])
+def staff_list(db: DbSession, login: CanManage) -> StaffList:
+    return StaffList(staff=[member(s, login.staff) for s in list_staff(db)])
 
 
 @router.post(
@@ -104,8 +102,8 @@ def add(
     except DuplicateDisplayNameError:
         return _conflict("name_taken")
     except NeedsOwnerError:
-        raise NEEDS_OWNER from None
-    return member(added)
+        raise _needs_owner() from None
+    return member(added, login.staff)
 
 
 @router.put(
@@ -124,8 +122,8 @@ def new_pin(
     except OwnerAccountError:
         return _conflict("owner")
     except NeedsOwnerError:
-        raise NEEDS_OWNER from None
-    return member(staff)
+        raise _needs_owner() from None
+    return member(staff, login.staff)
 
 
 @router.put(
@@ -142,8 +140,8 @@ def new_role(
     except OwnerAccountError:
         return _conflict("owner")
     except NeedsOwnerError:
-        raise NEEDS_OWNER from None
-    return member(staff)
+        raise _needs_owner() from None
+    return member(staff, login.staff)
 
 
 @router.post(
@@ -160,8 +158,8 @@ def make_inactive(
     except OwnerAccountError:
         return _conflict("owner")
     except NeedsOwnerError:
-        raise NEEDS_OWNER from None
-    return member(staff)
+        raise _needs_owner() from None
+    return member(staff, login.staff)
 
 
 @router.post(
@@ -178,19 +176,33 @@ def make_active(
     except DuplicateDisplayNameError:
         return _conflict("name_taken")
     except NeedsOwnerError:
-        raise NEEDS_OWNER from None
-    return member(staff)
+        raise _needs_owner() from None
+    return member(staff, login.staff)
 
 
-def member(staff: StaffUser) -> StaffMember:
+def member(staff: StaffUser, viewer: StaffUser) -> StaffMember:
+    """``staff`` as ``viewer`` sees them: with what ``viewer`` may do to
+    the account (``app.core.staff.actions_for``)."""
     until = locked_until(staff)
+    may = actions_for(viewer, staff)
     return StaffMember(
         id=staff.id,
         display_name=staff.display_name,
         role=staff.role,
         active=staff.active,
         locked_until=to_local(until) if until else None,
+        can_reset_pin=may.reset_pin,
+        can_change_role=may.change_role,
+        can_toggle_active=may.toggle_active,
     )
+
+
+def _needs_owner() -> HTTPException:
+    # Not refused by require_permission but by the account's rule: a
+    # manager changing a manager's account. The same answer, a plain 403.
+    # A new exception each time: one shared instance would collect every
+    # request's traceback.
+    return HTTPException(status.HTTP_403_FORBIDDEN)
 
 
 def staff_or_404(db: DbSession, staff_id: int) -> StaffUser:
