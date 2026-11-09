@@ -49,6 +49,9 @@ class CheckIn(Base):
             name="method_names_its_source",
         ),
         Index(None, "customer_id", "checked_in_at"),
+        # Everyone's check-ins in a stretch of time: today's on the
+        # dashboard, a month's for the report.
+        Index(None, "checked_in_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
