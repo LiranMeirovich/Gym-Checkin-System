@@ -521,6 +521,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current */
+        get: operations["current_api_settings_get"];
+        /** Save */
+        put: operations["save_api_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -868,6 +886,26 @@ export interface components {
          * @enum {string}
          */
         FormState: "valid" | "needs_doctor_note" | "missing";
+        /**
+         * GymSettingsAnswer
+         * @description The current settings. ``problems`` lists the settings whose stored
+         *     value is broken: each shows its default here, and saving the form
+         *     writes a good value over it (decision 0016).
+         */
+        GymSettingsAnswer: {
+            /** Gym Name */
+            gym_name: string | null;
+            /** Manager Email */
+            manager_email: string | null;
+            /** Report Recipients */
+            report_recipients: string[];
+            /** Lock Screen Minutes */
+            lock_screen_minutes: number;
+            /** Instructor Lock Screen Minutes */
+            instructor_lock_screen_minutes: number;
+            /** Problems */
+            problems: ("gym_name" | "manager_email" | "report_recipients" | "lock_screen_minutes" | "instructor_lock_screen_minutes")[];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1382,6 +1420,40 @@ export interface components {
             csrf_token: string;
             /** Lock After Seconds */
             lock_after_seconds: number;
+        };
+        /**
+         * SettingsChange
+         * @description The whole form. ``manager_email: null`` clears it; the gym name
+         *     can't be cleared. The limits only keep huge values out; the rules
+         *     (address format, minute ranges) are ``app.core.gym_settings``'s, and
+         *     break a field, not the request.
+         */
+        SettingsChange: {
+            /** Gym Name */
+            gym_name: string;
+            /** Manager Email */
+            manager_email: string | null;
+            /** Report Recipients */
+            report_recipients: string[];
+            /** Lock Screen Minutes */
+            lock_screen_minutes: number;
+            /** Instructor Lock Screen Minutes */
+            instructor_lock_screen_minutes: number;
+        };
+        /**
+         * SettingsRefused
+         * @description 400: nothing was saved. ``errors`` names each setting that breaks
+         *     its rule: ``invalid``, or ``duplicate`` for an address listed twice in
+         *     ``report_recipients``. ``bad_recipients`` holds the positions (from 0)
+         *     of the recipient addresses that aren't valid.
+         */
+        SettingsRefused: {
+            /** Errors */
+            errors: {
+                [key: string]: "invalid" | "duplicate";
+            };
+            /** Bad Recipients */
+            bad_recipients: number[];
         };
         /**
          * SetupRefused
@@ -3520,6 +3592,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityLogRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_api_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GymSettingsAnswer"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    save_api_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GymSettingsAnswer"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsRefused"];
                 };
             };
             /** @description Unauthorized */

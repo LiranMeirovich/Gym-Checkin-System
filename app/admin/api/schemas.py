@@ -10,6 +10,7 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictBool,
+    StrictInt,
     StringConstraints,
 )
 
@@ -712,3 +713,55 @@ class ActivityLogPage(Answer):
 
     entries: list[ActivityLogItem]
     next_before_id: int | None
+
+
+# ── Settings ────────────────────────────────────────────────────────────
+
+# The settings the screen edits, named as in ``app.core.gym_settings``.
+SettingsField = Literal[
+    "gym_name",
+    "manager_email",
+    "report_recipients",
+    "lock_screen_minutes",
+    "instructor_lock_screen_minutes",
+]
+
+
+class GymSettingsAnswer(Answer):
+    """The current settings. ``problems`` lists the settings whose stored
+    value is broken: each shows its default here, and saving the form
+    writes a good value over it (decision 0016)."""
+
+    gym_name: str | None
+    manager_email: str | None
+    report_recipients: list[str]
+    lock_screen_minutes: int
+    instructor_lock_screen_minutes: int
+    problems: list[SettingsField]
+
+
+class SettingsChange(BaseModel):
+    """The whole form. ``manager_email: null`` clears it; the gym name
+    can't be cleared. The limits only keep huge values out; the rules
+    (address format, minute ranges) are ``app.core.gym_settings``'s, and
+    break a field, not the request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gym_name: str = Field(max_length=500)
+    manager_email: str | None = Field(max_length=500)
+    report_recipients: list[Annotated[str, Field(max_length=500)]] = Field(
+        max_length=50
+    )
+    lock_screen_minutes: StrictInt
+    instructor_lock_screen_minutes: StrictInt
+
+
+class SettingsRefused(Answer):
+    """400: nothing was saved. ``errors`` names each setting that breaks
+    its rule: ``invalid``, or ``duplicate`` for an address listed twice in
+    ``report_recipients``. ``bad_recipients`` holds the positions (from 0)
+    of the recipient addresses that aren't valid."""
+
+    errors: dict[SettingsField, Literal["invalid", "duplicate"]]
+    bad_recipients: list[int]
