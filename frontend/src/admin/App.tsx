@@ -7,7 +7,7 @@ import { ActivityLog } from "./pages/ActivityLog";
 import { CustomerPage } from "./pages/CustomerPage";
 import { Customers } from "./pages/Customers";
 import { FillInHealthForm } from "./pages/FillInHealthForm";
-import { Home } from "./pages/Home";
+import { Dashboard } from "./pages/Dashboard";
 import { LockScreen } from "./pages/LockScreen";
 import { NewCustomer } from "./pages/NewCustomer";
 import { Prices } from "./pages/Prices";
@@ -22,7 +22,7 @@ export function App() {
       <Route path="/setup" element={<Setup />} />
       <Route path="/login" element={<LockScreen />} />
       <Route element={<RequireSession />}>
-        <Route index element={<Home />} />
+        <Route index element={<Dashboard />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/customers/new" element={<NewCustomer />} />
         <Route path="/customers/:id" element={<CustomerPage />} />
