@@ -42,7 +42,7 @@ After approval:
 - Track the steps in a todo list.
 
 ## 4. Work through the steps
-- Implement one step at a time, and run the affected tests (CLAUDE.md, "How we work") and ruff.
+- Implement one step at a time, and run the affected tests (CLAUDE.md, "How we work") and ruff. Run tests quietly, `uv run pytest -q --tb=short <files>`, so a pass is one line and a failure only its short traceback. Run them here, not in a subagent: a few files are cheaper than a subagent's cold start.
 - After each step, give a short architecture-level summary: what it adds, how it fits with the rest, any deviation from the plan, and anything risky. No line-by-line code walkthrough.
 - **Stay inside the approved scope list.** Before each step, say in one line which scope items it builds. If something not on the list seems needed or useful (a new field, filter, button, message, rule or behaviour), stop and ask; build it only after an OK, and add it to the list. Never add it quietly and mention it afterwards.
 - After each step's summary, name anything built that isn't on the scope list. There should be none.

@@ -15,9 +15,14 @@ This runs at the end of a feature, after its steps have been built, reviewed and
 
 ## 2. Check the whole branch
 Run each check and report the results plainly. Never hide a failure.
-1. **Tests:** `uv run pytest`
+
+Checks 1–3 print a lot, and anything printed here is resent with every later message. So hand them to **one subagent on Sonnet** (Agent tool, `model: "sonnet"`, general-purpose) and keep only its report. The subagent runs them as given, changes no files, and answers in a few lines: each check passed or failed, the test counts, and for each failure only the test or file name and its short error. If it reports a failure, look at that one test or file here, not the whole output.
+1. **Tests:** `uv run pytest -q --tb=short`
 2. **Lint and format:** `uv run ruff check .` and `uv run ruff format --check .`
 3. **Secrets:** `gitleaks git --log-opts="main..HEAD"` (skip with a note if gitleaks isn't installed yet)
+
+Then, in this session:
+
 4. **Code review:** run `/code-review` on the branch.
 5. **Project rules:** check the diff against the hard rules in CLAUDE.md: no real customer data, nothing gym-specific in code, no secrets, no admin routes on the public app, money in agorot, permission checks on the server, no `localStorage`.
 6. **Design doc:** does the feature match the design doc? List any difference.
@@ -26,7 +31,7 @@ Run each check and report the results plainly. Never hide a failure.
 ## 3. Fix what came up
 - Present the findings, most important first, and say which ones you suggest fixing now and which can be follow-ups.
 - Fix the ones the developer approves, one at a time, with a one-line summary of each fix. A fix in a protected area needs the developer's OK first.
-- Re-run the checks that failed until they pass.
+- Re-run the checks that failed until they pass: a single failing test file here with `-q --tb=short`, and the full checks again through the Sonnet subagent.
 
 ## 4. Update the project status
 Update the **Project status** section of CLAUDE.md so the next session (which won't remember this one) knows where things stand:

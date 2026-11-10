@@ -57,7 +57,7 @@ One feature = one branch = one PR = **one Claude session**. New sessions don't r
 3. Run `/finish-feature`: check the whole branch (tests, lint, gitleaks, `/code-review`), fix, and update the Project status above.
 4. Commit the wrap-up, push, open a PR, and merge into `main`. Close the session.
 
-Use `/explain-changes` any time for an architecture-level walkthrough of a change, and `/decision` to record a technical choice. Subagents are only for side jobs inside a session (searching, research), never for building a feature. Work on one feature at a time.
+Use `/explain-changes` any time for an architecture-level walkthrough of a change, and `/decision` to record a technical choice. Subagents are only for side jobs inside a session (searching, research, running `/finish-feature`'s checks on Sonnet), never for building a feature. Work on one feature at a time.
 
 ## How we work
 - **Talk architecture, not code.** Explain changes in terms of components, responsibilities, data flow, boundaries and trade-offs. Don't walk through code line by line; show a snippet only when it carries a decision (a schema, a route contract, a security check) or when asked.
