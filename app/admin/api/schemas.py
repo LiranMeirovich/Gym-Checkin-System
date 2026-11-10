@@ -479,6 +479,8 @@ class HealthFormSummary(Answer):
     # The doctor's notes added for this form, oldest first; each image is
     # opened (and logged) on its own.
     doctor_note_ids: list[int]
+    # The manager accepted it without a note (decision 0041).
+    accepted: bool
 
 
 class HealthFormList(Answer):

@@ -194,12 +194,24 @@ def test_an_instructor_sees_the_status(
     assert response.json() == {"state": "valid", "valid_until": "2027-11-03"}
 
 
-def test_a_yes_answer_shows_as_needing_a_doctors_note(
-    as_instructor: Staff, db: Session, customer: Customer
+def test_a_yes_answer_shows_the_manager_its_waiting(
+    as_manager: Staff, db: Session, customer: Customer
 ) -> None:
     add_form(db, customer, date(2026, 11, 4), yes=True)
 
-    assert as_instructor.status(customer.id).json()["state"] == "needs_doctor_note"
+    assert as_manager.status(customer.id).json()["state"] == "needs_doctor_note"
+
+
+def test_a_yes_answer_shows_an_instructor_valid(
+    as_instructor: Staff, db: Session, customer: Customer
+) -> None:
+    # As it is for getting in: reviewing is the manager's (decision 0041).
+    add_form(db, customer, date(2026, 11, 4), yes=True)
+
+    assert as_instructor.status(customer.id).json() == {
+        "state": "valid",
+        "valid_until": "2027-11-03",
+    }
 
 
 def test_no_form_shows_as_missing(as_instructor: Staff, customer: Customer) -> None:
@@ -247,6 +259,7 @@ def test_the_manager_lists_forms_newest_first(
         "signed_by_guardian": False,
         "needs_doctor_note": True,
         "doctor_note_ids": [],
+        "accepted": False,
     }
     # Listing isn't opening.
     assert opens_logged(db) == []
@@ -461,6 +474,8 @@ def test_the_manager_accepts_a_form_and_it_counts(
     assert (entry.target_type, entry.target_id) == (Target.HEALTH_FORM, form.id)
     # Reviewed: no note is wanted any more.
     assert add_note(as_manager, customer.id, data_url(photo())).status_code == 409
+    [listed] = as_manager.forms(customer.id).json()["forms"]
+    assert (listed["accepted"], listed["doctor_note_ids"]) == (True, [])
 
 
 def test_an_instructor_cant_accept_a_form(
@@ -677,13 +692,16 @@ def test_signing_on_the_pc_makes_the_form_valid_and_is_logged(
     assert json.loads(entry.after_json) == {"customer_id": customer.id}
 
 
-def test_a_yes_answer_on_the_pc_needs_a_doctors_note(
-    as_instructor: Staff, customer: Customer
+def test_a_yes_answer_on_the_pc_waits_for_the_managers_review(
+    as_instructor: Staff, db: Session, customer: Customer
 ) -> None:
     response = sign(as_instructor, customer.id, answers=ALL_NO | {"diabetes": True})
 
+    # Valid to the instructor; saved as waiting for the manager.
     assert response.status_code == 200
-    assert response.json()["state"] == "needs_doctor_note"
+    assert response.json()["state"] == "valid"
+    db.rollback()
+    assert db.scalars(select(HealthForm)).one().needs_doctor_note is True
 
 
 def test_bad_fields_are_all_refused_and_nothing_is_saved(

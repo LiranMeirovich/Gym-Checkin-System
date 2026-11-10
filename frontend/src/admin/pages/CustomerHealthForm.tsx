@@ -1,10 +1,12 @@
 // The Health form section of a customer's page (design doc: "Validity and
-// access"; decision 0031). Every staff member sees whether the form is
-// valid, needs a doctor's note, or is missing, and until when; can open
-// the form on this PC for a customer to fill in while it's missing; and
-// can add a doctor's note to a form with a "yes". Only the manager sees
-// the signed forms and their notes and can open them; the server checks
-// that too, and logs every opening.
+// access"; decisions 0031, 0041). Every staff member sees whether the form
+// is valid or missing, and until when, and can open the form on this PC
+// for a customer to fill in while it's missing. A form with a "yes" lets
+// the customer in, but waits for the manager's review: only they see it
+// as waiting (the server sends instructors "valid"), and they accept it or
+// add a doctor's note. Only the manager sees the signed forms and their
+// notes and can open them; the server checks that too, and logs every
+// opening.
 import { useState, type ChangeEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
@@ -54,7 +56,7 @@ async function fetchForms(id: number): Promise<FormSummary[]> {
 
 const STATE_BADGES: Record<Status["state"], { tone: Tone; text: string }> = {
   valid: { tone: "ok", text: "בתוקף" },
-  needs_doctor_note: { tone: "warn", text: "חסר אישור רפואי" },
+  needs_doctor_note: { tone: "warn", text: "ממתינה לבדיקה" },
   missing: { tone: "stop", text: "אין הצהרה בתוקף" },
 };
 
@@ -64,7 +66,7 @@ function statusText(status: Status): string {
     case "valid":
       return `בתוקף עד ${until}`;
     case "needs_doctor_note":
-      return `חסר אישור רפואי: הלקוח סימן "כן" בשאלון (הטופס עד ${until}). אין כניסה עד שיתקבל אישור.`;
+      return `הלקוח סימן "כן" בשאלון (בתוקף עד ${until}). הכניסה מותרת; יש לפתוח את הטופס ולאשר אותו, או להוסיף אישור רפואי.`;
     case "missing":
       return "חסרה או פג תוקפה. אין כניסה עד שהלקוח ימלא טופס.";
   }
@@ -102,7 +104,12 @@ export function CustomerHealthForm({ customer }: { customer: Customer }) {
             </p>
           )}
           {customer.active && data.state === "needs_doctor_note" && (
-            <DoctorNoteUpload customer={customer} />
+            <>
+              {can(session, "health_forms.accept") && (
+                <AcceptForm customer={customer} />
+              )}
+              <DoctorNoteUpload customer={customer} />
+            </>
           )}
         </>
       )}
@@ -113,6 +120,68 @@ export function CustomerHealthForm({ customer }: { customer: Customer }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** The manager accepts the form as it is, without a doctor's note. Can't
+ * be undone: the acceptance stays on record (decision 0041). */
+function AcceptForm({ customer }: { customer: Customer }) {
+  const queryClient = useQueryClient();
+  const [message, setMessage] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+
+  async function accept() {
+    if (!window.confirm("לאשר את ההצהרה בלי אישור רפואי? אי אפשר לבטל.")) {
+      return;
+    }
+    setMessage(null);
+    setSending(true);
+    try {
+      const { data, error, response } = await api.POST(
+        "/api/customers/{customer_id}/health-form/accept",
+        { params: { path: { customer_id: customer.id } } },
+      );
+      if (data) {
+        queryClient.setQueryData(healthFormKey(customer.id), data);
+        void queryClient.invalidateQueries({
+          queryKey: healthFormsKey(customer.id),
+        });
+        return;
+      }
+      if (response.status === 409 && error && "error" in error) {
+        // The status changed since the page loaded: show what's there now.
+        void queryClient.invalidateQueries({
+          queryKey: healthFormKey(customer.id),
+        });
+        setMessage(
+          error.error === "customer_inactive"
+            ? "הלקוח לא פעיל. יש להפעיל אותו מחדש קודם."
+            : "הטופס כבר לא ממתין לבדיקה.",
+        );
+      } else {
+        setMessage("האישור נכשל. נסו שוב.");
+      }
+    } catch {
+      setMessage(NO_CONNECTION_TRY_AGAIN);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <>
+      {message && <p role="alert">{message}</p>}
+      <p>
+        <button
+          type="button"
+          className={ui.primary}
+          onClick={() => void accept()}
+          disabled={sending}
+        >
+          אישור ההצהרה בלי אישור רפואי
+        </button>
+      </p>
+    </>
   );
 }
 
@@ -158,7 +227,7 @@ function DoctorNoteUpload({ customer }: { customer: Customer }) {
         setMessage(
           error.error === "customer_inactive"
             ? "הלקוח לא פעיל. יש להפעיל אותו מחדש קודם."
-            : "הטופס כבר לא ממתין לאישור רפואי.",
+            : "הטופס כבר לא ממתין לבדיקה.",
         );
       } else {
         setMessage("השמירה נכשלה. נסו שוב.");
@@ -323,7 +392,11 @@ function SignedForms({ customer }: { customer: Customer }) {
                   {!form.needs_doctor_note ? (
                     "לא נדרש"
                   ) : form.doctor_note_ids.length === 0 ? (
-                    <StatusBadge tone="warn">נדרש, חסר</StatusBadge>
+                    form.accepted ? (
+                      "אושר בלי אישור רפואי"
+                    ) : (
+                      <StatusBadge tone="warn">ממתין לבדיקה</StatusBadge>
+                    )
                   ) : (
                     form.doctor_note_ids.map((noteId, index) => (
                       <button

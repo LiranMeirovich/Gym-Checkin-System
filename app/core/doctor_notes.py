@@ -179,6 +179,17 @@ def _waiting_form(db: Session, customer: Customer, today: date) -> HealthForm:
     return form
 
 
+def accepted_forms(db: Session, forms: list[HealthForm]) -> set[int]:
+    """The ids of those of ``forms`` the manager accepted without a note."""
+    return set(
+        db.scalars(
+            select(HealthFormAcceptance.health_form_id).where(
+                HealthFormAcceptance.health_form_id.in_([form.id for form in forms])
+            )
+        )
+    )
+
+
 def notes_by_form(db: Session, forms: list[HealthForm]) -> dict[int, list[int]]:
     """The ids of each form's notes, oldest first, keyed by form id. The
     images stay unloaded."""

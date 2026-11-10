@@ -6,7 +6,9 @@ React shows:
 
 - ``GET /api/customers/{id}/health-form``: valid, needs a doctor's note,
   or missing, and until when (``health_forms.view_status``, every role).
-  Never the answers.
+  Never the answers. Only staff who review forms (``health_forms.accept``)
+  see "needs a doctor's note"; to the rest a form waiting for review is
+  valid, as it is for getting in (decision 0041).
 - ``GET /api/customers/{id}/health-forms``: every form the customer has
   signed, newest first, with its doctor's notes' ids but without their
   contents (``health_forms.view_contents``, the manager).
@@ -81,7 +83,7 @@ from app.core.clock import local_today
 from app.core.customers import CustomerInactiveError
 from app.core.db import DbSession
 from app.core.http import JPEG_DATA_URL, PNG_DATA_URL, data_url_bytes
-from app.core.permissions import Permission
+from app.core.permissions import Permission, has_permission
 
 router = APIRouter(
     prefix="/customers/{customer_id}",
@@ -124,6 +126,16 @@ def status_answer(found: health_forms.HealthFormStatus) -> HealthFormStatus:
     return HealthFormStatus(state=found.state, valid_until=found.valid_until)
 
 
+def status_for(
+    login: StaffLogin, found: health_forms.HealthFormStatus
+) -> HealthFormStatus:
+    """``found`` as ``login``'s staff member sees it: only those who review
+    forms see one waiting for review (decision 0041)."""
+    if not has_permission(login.staff.role, Permission.HEALTH_FORMS_ACCEPT):
+        found = found.as_entry_status()
+    return status_answer(found)
+
+
 def customer_forms(found: list[health_forms.CustomerForm]) -> CustomerForms:
     return CustomerForms(
         forms=[
@@ -149,11 +161,11 @@ def expiring(db: DbSession, _login: CanViewStatus) -> CustomerForms:
 
 @router.get("/health-form")
 def health_form_status(
-    customer_id: CustomerId, db: DbSession, _login: CanViewStatus
+    customer_id: CustomerId, db: DbSession, login: CanViewStatus
 ) -> HealthFormStatus:
     customer = customer_or_404(db, customer_id)
-    return status_answer(
-        health_forms.health_form_status(db, customer, health_forms.local_today())
+    return status_for(
+        login, health_forms.health_form_status(db, customer, health_forms.local_today())
     )
 
 
@@ -164,6 +176,7 @@ def health_form_list(
     customer = customer_or_404(db, customer_id)
     forms = health_forms.list_forms(db, customer)
     notes = doctor_notes.notes_by_form(db, forms)
+    accepted = doctor_notes.accepted_forms(db, forms)
     return HealthFormList(
         forms=[
             HealthFormSummary(
@@ -175,6 +188,7 @@ def health_form_list(
                 signed_by_guardian=form.signed_by_guardian,
                 needs_doctor_note=form.needs_doctor_note,
                 doctor_note_ids=notes[form.id],
+                accepted=form.id in accepted,
             )
             for form in forms
         ]
@@ -273,7 +287,7 @@ def sign_health_form(
     except CustomerInactiveError:
         answer = HealthFormConflict(error="customer_inactive")
         return JSONResponse(answer.model_dump(), status.HTTP_409_CONFLICT)
-    return status_answer(health_forms.health_form_status(db, customer, today))
+    return status_for(login, health_forms.health_form_status(db, customer, today))
 
 
 @router.post(
@@ -310,7 +324,7 @@ def add_doctor_note(
     except doctor_notes.NoNoteNeededError as refused:
         answer = DoctorNoteConflict(error="no_note_needed", state=refused.state)
         return JSONResponse(answer.model_dump(mode="json"), status.HTTP_409_CONFLICT)
-    return status_answer(health_forms.health_form_status(db, customer, today))
+    return status_for(login, health_forms.health_form_status(db, customer, today))
 
 
 @router.post(
@@ -331,7 +345,7 @@ def accept_health_form(
     except doctor_notes.NoNoteNeededError as refused:
         answer = DoctorNoteConflict(error="no_note_needed", state=refused.state)
         return JSONResponse(answer.model_dump(mode="json"), status.HTTP_409_CONFLICT)
-    return status_answer(health_forms.health_form_status(db, customer, today))
+    return status_for(login, health_forms.health_form_status(db, customer, today))
 
 
 @router.post(

@@ -234,9 +234,10 @@ class HealthFormStatus:
         (decision 0004)."""
         return self.state is not FormState.MISSING
 
-    def as_seen_by_customer(self) -> "HealthFormStatus":
-        """The status the customer's phone gets: a form waiting for the
-        manager's review is simply valid there (decision 0041)."""
+    def as_entry_status(self) -> "HealthFormStatus":
+        """What the form means for getting in, for the customer's phone and
+        for staff who don't review forms: one waiting for the manager's
+        review is simply valid (decision 0041)."""
         if self.state is FormState.NEEDS_DOCTOR_NOTE:
             return HealthFormStatus(FormState.VALID, self.valid_until)
         return self

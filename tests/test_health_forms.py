@@ -339,7 +339,7 @@ def test_a_form_with_a_yes_needs_a_doctors_note(
     # It lets the customer in meanwhile, and the phone sees it as valid
     # (decision 0041).
     assert status.allows_check_in is True
-    assert status.as_seen_by_customer() == HealthFormStatus(
+    assert status.as_entry_status() == HealthFormStatus(
         FormState.VALID, date(2027, 11, 3)
     )
 
@@ -348,7 +348,7 @@ def test_only_a_missing_form_blocks_check_in() -> None:
     missing = HealthFormStatus(FormState.MISSING, None)
 
     assert missing.allows_check_in is False
-    assert missing.as_seen_by_customer() == missing
+    assert missing.as_entry_status() == missing
 
 
 def test_the_newest_form_counts(db: Session, customer: Customer) -> None:

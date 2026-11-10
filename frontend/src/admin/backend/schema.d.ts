@@ -1260,6 +1260,8 @@ export interface components {
             needs_doctor_note: boolean;
             /** Doctor Note Ids */
             doctor_note_ids: number[];
+            /** Accepted */
+            accepted: boolean;
         };
         /**
          * LatestCustomer

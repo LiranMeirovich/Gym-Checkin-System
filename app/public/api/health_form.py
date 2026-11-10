@@ -45,7 +45,7 @@ NOT_LINKED = {status.HTTP_401_UNAUTHORIZED: {"model": NotLinked}}
 
 
 def status_answer(found: CoreStatus) -> HealthFormStatus:
-    shown = found.as_seen_by_customer()
+    shown = found.as_entry_status()
     return HealthFormStatus(state=shown.state, valid_until=shown.valid_until)
 
 
