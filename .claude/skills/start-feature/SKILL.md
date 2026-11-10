@@ -25,13 +25,15 @@ Read selectively: this session's context has to last the whole feature, so load 
 ## 2. Plan it
 Present a short plan, written at the architecture level:
 - **Goal:** one sentence.
+- **What gets built (the scope):** a numbered list, in plain words from the staff's or customer's side, of every screen, button, field, list, filter, message and rule this feature adds or changes, including behaviour changes to existing screens. This list is the contract: anything not on it is not built.
+- **Not in this feature:** the nearby things someone might expect but this feature won't do (including follow-ups it leaves for later).
 - **Architecture:** the components this feature adds or changes, what each is responsible for, how data flows between them (and between the admin and public apps), and where each sits in the layout (`app/core`, `app/admin`, `app/public`). Outline any new tables or route contracts.
 - **Steps:** 3–8 small steps, each a reviewable change (roughly one commit each). For each step, one line on what it delivers and how it will be tested.
 - **Protected areas:** flag any step that touches a protected area from CLAUDE.md (auth, cookie/linking, plan/price/report logic, schema).
 - **Decisions needed:** any library, schema or route choice that needs the developer's call, with options and a recommendation.
 - **Risks and trade-offs:** what could go wrong or be hard to change later, and what this feature deliberately leaves out.
 
-Then ask whether the plan looks right, and get an answer on each decision. Don't write any code until the developer approves.
+Then ask whether the plan looks right, and get an answer on each decision and an explicit OK on the scope list. Don't write any code until the developer approves.
 
 ## 3. Set up
 After approval:
@@ -42,6 +44,8 @@ After approval:
 ## 4. Work through the steps
 - Implement one step at a time, and run the affected tests (CLAUDE.md, "How we work") and ruff. Run tests quietly, `uv run pytest -q --tb=short <files>`, so a pass is one line and a failure only its short traceback. Run them here, not in a subagent: a few files are cheaper than a subagent's cold start.
 - After each step, give a short architecture-level summary: what it adds, how it fits with the rest, any deviation from the plan, and anything risky. No line-by-line code walkthrough.
+- **Stay inside the approved scope list.** Before each step, say in one line which scope items it builds. If something not on the list seems needed or useful (a new field, filter, button, message, rule or behaviour), stop and ask; build it only after an OK, and add it to the list. Never add it quietly and mention it afterwards.
+- After each step's summary, name anything built that isn't on the scope list. There should be none.
 - If a step turns up a decision that wasn't in the plan (library, schema, route contract, folder structure, protected area), stop and ask before going on.
 - **Commit after each approved step.** Once the developer is happy with a step, suggest a Conventional Commit message for it. Committing stays their call: never commit without being asked.
 - If a significant technical decision comes up, suggest recording it with `/decision`.

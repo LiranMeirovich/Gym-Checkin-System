@@ -61,6 +61,7 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 
 ## How we work
 - **Talk architecture, not code.** Explain changes in terms of components, responsibilities, data flow, boundaries and trade-offs. Don't walk through code line by line; show a snippet only when it carries a decision (a schema, a route contract, a security check) or when asked.
+- **Build only what the developer approved.** Every session states, before building anything, exactly what it will build: each screen, button, route, rule and behaviour a staff member or customer will see, and what it leaves out. Nothing outside that list gets built, however small or helpful it seems: an extra filter, a new column, a convenience button, a changed message. If an idea comes up while building, stop and ask; if approved, add it to the list. A summary that mentions something not on the list is a mistake.
 - **Ask before architectural decisions.** Don't choose libraries, change the database schema, change the folder structure or change route contracts without asking first. Suggest options and give a recommendation.
 - **Flag what's risky.** In every summary, call out anything surprising, security-relevant or hard to undo, even if it's small.
 - **Add a dependency only in the feature that first uses it** (decision 0010).
