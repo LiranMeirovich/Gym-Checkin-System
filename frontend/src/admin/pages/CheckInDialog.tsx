@@ -209,7 +209,9 @@ function CheckInBody({
     );
   }
 
-  const formValid = health.data.state === "valid";
+  // A form waiting for a doctor's note lets the customer in; the manager
+  // reviews it (decision 0041). Only a missing or expired one blocks.
+  const formValid = health.data.state !== "missing";
   const covering = plan.data.covering;
   const singleEntry = plan.data.options.find(
     (option) => option.plan === "single_entry",
@@ -220,15 +222,9 @@ function CheckInBody({
     action = (
       <p role="alert">
         אין כניסה בלי הצהרת בריאות בתוקף.{" "}
-        {health.data.state === "missing" ? (
-          <Link to={`/customers/${customerId}/health-form`} onClick={close}>
-            מילוי ההצהרה כאן, במחשב
-          </Link>
-        ) : (
-          <Link to={`/customers/${customerId}`} onClick={close}>
-            הוספת אישור רפואי בכרטיס הלקוח
-          </Link>
-        )}
+        <Link to={`/customers/${customerId}/health-form`} onClick={close}>
+          מילוי ההצהרה כאן, במחשב
+        </Link>
       </p>
     );
   } else if (covering) {

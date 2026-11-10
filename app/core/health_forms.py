@@ -204,7 +204,8 @@ class CheckedForm:
 
 class FormState(StrEnum):
     VALID = "valid"
-    # Signed with a "yes" answer; counts once a doctor's note is added.
+    # Signed with a "yes" answer and waiting for the manager: a doctor's
+    # note or their acceptance. Lets the customer in meanwhile (0041).
     NEEDS_DOCTOR_NOTE = "needs_doctor_note"
     # Never signed, or the newest form has expired.
     MISSING = "missing"
@@ -221,7 +222,18 @@ class HealthFormStatus:
 
     @property
     def allows_check_in(self) -> bool:
-        return self.state is FormState.VALID
+        """Any signed form that hasn't expired lets the customer in. One
+        waiting for a doctor's note does too: the manager reviews it
+        afterwards (decision 0041). Only a missing or expired form blocks
+        (decision 0004)."""
+        return self.state is not FormState.MISSING
+
+    def as_seen_by_customer(self) -> "HealthFormStatus":
+        """The status the customer's phone gets: a form waiting for the
+        manager's review is simply valid there (decision 0041)."""
+        if self.state is FormState.NEEDS_DOCTOR_NOTE:
+            return HealthFormStatus(FormState.VALID, self.valid_until)
+        return self
 
 
 def expires_on(signed_on: date) -> date:

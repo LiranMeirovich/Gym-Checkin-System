@@ -3,9 +3,10 @@ choice"; decisions 0004, 0017, 0025, 0032).
 
 Every check-in runs the same checks in order:
 
-1. **A valid health form** on the day, in Israel time. Without one,
-   nothing is recorded (``HealthFormRequiredError``): the gym isn't insured
-   (decision 0004).
+1. **A signed health form** that hasn't expired on the day, in Israel
+   time. Without one, nothing is recorded (``HealthFormRequiredError``):
+   the gym isn't insured (decision 0004). A form waiting for a doctor's
+   note lets the customer in; the manager reviews it (decision 0041).
 2. **Not a repeat:** a second check-in by the same customer within
    ``REPEAT_WINDOW`` of the last one, by any method, in the same month, is
    "already checked in". Nothing new is recorded, so it doesn't count as
@@ -73,8 +74,8 @@ HISTORY_LENGTH = 10
 
 
 class HealthFormRequiredError(ValueError):
-    """The customer has no valid health form today (missing, expired, or
-    waiting for a doctor's note). ``status`` says which."""
+    """The customer has no signed health form today: never signed, or the
+    newest has expired."""
 
     def __init__(self, status: HealthFormStatus) -> None:
         super().__init__(f"health form is {status.state.value}")
@@ -255,7 +256,8 @@ def _repeat(
 
 def _first_checks(db: Session, customer: Customer) -> _Visit:
     """Steps 1 and 2, shared by every way of checking in: an active
-    customer, a valid health form today, and whether this is a repeat.
+    customer, a signed form that hasn't expired, and whether this is a
+    repeat.
 
     One reading of the clock for the whole check-in: the form's day, the
     month, the repeat window and the plan choice all follow from it, so a

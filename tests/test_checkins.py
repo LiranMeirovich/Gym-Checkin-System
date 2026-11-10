@@ -276,15 +276,17 @@ def test_the_forms_day_is_israels_not_utcs(
         check_in_by_phone(db, phone)
 
 
-def test_a_form_waiting_for_a_doctors_note_refuses(
+def test_a_form_waiting_for_a_doctors_note_lets_the_customer_in(
     db: Session, customer: Customer, phone: DeviceSession
 ) -> None:
+    # The manager reviews it afterwards (decision 0041).
     add_choice(db, customer, Plan.MONTHLY, THIS_MONTH)
     add_form(db, customer, signed_on=date(2026, 11, 1), needs_doctor_note=True)
 
-    with pytest.raises(HealthFormRequiredError) as refused:
-        check_in_by_phone(db, phone)
-    assert refused.value.status.state is FormState.NEEDS_DOCTOR_NOTE
+    result = check_in_by_phone(db, phone)
+
+    assert result.outcome is Outcome.CHECKED_IN
+    assert len(recorded(db)) == 1
 
 
 def test_the_form_is_checked_before_the_plan(
@@ -757,16 +759,15 @@ def test_no_form_refuses_a_manual_check_in(
     assert logged(db) == []
 
 
-def test_a_form_waiting_for_a_doctors_note_refuses_a_manual_check_in(
+def test_a_form_waiting_for_a_doctors_note_lets_a_manual_check_in_through(
     db: Session, customer: Customer, instructor: StaffUser, prices: None
 ) -> None:
     add_form(db, customer, signed_on=date(2026, 3, 1), needs_doctor_note=True)
 
-    with pytest.raises(HealthFormRequiredError) as refused:
-        check_in_manually(db, customer, by=instructor)
+    result = check_in_manually(db, customer, by=instructor)
 
-    assert refused.value.status.state is FormState.NEEDS_DOCTOR_NOTE
-    assert recorded(db) == []
+    assert result.outcome is Outcome.CHECKED_IN
+    assert len(recorded(db)) == 1
 
 
 def test_an_inactive_customer_is_refused_at_the_desk(

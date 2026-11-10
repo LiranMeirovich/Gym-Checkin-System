@@ -279,15 +279,15 @@ def test_no_health_form_is_409_with_its_status(
     assert choices(db) == []
 
 
-def test_a_form_waiting_for_a_doctors_note_is_409(
+def test_a_form_waiting_for_a_doctors_note_checks_in(
     as_instructor: Staff, db: Session, customer: Customer, prices: None
 ) -> None:
     add_form(db, customer, yes=True)
 
     response = as_instructor.check_in(customer.id)
 
-    assert response.status_code == 409
-    assert response.json()["health_form"]["state"] == "needs_doctor_note"
+    assert response.status_code == 200
+    assert len(recorded(db)) == 1
 
 
 def test_an_unset_price_is_409(
