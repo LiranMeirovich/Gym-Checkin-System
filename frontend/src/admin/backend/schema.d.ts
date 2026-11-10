@@ -1222,15 +1222,19 @@ export interface components {
         };
         /**
          * HealthFormStatus
-         * @description What every staff member sees: ``valid``, ``needs_doctor_note`` (a
-         *     "yes" answer; blocks check-in until a doctor's note is added) or
-         *     ``missing`` (none, or expired). ``valid_until``: the last day of the
-         *     form that counts, or null for ``missing``. Never the answers.
+         * @description What staff see: ``valid``, ``needs_doctor_note`` (a "yes" answer
+         *     waiting for the manager's review; only staff who review forms see it,
+         *     decision 0041) or ``missing`` (none, or expired). ``valid_until``: the
+         *     last day of the form that counts, or null for ``missing``.
+         *     ``allows_check_in``: whether the customer may check in with it, the
+         *     server's rule, so the desk doesn't repeat it. Never the answers.
          */
         HealthFormStatus: {
             state: components["schemas"]["FormState"];
             /** Valid Until */
             valid_until: string | null;
+            /** Allows Check In */
+            allows_check_in: boolean;
         };
         /**
          * HealthFormSummary

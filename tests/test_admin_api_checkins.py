@@ -273,7 +273,11 @@ def test_no_health_form_is_409_with_its_status(
     assert response.status_code == 409
     assert response.json() == {
         "error": "health_form_required",
-        "health_form": {"state": "missing", "valid_until": None},
+        "health_form": {
+            "state": "missing",
+            "valid_until": None,
+            "allows_check_in": False,
+        },
     }
     assert recorded(db) == []
     assert choices(db) == []

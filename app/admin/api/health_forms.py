@@ -83,7 +83,7 @@ from app.core.clock import local_today
 from app.core.customers import CustomerInactiveError
 from app.core.db import DbSession
 from app.core.http import JPEG_DATA_URL, PNG_DATA_URL, data_url_bytes
-from app.core.permissions import Permission, has_permission
+from app.core.permissions import Permission
 
 router = APIRouter(
     prefix="/customers/{customer_id}",
@@ -123,17 +123,18 @@ NoteId = Annotated[int, Path(ge=1, le=MAX_ID)]
 
 
 def status_answer(found: health_forms.HealthFormStatus) -> HealthFormStatus:
-    return HealthFormStatus(state=found.state, valid_until=found.valid_until)
+    return HealthFormStatus(
+        state=found.state,
+        valid_until=found.valid_until,
+        allows_check_in=found.allows_check_in,
+    )
 
 
 def status_for(
     login: StaffLogin, found: health_forms.HealthFormStatus
 ) -> HealthFormStatus:
-    """``found`` as ``login``'s staff member sees it: only those who review
-    forms see one waiting for review (decision 0041)."""
-    if not has_permission(login.staff.role, Permission.HEALTH_FORMS_ACCEPT):
-        found = found.as_entry_status()
-    return status_answer(found)
+    """``found`` as ``login``'s staff member sees it (decision 0041)."""
+    return status_answer(found.as_seen_by(login.staff.role))
 
 
 def customer_forms(found: list[health_forms.CustomerForm]) -> CustomerForms:

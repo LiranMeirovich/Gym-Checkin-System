@@ -38,6 +38,7 @@ from app.core.models import (
     HealthFormAcceptance,
     StaffUser,
 )
+from app.core.permissions import Permission, Role, has_permission
 
 # Under this age on the signing day, a parent or guardian signs.
 ADULT_AGE = 18
@@ -241,6 +242,14 @@ class HealthFormStatus:
         if self.state is FormState.NEEDS_DOCTOR_NOTE:
             return HealthFormStatus(FormState.VALID, self.valid_until)
         return self
+
+    def as_seen_by(self, role: Role | str) -> "HealthFormStatus":
+        """The status as a staff member with ``role`` sees it: only those
+        who review forms (``health_forms.accept``) see one waiting for
+        review; to the rest it's its entry status (decision 0041)."""
+        if has_permission(role, Permission.HEALTH_FORMS_ACCEPT):
+            return self
+        return self.as_entry_status()
 
 
 def expires_on(signed_on: date) -> date:

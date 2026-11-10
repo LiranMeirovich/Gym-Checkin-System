@@ -344,6 +344,16 @@ def test_a_form_with_a_yes_needs_a_doctors_note(
     )
 
 
+def test_only_staff_who_review_forms_see_one_waiting() -> None:
+    waiting = HealthFormStatus(FormState.NEEDS_DOCTOR_NOTE, date(2027, 11, 3))
+    valid = HealthFormStatus(FormState.VALID, date(2027, 11, 3))
+
+    assert waiting.as_seen_by(Role.OWNER) == waiting
+    assert waiting.as_seen_by("manager") == waiting
+    assert waiting.as_seen_by(Role.INSTRUCTOR) == valid
+    assert valid.as_seen_by(Role.INSTRUCTOR) == valid
+
+
 def test_only_a_missing_form_blocks_check_in() -> None:
     missing = HealthFormStatus(FormState.MISSING, None)
 

@@ -54,7 +54,9 @@ There are three roles. Staff (the manager and instructors) each have their own l
 | Add a customer; edit name, phone and notes (a new customer can also sign up on their own phone, decision 0035) | Yes | Yes |
 | Link or unlink a customer's phone | Yes | Yes |
 | See whether a customer's health form is valid and when it expires | Yes | Yes |
-| Open the health form on a gym device for a customer, add a doctor's note | Yes | Yes |
+| Open the health form on a gym device for a customer | Yes | Yes |
+| See which forms with a "yes" wait for review; accept one without a doctor's note (decision 0041) | No | Yes |
+| Add a doctor's note to a form waiting for review (the server allows instructors; only the manager's screens offer it, decision 0041) | Yes | Yes |
 | View the contents of a health form | No | Yes |
 | Edit a customer's date of birth (decides who signs the health form) | No | Yes |
 | Change or clear a plan already chosen | No | Yes |

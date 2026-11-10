@@ -191,7 +191,11 @@ def test_an_instructor_sees_the_status(
     response = as_instructor.status(customer.id)
 
     assert response.status_code == 200
-    assert response.json() == {"state": "valid", "valid_until": "2027-11-03"}
+    assert response.json() == {
+        "state": "valid",
+        "valid_until": "2027-11-03",
+        "allows_check_in": True,
+    }
 
 
 def test_a_yes_answer_shows_the_manager_its_waiting(
@@ -199,7 +203,12 @@ def test_a_yes_answer_shows_the_manager_its_waiting(
 ) -> None:
     add_form(db, customer, date(2026, 11, 4), yes=True)
 
-    assert as_manager.status(customer.id).json()["state"] == "needs_doctor_note"
+    # Waiting, and still lets the customer in.
+    assert as_manager.status(customer.id).json() == {
+        "state": "needs_doctor_note",
+        "valid_until": "2027-11-03",
+        "allows_check_in": True,
+    }
 
 
 def test_a_yes_answer_shows_an_instructor_valid(
@@ -211,6 +220,7 @@ def test_a_yes_answer_shows_an_instructor_valid(
     assert as_instructor.status(customer.id).json() == {
         "state": "valid",
         "valid_until": "2027-11-03",
+        "allows_check_in": True,
     }
 
 
@@ -218,6 +228,7 @@ def test_no_form_shows_as_missing(as_instructor: Staff, customer: Customer) -> N
     assert as_instructor.status(customer.id).json() == {
         "state": "missing",
         "valid_until": None,
+        "allows_check_in": False,
     }
 
 
@@ -350,7 +361,11 @@ def test_an_instructor_adds_a_note_and_the_form_counts(
     response = add_note(as_instructor, customer.id, data_url(photo()))
 
     assert response.status_code == 200
-    assert response.json() == {"state": "valid", "valid_until": "2027-11-03"}
+    assert response.json() == {
+        "state": "valid",
+        "valid_until": "2027-11-03",
+        "allows_check_in": True,
+    }
     [note] = notes(db)
     assert note.health_form_id == form.id
     assert note.staff_user_id == instructor.id
@@ -466,7 +481,11 @@ def test_the_manager_accepts_a_form_and_it_counts(
     response = accept(as_manager, customer.id)
 
     assert response.status_code == 200
-    assert response.json() == {"state": "valid", "valid_until": "2027-11-03"}
+    assert response.json() == {
+        "state": "valid",
+        "valid_until": "2027-11-03",
+        "allows_check_in": True,
+    }
     [accepted] = acceptances(db)
     assert (accepted.health_form_id, accepted.staff_user_id) == (form.id, manager.id)
     [entry] = logged(db, Action.HEALTH_FORM_ACCEPT)
@@ -677,6 +696,7 @@ def test_signing_on_the_pc_makes_the_form_valid_and_is_logged(
     assert response.json() == {
         "state": "valid",
         "valid_until": expires_on(date(2026, 11, 4)).isoformat(),
+        "allows_check_in": True,
     }
     # The PC never becomes the customer's device.
     assert "set-cookie" not in response.headers

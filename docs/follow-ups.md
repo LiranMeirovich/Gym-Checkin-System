@@ -60,6 +60,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Health form: 12 months from signing (the paper form says "valid for <year>"), the confirmation checkbox's wording, whether the doctor's note must be at most 3 months old, and that names on the form must be in Hebrew or Latin letters (decision 0031).
 
 ## Code review leftovers (low priority)
+- Forms waiting for review (decision 0041): the public API's health form state still lists `needs_doctor_note`, which the phone can no longer receive; `FormState.NEEDS_DOCTOR_NOTE`, `forms_needing_doctor_note()` and `/api/health-forms/needing-note` now mean "waiting for the manager's review" (a note or an acceptance). Rename them (API contract changes) before more screens use them. `AcceptForm` and `DoctorNoteUpload` on the customer page repeat the same answer handling; share it if a third review action comes.
 - The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two, `plan_choices`' five (append-only, overlap, same customer, same months) and `checkins`' three (append-only, same customer's phone).
 - Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`, now including the customer and price tests), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
 - Setup validates the gym name twice.

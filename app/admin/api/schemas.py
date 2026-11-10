@@ -441,13 +441,16 @@ class LinkedPhones(Answer):
 
 
 class HealthFormStatus(Answer):
-    """What every staff member sees: ``valid``, ``needs_doctor_note`` (a
-    "yes" answer; blocks check-in until a doctor's note is added) or
-    ``missing`` (none, or expired). ``valid_until``: the last day of the
-    form that counts, or null for ``missing``. Never the answers."""
+    """What staff see: ``valid``, ``needs_doctor_note`` (a "yes" answer
+    waiting for the manager's review; only staff who review forms see it,
+    decision 0041) or ``missing`` (none, or expired). ``valid_until``: the
+    last day of the form that counts, or null for ``missing``.
+    ``allows_check_in``: whether the customer may check in with it, the
+    server's rule, so the desk doesn't repeat it. Never the answers."""
 
     state: FormState
     valid_until: date | None
+    allows_check_in: bool
 
 
 class CustomerFormEntry(Answer):

@@ -209,9 +209,11 @@ function CheckInBody({
     );
   }
 
-  // A form waiting for a doctor's note lets the customer in; the manager
-  // reviews it (decision 0041). Only a missing or expired one blocks.
-  const formValid = health.data.state !== "missing";
+  // The server says whether the form lets the customer in (decision 0041:
+  // one waiting for the manager's review does).
+  const formValid = health.data.allows_check_in;
+  // Only staff who review forms are ever sent "waiting for review".
+  const waiting = health.data.state === "needs_doctor_note";
   const covering = plan.data.covering;
   const singleEntry = plan.data.options.find(
     (option) => option.plan === "single_entry",
@@ -258,9 +260,13 @@ function CheckInBody({
       <dl className={styles.summary}>
         <dt>הצהרת בריאות</dt>
         <dd>
-          <StatusBadge tone={formValid ? "ok" : "stop"}>
-            {formValid ? "בתוקף" : "לא בתוקף"}
-          </StatusBadge>
+          {waiting ? (
+            <StatusBadge tone="warn">ממתינה לבדיקה</StatusBadge>
+          ) : (
+            <StatusBadge tone={formValid ? "ok" : "stop"}>
+              {formValid ? "בתוקף" : "לא בתוקף"}
+            </StatusBadge>
+          )}
         </dd>
         <dt>מסלול לחודש {formatMonth(plan.data.current_month)}</dt>
         <dd>
