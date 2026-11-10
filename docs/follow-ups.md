@@ -16,15 +16,11 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Doctor's notes: the official text says a note must be at most 3 months old. Not enforced (the developer's call, for now); confirm with the manager. A note added by mistake can't be removed (append-only); a "withdrawn" row would be new.
 - Health form renewal for customers without a phone (an expired form blocks their manual check-in): left for later by the developer. The PC form screen from feature 4 can serve it.
 
-## Milestone 4: admin screens (from Customers)
-- Dashboard: the latest sign-ups are the newest customers by `created_at` (no column, decision 0035). They include phone sign-ups, which no one at the desk has seen, so the manager can spot a fake one before the report.
-
 ## Milestone 4: admin screens
 - Activity log: the target filter is exact, so a customer's plan choices, check-ins and forms (other target types) don't show under that customer. A full customer history would need a `customer_id` column or a JSON search.
-- Lock screen: a polling dashboard doesn't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
-- Customer page, Phones: the list doesn't refresh itself while a code is on screen, because every React request counts as activity for the auto-lock. Once background refreshes skip the idle timer (the server already allows a request that doesn't `touch`), poll the list and hide the code once a phone links. The device name is a rough guess from the user agent (iPhone / Android / iPad); iPadOS sends a Mac user agent, so iPads show as "other device".
-- Dashboard: show the instructor the customers whose form needs a doctor's note, and the forms expiring in the next 30 days (design doc "Validity and access").
-- Dashboard: today's check-ins live, from `checkins` (the instructor's answer to fake check-ins, design doc "Fake check-ins").
+- Lock screen: the dashboard's timed refreshes don't count as activity, so instructors still lock after 60 idle minutes; the manager can raise `instructor_lock_screen_minutes`.
+- Customer page, Phones: the device name is a rough guess from the user agent (iPhone / Android / iPad); iPadOS sends a Mac user agent, so iPads show as "other device". The list refreshes itself only while a link code shows (the Refresh button is gone), so a phone change made elsewhere shows on the next page load.
+- Staff header: on a window narrower than about 480px the menu is wider than the page and pushes it sideways (every staff screen). The desk PC is wide; fix if the admin app is ever used on a small screen.
 - Customer list search: names in other alphabets (Cyrillic, accented Latin) match only in the case typed, since SQLite's `LIKE` folds English letters only. If staff need it, a lowercased search column (schema change) fixes it. Name search reads the whole `customers` table (`LIKE '%…%'`); fine at hundreds of customers, FTS5 if it ever gets slow.
 - Customer list: the search text sits in the desk PC's address bar and browser history (the server log drops it). Acceptable on a staff-only PC; revisit if the admin app is ever used elsewhere.
 - Styling pass leftovers (decision 0034): the phone's "needs a doctor's note" message was styled only by `base.css` and not checked in the browser; the health form's yes/no answers hide their radio buttons visually (the labels are the controls), so check them with a real screen reader (NVDA on the desk PC, VoiceOver on a phone).
@@ -35,6 +31,8 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Staff choose and correct only choices starting in the current month (decisions 0025, 0026). If the manager needs to fix last month before approving its report, or to stop a tri-monthly period that started earlier, widen that rule once report approval exists.
 
 ## Milestones 5–6: report, operations and hosting
+- Dashboard cards: the report card (manager only, as its own route with the report permission) and the backup card ("last backup", red after 2 days without one), from the design doc's dashboard. The dashboard's lists are one route each, so a card is a new route and a new panel.
+- Every request, a dashboard's timed refresh included, takes SQLite's write lock (`BEGIN IMMEDIATE`, decision 0027) although a refresh writes nothing. Milliseconds each today; if many screens poll, give background refreshes a read-only transaction.
 - SMTP host/user and the backup folder become settings (after hosting).
 - Relative `GYM_DATABASE_PATH` and the `.env` lookup depend on the process's working directory. A missing DB file stops startup, but the two apps could still open different files if started from different folders. Pin a base folder or require absolute paths in prod.
 - Packaging: the apps need `alembic.ini` and `migrations/` next to the code at runtime (the startup check reads them), and `npm ci` + `npm run build` must run before they start (a missing build is a 503 page, not a startup error).

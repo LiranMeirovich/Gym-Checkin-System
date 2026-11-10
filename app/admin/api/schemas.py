@@ -18,7 +18,7 @@ from app.core.checkins import Outcome
 from app.core.health_form_pdf import SIGNATURE_MAX_BYTES
 from app.core.health_forms import FormField, FormState
 from app.core.http import Answer, DateOfBirth
-from app.core.models import CheckInMethod, ChosenBy, Plan
+from app.core.models import CheckInMethod, ChosenBy, Customer, Plan
 from app.core.permissions import Permission, Role
 
 # SQLite's integer range. A bigger id can't exist, and SQLite would refuse
@@ -163,6 +163,37 @@ class CustomerList(Answer):
     page: int
     page_size: int
     page_count: int
+
+
+class CustomerName(Answer):
+    """Who a dashboard row is about: enough to show the name and link to
+    the customer's page."""
+
+    id: int
+    first_name: str
+    last_name: str
+
+    @classmethod
+    def of(cls, customer: Customer) -> "CustomerName":
+        return cls(
+            id=customer.id,
+            first_name=customer.first_name,
+            last_name=customer.last_name,
+        )
+
+
+class LatestCustomer(CustomerSummary):
+    """A newly added customer. ``created_at`` is the gym's local time, with
+    its offset."""
+
+    created_at: datetime
+
+
+class LatestCustomers(Answer):
+    """The newest active customers, newest first, whether added at the desk
+    or signed up on their phone (decision 0035)."""
+
+    customers: list[LatestCustomer]
 
 
 class CustomerDetails(CustomerSummary):
@@ -419,6 +450,21 @@ class HealthFormStatus(Answer):
     valid_until: date | None
 
 
+class CustomerFormEntry(Answer):
+    """A customer and the form that counts for them today: when it was
+    signed and its last valid day. Never the answers."""
+
+    customer: CustomerName
+    signed_on: date
+    valid_until: date
+
+
+class CustomerForms(Answer):
+    """Customers whose form needs attention, in the order the list gives."""
+
+    forms: list[CustomerFormEntry]
+
+
 class HealthFormSummary(Answer):
     """One signed form, for the manager. The answers stay in the PDF,
     which is opened (and logged) on its own."""
@@ -624,6 +670,18 @@ class CheckInHistory(Answer):
     """The customer's latest check-ins, newest first."""
 
     checkins: list[CheckInHistoryEntry]
+
+
+class TodaysCheckIn(CheckInHistoryEntry):
+    """One of today's check-ins, with who checked in."""
+
+    customer: CustomerName
+
+
+class TodaysCheckIns(Answer):
+    """Every check-in today (the gym's local day), newest first."""
+
+    checkins: list[TodaysCheckIn]
 
 
 # ── Staff accounts ──────────────────────────────────────────────────────

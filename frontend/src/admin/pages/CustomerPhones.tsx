@@ -2,11 +2,14 @@
 // customer to type on their phone, and the phones linked so far, each with
 // Unlink. The code is shown only here, once; the server keeps its hash.
 //
-// The list doesn't poll while a code is on screen: every API request
-// counts as activity for the auto-lock, so polling would keep the desk
-// unlocked. A Refresh button shows a phone the customer just linked.
+// While a code is on screen (until it expires), the list refreshes itself
+// every few seconds as background refreshes, which don't hold off the
+// auto-lock (`usePolledQuery`). When a phone that wasn't there before shows
+// up, the customer has used the code: it's hidden and the new phone is in
+// the list. A code is issued only once the list has loaded, so "before" is
+// known.
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { formatDate, formatTime, phonesKey, type Customer } from "../customers";
 import {
@@ -14,15 +17,22 @@ import {
   NO_CONNECTION_TRY_AGAIN,
 } from "../../shared/NoConnection";
 import ui from "../layout/ui.module.css";
+import { usePolledQuery } from "../polling";
 import styles from "./CustomerPhones.module.css";
 
 type LinkedPhone = Schemas["LinkedPhone"];
 type IssuedCode = Schemas["LinkCodeIssued"];
 
-async function fetchPhones(id: number): Promise<LinkedPhone[]> {
+// How often the list refreshes while a code waits to be used.
+const WHILE_CODE_SHOWS_MS = 4_000;
+
+async function fetchPhones(
+  id: number,
+  headers: Record<string, string>,
+): Promise<LinkedPhone[]> {
   const { data, response } = await api.GET(
     "/api/customers/{customer_id}/phones",
-    { params: { path: { customer_id: id } } },
+    { params: { path: { customer_id: id } }, headers },
   );
   if (data) return data.phones;
   throw new Error(`GET /api/customers/${id}/phones failed: ${response.status}`);
@@ -31,14 +41,22 @@ async function fetchPhones(id: number): Promise<LinkedPhone[]> {
 export function CustomerPhones({ customer }: { customer: Customer }) {
   const queryClient = useQueryClient();
   const [issued, setIssued] = useState<IssuedCode | null>(null);
+  // The phones linked when the code was issued: a new one means it was used.
+  const [linkedBefore, setLinkedBefore] = useState<Set<number>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const { data, isPending, isError, isFetching, refetch } = useQuery({
+  const { data, isPending, isError, refetch } = usePolledQuery({
     queryKey: phonesKey(customer.id),
-    queryFn: () => fetchPhones(customer.id),
+    fetch: (headers) => fetchPhones(customer.id, headers),
+    everyMs: (phones) =>
+      issued && !codeUsed(phones, linkedBefore) ? WHILE_CODE_SHOWS_MS : false,
+    until: issued ? Date.parse(issued.expires_at) : undefined,
   });
+  const linked = issued !== null && codeUsed(data, linkedBefore);
+  const shownCode = linked ? null : issued;
 
   async function issue() {
+    if (data === undefined) return;
     setSending(true);
     setMessage(null);
     try {
@@ -46,8 +64,10 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
         "/api/customers/{customer_id}/link-code",
         { params: { path: { customer_id: customer.id } } },
       );
-      if (code) setIssued(code);
-      else if (response.status === 409) {
+      if (code) {
+        setLinkedBefore(new Set(data.map((phone) => phone.id)));
+        setIssued(code);
+      } else if (response.status === 409) {
         setMessage("הלקוח לא פעיל. יש להפעיל אותו מחדש קודם.");
       } else setMessage("הפקת הקוד נכשלה. נסו שוב.");
     } catch {
@@ -63,6 +83,8 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
     }
     setSending(true);
     setMessage(null);
+    // A used code mustn't come back when its phone is unlinked.
+    if (linked) setIssued(null);
     try {
       const { data: list } = await api.POST(
         "/api/customers/{customer_id}/phones/{phone_id}/unlink",
@@ -86,18 +108,19 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
     <section className={ui.panel}>
       <h2>טלפונים מקושרים</h2>
       {message && <p role="alert">{message}</p>}
+      {linked && <p role="status">הטלפון קושר.</p>}
 
       {customer.active && (
         <>
-          {issued && (
+          {shownCode && (
             <div role="status" className={styles.code}>
               <span className={styles.codeLabel}>קוד קישור</span>
               <strong className={styles.codeDigits} dir="ltr">
-                {issued.code}
+                {shownCode.code}
               </strong>
               <span className={styles.codeHelp}>
                 הלקוח מזין בטלפון את מספר הטלפון שלו ואת הקוד. הקוד תקף עד{" "}
-                {formatTime(issued.expires_at)}, לשימוש אחד. קוד חדש מבטל את
+                {formatTime(shownCode.expires_at)}, לשימוש אחד. קוד חדש מבטל את
                 הקודם.
               </span>
             </div>
@@ -105,11 +128,13 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
           <p>
             <button
               type="button"
-              className={issued ? undefined : ui.primary}
+              className={shownCode ? undefined : ui.primary}
               onClick={issue}
-              disabled={sending}
+              // The phones linked now must be known, to tell when a new
+              // one appears.
+              disabled={sending || data === undefined}
             >
-              {issued ? "קוד חדש" : "קישור טלפון"}
+              {shownCode ? "קוד חדש" : "קישור טלפון"}
             </button>
           </p>
         </>
@@ -155,20 +180,17 @@ export function CustomerPhones({ customer }: { customer: Customer }) {
           </table>
         </div>
       )}
-      {!isPending && (
-        <p className={ui.note}>
-          <button
-            type="button"
-            className={styles.refresh}
-            onClick={() => void refetch()}
-            disabled={isFetching}
-          >
-            רענון הרשימה
-          </button>
-        </p>
-      )}
     </section>
   );
+}
+
+/** Whether a phone that wasn't linked when the code was issued is in the
+ * list now: the customer has used the code. */
+function codeUsed(
+  phones: LinkedPhone[] | undefined,
+  linkedBefore: Set<number>,
+): boolean {
+  return phones?.some((phone) => !linkedBefore.has(phone.id)) ?? false;
 }
 
 /** A rough name from the browser's user agent, enough for staff to tell

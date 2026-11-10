@@ -27,6 +27,12 @@ def to_local(moment: datetime) -> datetime:
     return moment.astimezone(get_settings().tz)
 
 
+def local_today() -> date:
+    """Today in the configured timezone: the gym's day, whatever the hour
+    in UTC."""
+    return to_local(utc_now()).date()
+
+
 def start_of_local_day(day: date) -> datetime:
     """The UTC moment the local day ``day`` starts (midnight in the
     configured timezone), for comparing stored times against local days."""

@@ -1,11 +1,12 @@
 """Current time and local display time, including Israel's daylight-saving
 switches."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from app.core.clock import to_local, utc_now
+from app.core import clock
+from app.core.clock import local_today, to_local, utc_now
 
 
 @pytest.fixture(autouse=True)
@@ -51,3 +52,14 @@ def test_to_local_uses_the_configured_timezone(
 def test_to_local_refuses_naive_datetimes() -> None:
     with pytest.raises(ValueError, match="naive"):
         to_local(datetime(2026, 1, 15, 7, 0))
+
+
+def test_local_today_is_the_gyms_day_not_utcs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 00:30 on 15 November in Israel is still the 14th in UTC.
+    monkeypatch.setattr(
+        clock, "utc_now", lambda: datetime(2026, 11, 14, 22, 30, tzinfo=UTC)
+    )
+
+    assert local_today() == date(2026, 11, 15)

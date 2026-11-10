@@ -24,6 +24,24 @@ export function setCsrfToken(token: string | null): void {
   csrfToken = token;
 }
 
+// A screen refreshing itself on a timer (the dashboard) marks each timed
+// refresh with this header (`usePolledQuery`, polling.ts). The server
+// answers it as usual but doesn't count it as activity, and neither does
+// the auto-lock timer in session.tsx, so a screen left refreshing still
+// locks on time. Only GETs: the server ignores it on anything that
+// changes data.
+const BACKGROUND_HEADER = "X-Background-Refresh";
+
+/** The headers of a timed refresh's GET. */
+export const BACKGROUND_REFRESH: Readonly<Record<string, string>> = {
+  [BACKGROUND_HEADER]: "1",
+};
+
+/** Whether a request was a timed background refresh. */
+export function isBackgroundRefresh(request: Request): boolean {
+  return request.headers.get(BACKGROUND_HEADER) === "1";
+}
+
 type ResponseListener = (request: Request, response: Response) => void;
 const responseListeners = new Set<ResponseListener>();
 

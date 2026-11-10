@@ -14,6 +14,13 @@ activity, restarting the idle timeout. On a POST, PUT, PATCH or DELETE
 both also check the session's CSRF token in the ``X-CSRF-Token`` header
 (``app.admin.csrf``), and refuse the request with 403 without it.
 
+A background refresh (a screen polling for changes, such as the
+dashboard) is not activity: a GET with ``X-Background-Refresh: 1`` is
+checked exactly the same way but doesn't ``touch`` the session, so a
+screen left polling still locks after its role's idle time. The header can
+only give up activity, never add access; on any other method it's ignored,
+so a change always counts.
+
 Not logged in: 401 with ``NotLoggedIn``, saying whether first-run setup is
 still needed; the React app goes to the lock screen or setup. Logged in
 without the permission: 403.
@@ -40,6 +47,9 @@ from app.core.staff_sessions import find_session, idle_timeout, lock_settings, t
 # The browser's session token. HttpOnly, SameSite=Strict, no expiry (gone
 # when the browser closes); set by the login route.
 SESSION_COOKIE = "gym_staff"
+
+# Sent by the React app on its own polling requests (``client.ts``).
+BACKGROUND_HEADER = "X-Background-Refresh"
 
 
 @dataclass(frozen=True)
@@ -72,12 +82,22 @@ def _current_staff(request: Request, db: DbSession) -> StaffLogin:
         token, request.headers.get(CSRF_HEADER)
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "CSRF token missing or wrong")
-    touch(db, session)
+    if not _is_background_refresh(request):
+        touch(db, session)
     return StaffLogin(
         staff=session.staff,
         session=session,
         token=token,
         lock_after=idle_timeout(settings, session.staff.role),
+    )
+
+
+def _is_background_refresh(request: Request) -> bool:
+    """A screen polling on its own, not a person: a GET (or HEAD) that
+    says so. Every other method counts as activity, whatever it says."""
+    return (
+        request.method not in UNSAFE_METHODS
+        and request.headers.get(BACKGROUND_HEADER) == "1"
     )
 
 

@@ -222,6 +222,84 @@ def test_an_instructor_stays_logged_in_longer(
     assert client.get("/who").status_code == 401
 
 
+BACKGROUND = {"X-Background-Refresh": "1"}
+
+
+def last_seen(db: Session) -> datetime:
+    db.expire_all()
+    return db.scalars(select(StaffSession)).one().last_seen_at
+
+
+def test_a_background_refresh_is_answered_but_isnt_activity(
+    db: Session, client: TestClient, clock: Clock
+) -> None:
+    log_in(db, client, add_staff(db, "Dana", Role.INSTRUCTOR))
+
+    clock.now += timedelta(minutes=1)
+    response = client.get("/who", headers=BACKGROUND)
+
+    assert response.status_code == 200
+    assert response.json() == {"name": "Dana"}
+    assert last_seen(db) == START
+
+
+def test_a_screen_left_polling_still_locks_on_time(
+    db: Session, client: TestClient, clock: Clock
+) -> None:
+    log_in(db, client, add_staff(db, "Noa", Role.MANAGER))
+
+    # A poll every 15 seconds for the whole 5-minute lock time.
+    for _ in range(20):
+        clock.now += timedelta(seconds=15)
+        assert client.get("/who", headers=BACKGROUND).status_code == 200
+    clock.now += timedelta(seconds=1)
+
+    assert client.get("/who", headers=BACKGROUND).status_code == 401
+    assert client.get("/who").status_code == 401
+
+
+def test_the_background_header_counts_only_with_the_value_1(
+    db: Session, client: TestClient, clock: Clock
+) -> None:
+    log_in(db, client, add_staff(db, "Dana", Role.INSTRUCTOR))
+
+    clock.now += timedelta(minutes=1)
+    client.get("/who", headers={"X-Background-Refresh": "yes"})
+
+    assert last_seen(db) == clock.now
+
+
+def test_a_change_always_counts_as_activity_even_marked_background(
+    db: Session, client: TestClient, clock: Clock
+) -> None:
+    token = log_in(db, client, add_staff(db, "Dana", Role.INSTRUCTOR))
+
+    clock.now += timedelta(minutes=1)
+    response = client.post(
+        "/rename", headers={"X-CSRF-Token": csrf_token(token), **BACKGROUND}
+    )
+
+    assert response.status_code == 200
+    assert last_seen(db) == clock.now
+
+
+def test_a_background_refresh_still_checks_the_csrf_token_on_a_change(
+    db: Session, client: TestClient
+) -> None:
+    log_in(db, client, add_staff(db, "Dana", Role.INSTRUCTOR))
+
+    assert client.post("/rename", headers=BACKGROUND).status_code == 403
+
+
+@pytest.mark.usefixtures("clock")
+def test_a_background_refresh_still_checks_permissions(
+    db: Session, client: TestClient
+) -> None:
+    log_in(db, client, add_staff(db, "Dana", Role.INSTRUCTOR))
+
+    assert client.get("/prices", headers=BACKGROUND).status_code == 403
+
+
 @pytest.mark.usefixtures("clock")
 def test_deactivation_applies_from_the_next_request(
     db: Session, client: TestClient

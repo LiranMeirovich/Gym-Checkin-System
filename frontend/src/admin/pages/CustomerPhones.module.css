@@ -32,11 +32,3 @@
   max-width: 22rem;
   opacity: 0.9;
 }
-
-.refresh {
-  min-height: 2rem;
-  padding-inline: var(--space-3);
-  font-size: var(--text-s);
-  border-color: var(--line-strong);
-  color: var(--muted);
-}

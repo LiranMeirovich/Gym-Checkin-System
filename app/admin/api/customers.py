@@ -11,6 +11,9 @@ React shows:
   ``came_in`` (``any``, ``7d``, ``30d``, ``not_30d``), ``sort`` (``name``,
   ``last_check_in``) and ``page`` (from 1; 25 a page). The search text
   is in the URL, so the access log drops query strings (``app.core.http``).
+- ``GET /api/customers/latest``: the 10 newest active customers, newest
+  first (``customers.view``), for the dashboard. Registered before
+  ``/{id}``, so ``latest`` is never read as an id.
 - ``GET /api/customers/{id}``: one customer (``customers.view``).
 - ``POST /api/customers``: add one (``customers.add``). A phone that
   belongs to an inactive customer brings them back instead (201 either
@@ -42,6 +45,8 @@ from app.admin.api.schemas import (
     CustomerListRow,
     CustomerRefused,
     DateOfBirthChange,
+    LatestCustomer,
+    LatestCustomers,
     NewCustomer,
     NotLoggedIn,
 )
@@ -61,6 +66,7 @@ from app.core.customers import (
     change_date_of_birth,
     deactivate_customer,
     edit_customer,
+    latest_customers,
     reactivate_customer,
 )
 from app.core.db import DbSession
@@ -124,6 +130,23 @@ def customer_list(
         page=found.page,
         page_size=found.page_size,
         page_count=found.page_count,
+    )
+
+
+@router.get("/latest")
+def latest(db: DbSession, _login: CanView) -> LatestCustomers:
+    return LatestCustomers(
+        customers=[
+            LatestCustomer(
+                id=customer.id,
+                first_name=customer.first_name,
+                last_name=customer.last_name,
+                phone=customer.phone,
+                active=customer.active,
+                created_at=to_local(customer.created_at),
+            )
+            for customer in latest_customers(db)
+        ]
     )
 
 

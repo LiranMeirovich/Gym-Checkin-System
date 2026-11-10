@@ -141,6 +141,27 @@ def display_phone(phone: str) -> str:
     return f"{national[:-7]}-{national[-7:]}"
 
 
+# How many of the newest customers the dashboard lists.
+LATEST_COUNT = 10
+
+
+def latest_customers(db: Session, *, limit: int = LATEST_COUNT) -> list[Customer]:
+    """The newest active customers, newest first: added at the desk or
+    signed up on their own phone (decision 0035 keeps no column telling
+    which). The instructor at the desk knows the regulars and spots a sign-up
+    that doesn't belong. Only reads, and isn't logged."""
+    if limit < 1:
+        raise ValueError("limit must be at least 1")
+    return list(
+        db.scalars(
+            select(Customer)
+            .where(Customer.active)
+            .order_by(Customer.created_at.desc(), Customer.id.desc())
+            .limit(limit)
+        )
+    )
+
+
 def find_by_phone(db: Session, phone: str) -> Customer | None:
     """The customer with this phone, active or not, in any typed form.
     ``None`` if nobody has it or it isn't a valid number."""
