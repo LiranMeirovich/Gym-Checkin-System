@@ -1,6 +1,6 @@
 # 0031. Health forms are online only, on the official form; a "yes" needs a doctor's note
 
-- Status: Accepted
+- Status: Accepted; "a yes blocks check-in until a doctor's note" superseded by [0041](0041-a-yes-on-the-health-form-lets-the-customer-in-the-manager-reviews-it.md) (the customer gets in; the manager reviews the form)
 - Date: 2026-11-04
 
 ## Context
