@@ -401,6 +401,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/customers/{customer_id}/health-form/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept Health Form */
+        post: operations["accept_health_form_api_customers__customer_id__health_form_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/customers/{customer_id}/doctor-notes/{note_id}/open": {
         parameters: {
             query?: never;
@@ -1015,8 +1032,9 @@ export interface components {
         };
         /**
          * DoctorNoteConflict
-         * @description 409. ``no_note_needed``: the form that counts today isn't waiting
-         *     for a note (``state``: ``valid``, or ``missing`` when there is none).
+         * @description 409, from adding a doctor's note or accepting a form without one.
+         *     ``no_note_needed``: the form that counts today isn't waiting for review
+         *     (``state``: ``valid``, or ``missing`` when there is none).
          *     ``customer_inactive``: reactivate them first. Nothing was saved.
          */
         DoctorNoteConflict: {
@@ -1411,7 +1429,7 @@ export interface components {
          * @description Everything a role can be allowed to do, named ``<area>.<action>``.
          * @enum {string}
          */
-        Permission: "customers.view" | "customers.add" | "customers.edit" | "customers.edit_birth_date" | "customers.archive" | "checkins.manual" | "phones.link" | "plans.choose" | "plans.correct" | "plans.freeze" | "health_forms.view_status" | "health_forms.view_contents" | "health_forms.add_doctor_note" | "health_forms.fill_in" | "prices.view" | "prices.edit" | "reports.manage" | "settings.edit" | "backups.manage" | "staff.manage" | "staff.manage_managers" | "activity_log.view";
+        Permission: "customers.view" | "customers.add" | "customers.edit" | "customers.edit_birth_date" | "customers.archive" | "checkins.manual" | "phones.link" | "plans.choose" | "plans.correct" | "plans.freeze" | "health_forms.view_status" | "health_forms.view_contents" | "health_forms.add_doctor_note" | "health_forms.accept" | "health_forms.fill_in" | "prices.view" | "prices.edit" | "reports.manage" | "settings.edit" | "backups.manage" | "staff.manage" | "staff.manage_managers" | "activity_log.view";
         /** PinReset */
         PinReset: {
             /** Pin */
@@ -3297,6 +3315,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DoctorNoteRefused"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorNoteConflict"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_health_form_api_customers__customer_id__health_form_accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                customer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthFormStatus"];
                 };
             };
             /** @description Unauthorized */

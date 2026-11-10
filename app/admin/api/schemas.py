@@ -579,8 +579,9 @@ class DoctorNoteRefused(Answer):
 
 
 class DoctorNoteConflict(Answer):
-    """409. ``no_note_needed``: the form that counts today isn't waiting
-    for a note (``state``: ``valid``, or ``missing`` when there is none).
+    """409, from adding a doctor's note or accepting a form without one.
+    ``no_note_needed``: the form that counts today isn't waiting for review
+    (``state``: ``valid``, or ``missing`` when there is none).
     ``customer_inactive``: reactivate them first. Nothing was saved."""
 
     error: Literal["no_note_needed", "customer_inactive"]

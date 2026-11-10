@@ -1,5 +1,8 @@
 """Doctor's notes: staff add one to a health form with a "yes" answer, and
 the form then counts (design doc: "Health form"; decisions 0004, 0031).
+Or the manager accepts the form without one (``accept_form()``, decision
+0041). Until one of the two, the form still lets the customer in, and it
+waits on the manager's "forms to review" list.
 
 Adding a note has two parts, so the slow one stays outside the request's
 write lock (decision 0027):
@@ -31,7 +34,14 @@ from sqlalchemy.orm import Session
 from app.core.activity_log import Action, Target, record
 from app.core.customers import CustomerInactiveError
 from app.core.health_forms import FormState, counting_form, status_of
-from app.core.models import Customer, DoctorNote, HealthForm, ImageType, StaffUser
+from app.core.models import (
+    Customer,
+    DoctorNote,
+    HealthForm,
+    HealthFormAcceptance,
+    ImageType,
+    StaffUser,
+)
 from app.core.models.doctor_notes import IMAGE_MAX_BYTES
 
 # What the browser may send. It shrinks photos first, so this only keeps a
@@ -51,8 +61,9 @@ class InvalidNoteImageError(ValueError):
 
 
 class NoNoteNeededError(ValueError):
-    """The customer's form that counts today isn't waiting for a doctor's
-    note: it's already valid, or there is none (missing or expired)."""
+    """The customer's form that counts today isn't waiting for review (a
+    doctor's note or the manager's acceptance): it's already valid, or
+    there is none (missing or expired)."""
 
     def __init__(self, state: FormState) -> None:
         super().__init__(f"health form is {state.value}")
@@ -118,12 +129,7 @@ def add_doctor_note(
 
     Raises ``CustomerInactiveError`` or ``NoNoteNeededError``.
     """
-    if not customer.active:
-        raise CustomerInactiveError("reactivate the customer first")
-    form = counting_form(db, customer, today)
-    state = status_of(db, form).state
-    if form is None or state is not FormState.NEEDS_DOCTOR_NOTE:
-        raise NoNoteNeededError(state)
+    form = _waiting_form(db, customer, today)
     note = DoctorNote(
         health_form_id=form.id,
         image=image.data,
@@ -141,6 +147,36 @@ def add_doctor_note(
         after={"doctor_note_id": note.id},
     )
     return note
+
+
+def accept_form(
+    db: Session, customer: Customer, *, by: StaffUser, today: date
+) -> HealthFormAcceptance:
+    """Manager ``by`` accepts ``customer``'s form that counts on ``today``
+    (an Israel-local date) without a doctor's note; it must be waiting for
+    review. The form then counts like one with a note (decision 0041). The
+    caller checks ``health_forms.accept``.
+
+    Raises ``CustomerInactiveError`` or ``NoNoteNeededError``.
+    """
+    form = _waiting_form(db, customer, today)
+    acceptance = HealthFormAcceptance(health_form_id=form.id, staff_user_id=by.id)
+    db.add(acceptance)
+    db.flush()
+    record(db, by, Action.HEALTH_FORM_ACCEPT, Target.HEALTH_FORM, form.id)
+    return acceptance
+
+
+def _waiting_form(db: Session, customer: Customer, today: date) -> HealthForm:
+    """``customer``'s form that counts on ``today``, which must be waiting
+    for review. Raises ``CustomerInactiveError`` or ``NoNoteNeededError``."""
+    if not customer.active:
+        raise CustomerInactiveError("reactivate the customer first")
+    form = counting_form(db, customer, today)
+    state = status_of(db, form).state
+    if form is None or state is not FormState.NEEDS_DOCTOR_NOTE:
+        raise NoNoteNeededError(state)
+    return form
 
 
 def notes_by_form(db: Session, forms: list[HealthForm]) -> dict[int, list[int]]:

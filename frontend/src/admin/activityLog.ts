@@ -39,6 +39,7 @@ export const ACTION_NAMES: Record<string, string> = {
   "phone.unlink": "טלפון נותק",
   "health_form.open": "הצהרת בריאות נפתחה",
   "health_form.add_doctor_note": "אישור רפואי נוסף",
+  "health_form.accept": "הצהרת בריאות אושרה בלי אישור רפואי",
   "health_form.fill_in": "הצהרת בריאות מולאה בעמדה",
   "doctor_note.open": "אישור רפואי נפתח",
   "checkin.manual": "כניסה ידנית",

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import StrEnum
 
-from sqlalchemy import Exists, Select, exists, func, select
+from sqlalchemy import ColumnElement, Select, exists, func, select
 from sqlalchemy.orm import Session
 
 from app.core.activity_log import Action, Target, record
@@ -31,7 +31,13 @@ from app.core.health_form_pdf import (
     is_printable,
     render_snapshot,
 )
-from app.core.models import Customer, DoctorNote, HealthForm, StaffUser
+from app.core.models import (
+    Customer,
+    DoctorNote,
+    HealthForm,
+    HealthFormAcceptance,
+    StaffUser,
+)
 
 # Under this age on the signing day, a parent or guardian signs.
 ADULT_AGE = 18
@@ -468,10 +474,11 @@ def counting_form(db: Session, customer: Customer, today: date) -> HealthForm | 
 
 def status_of(db: Session, form: HealthForm | None) -> HealthFormStatus:
     """The status of the form that counts (``None``: missing). A form with
-    a "yes" is valid once a doctor's note has been added for it."""
+    a "yes" is valid once the manager has reviewed it: a doctor's note was
+    added for it, or the manager accepted it (decision 0041)."""
     if form is None:
         return HealthFormStatus(FormState.MISSING, None)
-    if form.needs_doctor_note and not has_doctor_note(db, form):
+    if form.needs_doctor_note and not is_reviewed(db, form):
         return HealthFormStatus(FormState.NEEDS_DOCTOR_NOTE, form.expires_on)
     return HealthFormStatus(FormState.VALID, form.expires_on)
 
@@ -491,7 +498,7 @@ def forms_needing_doctor_note(db: Session, today: date) -> list[CustomerForm]:
     return _customer_forms(
         db,
         _counting_forms(today)
-        .where(HealthForm.needs_doctor_note, ~_noted())
+        .where(HealthForm.needs_doctor_note, ~_reviewed())
         .order_by(HealthForm.signed_on, HealthForm.id),
     )
 
@@ -506,7 +513,7 @@ def forms_expiring(db: Session, today: date) -> list[CustomerForm]:
         _counting_forms(today)
         .where(
             HealthForm.expires_on <= today + EXPIRING_WITHIN,
-            ~HealthForm.needs_doctor_note | _noted(),
+            ~HealthForm.needs_doctor_note | _reviewed(),
         )
         .order_by(HealthForm.expires_on, HealthForm.id),
     )
@@ -536,9 +543,12 @@ def _counting_forms(today: date) -> Select[tuple[HealthForm, Customer]]:
     )
 
 
-def _noted() -> Exists:
-    """The form in the query has a doctor's note."""
-    return exists().where(DoctorNote.health_form_id == HealthForm.id)
+def _reviewed() -> ColumnElement[bool]:
+    """The form in the query has been reviewed: it has a doctor's note, or
+    the manager accepted it (``is_reviewed()`` in a query)."""
+    return exists().where(DoctorNote.health_form_id == HealthForm.id) | exists().where(
+        HealthFormAcceptance.health_form_id == HealthForm.id
+    )
 
 
 def _customer_forms(
@@ -547,6 +557,9 @@ def _customer_forms(
     return [CustomerForm(customer, form) for form, customer in db.execute(query)]
 
 
-def has_doctor_note(db: Session, form: HealthForm) -> bool:
-    """Whether staff have added a doctor's note for ``form``."""
-    return bool(db.scalar(select(exists().where(DoctorNote.health_form_id == form.id))))
+def is_reviewed(db: Session, form: HealthForm) -> bool:
+    """Whether ``form`` no longer waits for the manager: staff added a
+    doctor's note for it, or the manager accepted it (decision 0041)."""
+    noted = exists().where(DoctorNote.health_form_id == form.id)
+    accepted = exists().where(HealthFormAcceptance.health_form_id == form.id)
+    return bool(db.scalar(select(noted | accepted)))

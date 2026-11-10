@@ -21,6 +21,10 @@ React shows:
   updated status. The image is checked before any database work, so a
   slow check never holds the write lock (decision 0027). 400
   ``invalid_image``; 409 ``no_note_needed`` or ``customer_inactive``.
+- ``POST /api/customers/{id}/health-form/accept``: the manager accepts
+  the form that counts today without a doctor's note; it must be waiting
+  for one (``health_forms.accept``, decision 0041). Logged. The answer is
+  the updated status; 409 ``no_note_needed`` or ``customer_inactive``.
 - ``GET /api/customers/{id}/health-form/fill-in``: the current form's
   wording and the customer's details, for the customer to fill in and
   sign on the admin PC (``health_forms.fill_in``, every role). The PC
@@ -103,6 +107,9 @@ CanViewContents = Annotated[
 ]
 CanAddDoctorNote = Annotated[
     StaffLogin, Depends(require_permission(Permission.HEALTH_FORMS_ADD_DOCTOR_NOTE))
+]
+CanAccept = Annotated[
+    StaffLogin, Depends(require_permission(Permission.HEALTH_FORMS_ACCEPT))
 ]
 CanFillIn = Annotated[
     StaffLogin, Depends(require_permission(Permission.HEALTH_FORMS_FILL_IN))
@@ -295,6 +302,27 @@ def add_doctor_note(
     today = health_forms.local_today()
     try:
         doctor_notes.add_doctor_note(db, customer, image, by=login.staff, today=today)
+    except CustomerInactiveError:
+        answer = DoctorNoteConflict(error="customer_inactive")
+        return JSONResponse(answer.model_dump(), status.HTTP_409_CONFLICT)
+    except doctor_notes.NoNoteNeededError as refused:
+        answer = DoctorNoteConflict(error="no_note_needed", state=refused.state)
+        return JSONResponse(answer.model_dump(mode="json"), status.HTTP_409_CONFLICT)
+    return status_answer(health_forms.health_form_status(db, customer, today))
+
+
+@router.post(
+    "/health-form/accept",
+    response_model=HealthFormStatus,
+    responses={status.HTTP_409_CONFLICT: {"model": DoctorNoteConflict}},
+)
+def accept_health_form(
+    customer_id: CustomerId, db: DbSession, login: CanAccept
+) -> HealthFormStatus | JSONResponse:
+    customer = customer_or_404(db, customer_id)
+    today = health_forms.local_today()
+    try:
+        doctor_notes.accept_form(db, customer, by=login.staff, today=today)
     except CustomerInactiveError:
         answer = DoctorNoteConflict(error="customer_inactive")
         return JSONResponse(answer.model_dump(), status.HTTP_409_CONFLICT)

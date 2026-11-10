@@ -38,6 +38,7 @@ MANAGER_ONLY = {
     ("GET", "/api/customers/{customer_id}/health-forms"),
     ("POST", "/api/customers/{customer_id}/health-forms/{form_id}/open"),
     ("POST", "/api/customers/{customer_id}/doctor-notes/{note_id}/open"),
+    ("POST", "/api/customers/{customer_id}/health-form/accept"),
     ("GET", "/api/staff"),
     ("POST", "/api/staff"),
     ("PUT", "/api/staff/{staff_id}/pin"),

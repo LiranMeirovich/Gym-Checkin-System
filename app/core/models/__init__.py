@@ -7,6 +7,7 @@ from app.core.models.base import Base, MonthColumn, UTCDateTime
 from app.core.models.checkins import CheckIn, CheckInMethod
 from app.core.models.customers import Customer
 from app.core.models.doctor_notes import DoctorNote, ImageType
+from app.core.models.health_form_acceptances import HealthFormAcceptance
 from app.core.models.health_forms import HealthForm
 from app.core.models.phone_links import DeviceSession, LinkCode
 from app.core.models.plan_choices import ChosenBy, PlanChoice
@@ -25,6 +26,7 @@ __all__ = [
     "DeviceSession",
     "DoctorNote",
     "HealthForm",
+    "HealthFormAcceptance",
     "ImageType",
     "LinkCode",
     "MonthColumn",
