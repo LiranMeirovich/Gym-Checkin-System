@@ -60,6 +60,9 @@ class Permission(StrEnum):
     HEALTH_FORMS_VIEW_CONTENTS = "health_forms.view_contents"
     # Add a doctor's note to a form with a "yes" answer.
     HEALTH_FORMS_ADD_DOCTOR_NOTE = "health_forms.add_doctor_note"
+    # Accept a form with a "yes" answer without a doctor's note (the
+    # manager's, decision 0041).
+    HEALTH_FORMS_ACCEPT = "health_forms.accept"
     # Open the form on the desk PC for a customer to fill in and sign.
     HEALTH_FORMS_FILL_IN = "health_forms.fill_in"
 

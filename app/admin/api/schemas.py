@@ -441,13 +441,16 @@ class LinkedPhones(Answer):
 
 
 class HealthFormStatus(Answer):
-    """What every staff member sees: ``valid``, ``needs_doctor_note`` (a
-    "yes" answer; blocks check-in until a doctor's note is added) or
-    ``missing`` (none, or expired). ``valid_until``: the last day of the
-    form that counts, or null for ``missing``. Never the answers."""
+    """What staff see: ``valid``, ``needs_doctor_note`` (a "yes" answer
+    waiting for the manager's review; only staff who review forms see it,
+    decision 0041) or ``missing`` (none, or expired). ``valid_until``: the
+    last day of the form that counts, or null for ``missing``.
+    ``allows_check_in``: whether the customer may check in with it, the
+    server's rule, so the desk doesn't repeat it. Never the answers."""
 
     state: FormState
     valid_until: date | None
+    allows_check_in: bool
 
 
 class CustomerFormEntry(Answer):
@@ -479,6 +482,8 @@ class HealthFormSummary(Answer):
     # The doctor's notes added for this form, oldest first; each image is
     # opened (and logged) on its own.
     doctor_note_ids: list[int]
+    # The manager accepted it without a note (decision 0041).
+    accepted: bool
 
 
 class HealthFormList(Answer):
@@ -579,8 +584,9 @@ class DoctorNoteRefused(Answer):
 
 
 class DoctorNoteConflict(Answer):
-    """409. ``no_note_needed``: the form that counts today isn't waiting
-    for a note (``state``: ``valid``, or ``missing`` when there is none).
+    """409, from adding a doctor's note or accepting a form without one.
+    ``no_note_needed``: the form that counts today isn't waiting for review
+    (``state``: ``valid``, or ``missing`` when there is none).
     ``customer_inactive``: reactivate them first. Nothing was saved."""
 
     error: Literal["no_note_needed", "customer_inactive"]

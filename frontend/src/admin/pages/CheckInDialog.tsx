@@ -209,7 +209,11 @@ function CheckInBody({
     );
   }
 
-  const formValid = health.data.state === "valid";
+  // The server says whether the form lets the customer in (decision 0041:
+  // one waiting for the manager's review does).
+  const formValid = health.data.allows_check_in;
+  // Only staff who review forms are ever sent "waiting for review".
+  const waiting = health.data.state === "needs_doctor_note";
   const covering = plan.data.covering;
   const singleEntry = plan.data.options.find(
     (option) => option.plan === "single_entry",
@@ -220,15 +224,9 @@ function CheckInBody({
     action = (
       <p role="alert">
         אין כניסה בלי הצהרת בריאות בתוקף.{" "}
-        {health.data.state === "missing" ? (
-          <Link to={`/customers/${customerId}/health-form`} onClick={close}>
-            מילוי ההצהרה כאן, במחשב
-          </Link>
-        ) : (
-          <Link to={`/customers/${customerId}`} onClick={close}>
-            הוספת אישור רפואי בכרטיס הלקוח
-          </Link>
-        )}
+        <Link to={`/customers/${customerId}/health-form`} onClick={close}>
+          מילוי ההצהרה כאן, במחשב
+        </Link>
       </p>
     );
   } else if (covering) {
@@ -262,9 +260,13 @@ function CheckInBody({
       <dl className={styles.summary}>
         <dt>הצהרת בריאות</dt>
         <dd>
-          <StatusBadge tone={formValid ? "ok" : "stop"}>
-            {formValid ? "בתוקף" : "לא בתוקף"}
-          </StatusBadge>
+          {waiting ? (
+            <StatusBadge tone="warn">ממתינה לבדיקה</StatusBadge>
+          ) : (
+            <StatusBadge tone={formValid ? "ok" : "stop"}>
+              {formValid ? "בתוקף" : "לא בתוקף"}
+            </StatusBadge>
+          )}
         </dd>
         <dt>מסלול לחודש {formatMonth(plan.data.current_month)}</dt>
         <dd>

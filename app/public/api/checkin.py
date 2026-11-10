@@ -8,8 +8,8 @@ choice"; decisions 0004, 0017, 0025).
   - 200 ``checked_in`` or ``already_checked_in`` (within 10 minutes of
     the last check-in), with the plan covering this month.
   - 401 ``not_linked``: show the link form.
-  - 409 ``health_form_required``: show the form, or send the customer to
-    the desk for a doctor's note.
+  - 409 ``health_form_required``: no form, or it has expired; show the
+    form.
   - 409 ``plan_required``: show the plan page with ``options``; the tapped
     plan comes back in ``plan`` and is chosen with the check-in.
   - 409 ``price_not_set``: the tapped plan's price went away meanwhile.

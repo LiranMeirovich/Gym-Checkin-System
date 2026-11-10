@@ -23,7 +23,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Staff header: on a window narrower than about 480px the menu is wider than the page and pushes it sideways (every staff screen). The desk PC is wide; fix if the admin app is ever used on a small screen.
 - Customer list search: names in other alphabets (Cyrillic, accented Latin) match only in the case typed, since SQLite's `LIKE` folds English letters only. If staff need it, a lowercased search column (schema change) fixes it. Name search reads the whole `customers` table (`LIKE '%…%'`); fine at hundreds of customers, FTS5 if it ever gets slow.
 - Customer list: the search text sits in the desk PC's address bar and browser history (the server log drops it). Acceptable on a staff-only PC; revisit if the admin app is ever used elsewhere.
-- Styling pass leftovers (decision 0034): the phone's "needs a doctor's note" message was styled only by `base.css` and not checked in the browser; the health form's yes/no answers hide their radio buttons visually (the labels are the controls), so check them with a real screen reader (NVDA on the desk PC, VoiceOver on a phone).
+- Styling pass leftovers (decision 0034): the health form's yes/no answers hide their radio buttons visually (the labels are the controls), so check them with a real screen reader (NVDA on the desk PC, VoiceOver on a phone).
 
 ## Milestone 5: report (from Plan corrections)
 - The report reads plan choices with the same rule as `_first_active()` in `app/core/plans.py`: active means no row replaces it, and a "no plan" row (`plan IS NULL`) covers nothing (decision 0026).
@@ -56,9 +56,11 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - The lock times (managers 5 min, instructors 60).
 - The instructor/manager permission split, still the design doc's proposal (one-line change in `ROLE_PERMISSIONS` plus its test). That now includes instructors seeing prices and their history (`prices.view`).
 - Enter the real prices on the Prices screen; none ship with the system.
+- Insurance with a "yes" on the health form (decision 0041): a customer whose form has a "yes" now trains before the manager reviews it. Confirm with the insurer that a signed form with a "yes" covers them, or go back to blocking until a doctor's note.
 - Health form: 12 months from signing (the paper form says "valid for <year>"), the confirmation checkbox's wording, whether the doctor's note must be at most 3 months old, and that names on the form must be in Hebrew or Latin letters (decision 0031).
 
 ## Code review leftovers (low priority)
+- Forms waiting for review (decision 0041): the public API's health form state still lists `needs_doctor_note`, which the phone can no longer receive; `FormState.NEEDS_DOCTOR_NOTE`, `forms_needing_doctor_note()` and `/api/health-forms/needing-note` now mean "waiting for the manager's review" (a note or an acceptance). Rename them (API contract changes) before more screens use them. `AcceptForm` and `DoctorNoteUpload` on the customer page repeat the same answer handling; share it if a third review action comes.
 - The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two, `plan_choices`' five (append-only, overlap, same customer, same months) and `checkins`' three (append-only, same customer's phone).
 - Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`, now including the customer and price tests), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
 - Setup validates the gym name twice.

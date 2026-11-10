@@ -1,6 +1,6 @@
 # 0040. The dashboard polls, and timed refreshes don't count as activity
 
-- Status: Accepted
+- Status: Accepted; the two form lists superseded by [0041](0041-a-yes-on-the-health-form-lets-the-customer-in-the-manager-reviews-it.md) (a manager-only "forms to review" panel)
 - Date: 2026-11-09
 
 ## Context

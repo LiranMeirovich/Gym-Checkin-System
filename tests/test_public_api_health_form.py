@@ -188,7 +188,9 @@ def test_signing_makes_the_form_valid(linked: TestClient, db: Session) -> None:
     assert saved.document.startswith(b"%PDF-")
 
 
-def test_a_yes_answer_needs_a_doctors_note(linked: TestClient, db: Session) -> None:
+def test_a_yes_answer_is_valid_on_the_phone(linked: TestClient, db: Session) -> None:
+    # Saved as needing a doctor's note for the manager to review, but the
+    # phone carries on to check-in (decision 0041).
     response = sign(
         linked,
         answers=ALL_NO | {"other": True},
@@ -196,8 +198,9 @@ def test_a_yes_answer_needs_a_doctors_note(linked: TestClient, db: Session) -> N
     )
 
     assert response.status_code == 200
-    assert response.json()["state"] == "needs_doctor_note"
+    assert response.json()["state"] == "valid"
     saved = db.scalars(select(HealthForm)).one()
+    assert saved.needs_doctor_note is True
     assert json.loads(saved.answers_json)["details"] == {"other": "made-up detail"}
 
 

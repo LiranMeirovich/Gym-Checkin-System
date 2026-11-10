@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.activity_log import Action, Target
 from app.core.customers import CustomerInactiveError
 from app.core.db import get_engine
+from app.core.doctor_notes import NoNoteNeededError, accept_form
 from app.core.health_forms import (
     CURRENT_VERSION,
     FORMS,
@@ -23,6 +24,7 @@ from app.core.health_forms import (
     FormState,
     FormVersionChangedError,
     Gender,
+    HealthFormStatus,
     InvalidHealthFormError,
     check_form,
     expires_on,
@@ -37,6 +39,7 @@ from app.core.models import (
     Customer,
     DoctorNote,
     HealthForm,
+    HealthFormAcceptance,
     ImageType,
     StaffUser,
 )
@@ -333,7 +336,29 @@ def test_a_form_with_a_yes_needs_a_doctors_note(
 
     assert status.state is FormState.NEEDS_DOCTOR_NOTE
     assert status.valid_until == date(2027, 11, 3)
-    assert status.allows_check_in is False
+    # It lets the customer in meanwhile, and the phone sees it as valid
+    # (decision 0041).
+    assert status.allows_check_in is True
+    assert status.as_entry_status() == HealthFormStatus(
+        FormState.VALID, date(2027, 11, 3)
+    )
+
+
+def test_only_staff_who_review_forms_see_one_waiting() -> None:
+    waiting = HealthFormStatus(FormState.NEEDS_DOCTOR_NOTE, date(2027, 11, 3))
+    valid = HealthFormStatus(FormState.VALID, date(2027, 11, 3))
+
+    assert waiting.as_seen_by(Role.OWNER) == waiting
+    assert waiting.as_seen_by("manager") == waiting
+    assert waiting.as_seen_by(Role.INSTRUCTOR) == valid
+    assert valid.as_seen_by(Role.INSTRUCTOR) == valid
+
+
+def test_only_a_missing_form_blocks_check_in() -> None:
+    missing = HealthFormStatus(FormState.MISSING, None)
+
+    assert missing.allows_check_in is False
+    assert missing.as_entry_status() == missing
 
 
 def test_the_newest_form_counts(db: Session, customer: Customer) -> None:
@@ -394,6 +419,86 @@ def test_a_note_on_an_older_form_doesnt_clear_a_newer_yes(
 ) -> None:
     older = add_form(db, customer, date(2026, 1, 10), yes=True)
     add_note(db, older)
+    add_form(db, customer, date(2026, 6, 1), yes=True)
+
+    status = health_form_status(db, customer, date(2026, 7, 1))
+
+    assert status.state is FormState.NEEDS_DOCTOR_NOTE
+
+
+def a_manager(db: Session) -> StaffUser:
+    manager = StaffUser(
+        display_name="Rona",
+        role=Role.MANAGER,
+        pin_hash="$argon2id$v=19$m=65536,t=3,p=4$fake",
+    )
+    db.add(manager)
+    db.flush()
+    return manager
+
+
+def test_the_managers_acceptance_makes_a_form_with_a_yes_valid(
+    db: Session, customer: Customer
+) -> None:
+    form = add_form(db, customer, date(2026, 11, 4), yes=True)
+    manager = a_manager(db)
+
+    accepted = accept_form(db, customer, by=manager, today=date(2026, 11, 5))
+
+    assert accepted.health_form_id == form.id
+    assert accepted.staff_user_id == manager.id
+    status = health_form_status(db, customer, date(2026, 11, 5))
+    assert status == HealthFormStatus(FormState.VALID, date(2027, 11, 3))
+    entry = db.scalars(select(ActivityLogEntry)).one()
+    assert (entry.action, entry.target_type, entry.target_id) == (
+        Action.HEALTH_FORM_ACCEPT,
+        Target.HEALTH_FORM,
+        form.id,
+    )
+    assert entry.staff_user_id == manager.id
+
+
+@pytest.mark.parametrize("yes", [False, True])
+def test_only_a_form_waiting_for_review_can_be_accepted(
+    db: Session, customer: Customer, yes: bool
+) -> None:
+    # A form without a "yes", or one already accepted, isn't waiting.
+    add_form(db, customer, date(2026, 11, 4), yes=yes)
+    manager = a_manager(db)
+    if yes:
+        accept_form(db, customer, by=manager, today=date(2026, 11, 4))
+
+    with pytest.raises(NoNoteNeededError) as refused:
+        accept_form(db, customer, by=manager, today=date(2026, 11, 4))
+
+    assert refused.value.state is FormState.VALID
+    assert len(db.scalars(select(HealthFormAcceptance)).all()) == (1 if yes else 0)
+
+
+def test_a_missing_form_cant_be_accepted(db: Session, customer: Customer) -> None:
+    with pytest.raises(NoNoteNeededError) as refused:
+        accept_form(db, customer, by=a_manager(db), today=date(2026, 11, 4))
+
+    assert refused.value.state is FormState.MISSING
+
+
+def test_an_inactive_customers_form_cant_be_accepted(
+    db: Session, customer: Customer
+) -> None:
+    add_form(db, customer, date(2026, 11, 4), yes=True)
+    customer.active = False
+
+    with pytest.raises(CustomerInactiveError):
+        accept_form(db, customer, by=a_manager(db), today=date(2026, 11, 4))
+
+    assert db.scalars(select(HealthFormAcceptance)).all() == []
+
+
+def test_accepting_an_older_form_doesnt_clear_a_newer_yes(
+    db: Session, customer: Customer
+) -> None:
+    add_form(db, customer, date(2026, 1, 10), yes=True)
+    accept_form(db, customer, by=a_manager(db), today=date(2026, 2, 1))
     add_form(db, customer, date(2026, 6, 1), yes=True)
 
     status = health_form_status(db, customer, date(2026, 7, 1))

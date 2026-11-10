@@ -28,6 +28,7 @@ from app.core.models import (
     Customer,
     DoctorNote,
     HealthForm,
+    HealthFormAcceptance,
     ImageType,
     StaffUser,
 )
@@ -190,21 +191,44 @@ def test_an_instructor_sees_the_status(
     response = as_instructor.status(customer.id)
 
     assert response.status_code == 200
-    assert response.json() == {"state": "valid", "valid_until": "2027-11-03"}
+    assert response.json() == {
+        "state": "valid",
+        "valid_until": "2027-11-03",
+        "allows_check_in": True,
+    }
 
 
-def test_a_yes_answer_shows_as_needing_a_doctors_note(
-    as_instructor: Staff, db: Session, customer: Customer
+def test_a_yes_answer_shows_the_manager_its_waiting(
+    as_manager: Staff, db: Session, customer: Customer
 ) -> None:
     add_form(db, customer, date(2026, 11, 4), yes=True)
 
-    assert as_instructor.status(customer.id).json()["state"] == "needs_doctor_note"
+    # Waiting, and still lets the customer in.
+    assert as_manager.status(customer.id).json() == {
+        "state": "needs_doctor_note",
+        "valid_until": "2027-11-03",
+        "allows_check_in": True,
+    }
+
+
+def test_a_yes_answer_shows_an_instructor_valid(
+    as_instructor: Staff, db: Session, customer: Customer
+) -> None:
+    # As it is for getting in: reviewing is the manager's (decision 0041).
+    add_form(db, customer, date(2026, 11, 4), yes=True)
+
+    assert as_instructor.status(customer.id).json() == {
+        "state": "valid",
+        "valid_until": "2027-11-03",
+        "allows_check_in": True,
+    }
 
 
 def test_no_form_shows_as_missing(as_instructor: Staff, customer: Customer) -> None:
     assert as_instructor.status(customer.id).json() == {
         "state": "missing",
         "valid_until": None,
+        "allows_check_in": False,
     }
 
 
@@ -246,6 +270,7 @@ def test_the_manager_lists_forms_newest_first(
         "signed_by_guardian": False,
         "needs_doctor_note": True,
         "doctor_note_ids": [],
+        "accepted": False,
     }
     # Listing isn't opening.
     assert opens_logged(db) == []
@@ -336,7 +361,11 @@ def test_an_instructor_adds_a_note_and_the_form_counts(
     response = add_note(as_instructor, customer.id, data_url(photo()))
 
     assert response.status_code == 200
-    assert response.json() == {"state": "valid", "valid_until": "2027-11-03"}
+    assert response.json() == {
+        "state": "valid",
+        "valid_until": "2027-11-03",
+        "allows_check_in": True,
+    }
     [note] = notes(db)
     assert note.health_form_id == form.id
     assert note.staff_user_id == instructor.id
@@ -427,6 +456,109 @@ def test_adding_a_note_needs_the_csrf_token(
 
 def test_a_note_for_an_unknown_customer_is_404(as_instructor: Staff) -> None:
     assert add_note(as_instructor, 999, data_url(photo())).status_code == 404
+
+
+# ── Accepting a form without a note (decision 0041) ───────────────────
+
+
+def accept(staff: Staff, customer_id: int, *, csrf: bool = True):
+    return staff.client.post(
+        f"/api/customers/{customer_id}/health-form/accept",
+        headers=staff.headers if csrf else SAME_ORIGIN,
+    )
+
+
+def acceptances(db: Session) -> list[HealthFormAcceptance]:
+    db.rollback()
+    return list(db.scalars(select(HealthFormAcceptance)))
+
+
+def test_the_manager_accepts_a_form_and_it_counts(
+    as_manager: Staff, db: Session, manager: StaffUser, customer: Customer
+) -> None:
+    form = add_form(db, customer, date(2026, 11, 4), yes=True)
+
+    response = accept(as_manager, customer.id)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "state": "valid",
+        "valid_until": "2027-11-03",
+        "allows_check_in": True,
+    }
+    [accepted] = acceptances(db)
+    assert (accepted.health_form_id, accepted.staff_user_id) == (form.id, manager.id)
+    [entry] = logged(db, Action.HEALTH_FORM_ACCEPT)
+    assert entry.staff_user_id == manager.id
+    assert (entry.target_type, entry.target_id) == (Target.HEALTH_FORM, form.id)
+    # Reviewed: no note is wanted any more.
+    assert add_note(as_manager, customer.id, data_url(photo())).status_code == 409
+    [listed] = as_manager.forms(customer.id).json()["forms"]
+    assert (listed["accepted"], listed["doctor_note_ids"]) == (True, [])
+
+
+def test_an_instructor_cant_accept_a_form(
+    as_instructor: Staff, db: Session, customer: Customer
+) -> None:
+    add_form(db, customer, date(2026, 11, 4), yes=True)
+
+    assert accept(as_instructor, customer.id).status_code == 403
+    assert acceptances(db) == []
+
+
+@pytest.mark.parametrize(("yes", "state"), [(False, "valid"), (None, "missing")])
+def test_accepting_is_refused_when_nothing_waits(
+    as_manager: Staff,
+    db: Session,
+    customer: Customer,
+    yes: bool | None,
+    state: str,
+) -> None:
+    if yes is not None:
+        add_form(db, customer, date(2026, 11, 4), yes=yes)
+
+    response = accept(as_manager, customer.id)
+
+    assert response.status_code == 409
+    assert response.json() == {"error": "no_note_needed", "state": state}
+    assert acceptances(db) == []
+
+
+def test_accepting_twice_is_refused(
+    as_manager: Staff, db: Session, customer: Customer
+) -> None:
+    add_form(db, customer, date(2026, 11, 4), yes=True)
+    assert accept(as_manager, customer.id).status_code == 200
+
+    response = accept(as_manager, customer.id)
+
+    assert response.status_code == 409
+    assert response.json() == {"error": "no_note_needed", "state": "valid"}
+    assert len(acceptances(db)) == 1
+
+
+def test_accepting_for_an_inactive_customer_is_refused(
+    as_manager: Staff, db: Session, customer: Customer
+) -> None:
+    add_form(db, customer, date(2026, 11, 4), yes=True)
+    customer.active = False
+    db.commit()
+
+    response = accept(as_manager, customer.id)
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "customer_inactive"
+    assert acceptances(db) == []
+
+
+def test_accepting_needs_the_csrf_token(
+    as_manager: Staff, db: Session, customer: Customer
+) -> None:
+    add_form(db, customer, date(2026, 11, 4), yes=True)
+
+    assert accept(as_manager, customer.id, csrf=False).status_code == 403
+    assert accept(as_manager, 999).status_code == 404
+    assert acceptances(db) == []
 
 
 def test_the_manager_sees_and_opens_a_note_and_opening_is_logged(
@@ -564,6 +696,7 @@ def test_signing_on_the_pc_makes_the_form_valid_and_is_logged(
     assert response.json() == {
         "state": "valid",
         "valid_until": expires_on(date(2026, 11, 4)).isoformat(),
+        "allows_check_in": True,
     }
     # The PC never becomes the customer's device.
     assert "set-cookie" not in response.headers
@@ -579,13 +712,16 @@ def test_signing_on_the_pc_makes_the_form_valid_and_is_logged(
     assert json.loads(entry.after_json) == {"customer_id": customer.id}
 
 
-def test_a_yes_answer_on_the_pc_needs_a_doctors_note(
-    as_instructor: Staff, customer: Customer
+def test_a_yes_answer_on_the_pc_waits_for_the_managers_review(
+    as_instructor: Staff, db: Session, customer: Customer
 ) -> None:
     response = sign(as_instructor, customer.id, answers=ALL_NO | {"diabetes": True})
 
+    # Valid to the instructor; saved as waiting for the manager.
     assert response.status_code == 200
-    assert response.json()["state"] == "needs_doctor_note"
+    assert response.json()["state"] == "valid"
+    db.rollback()
+    assert db.scalars(select(HealthForm)).one().needs_doctor_note is True
 
 
 def test_bad_fields_are_all_refused_and_nothing_is_saved(

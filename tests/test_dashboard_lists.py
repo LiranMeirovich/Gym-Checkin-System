@@ -20,6 +20,7 @@ from app.core.models import (
     DeviceSession,
     DoctorNote,
     HealthForm,
+    HealthFormAcceptance,
     ImageType,
     StaffUser,
 )
@@ -193,6 +194,14 @@ def test_a_yes_answer_without_a_note_is_listed(db: Session) -> None:
 def test_a_note_takes_the_form_off_the_list(db: Session) -> None:
     form = add_form(db, add_customer(db), needs_doctor_note=True)
     add_note(db, form, add_staff(db))
+
+    assert forms_needing_doctor_note(db, TODAY) == []
+
+
+def test_the_managers_acceptance_takes_the_form_off_the_list(db: Session) -> None:
+    form = add_form(db, add_customer(db), needs_doctor_note=True)
+    db.add(HealthFormAcceptance(health_form_id=form.id, staff_user_id=add_staff(db).id))
+    db.flush()
 
     assert forms_needing_doctor_note(db, TODAY) == []
 

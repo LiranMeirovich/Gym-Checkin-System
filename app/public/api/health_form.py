@@ -5,8 +5,8 @@ decisions 0004, 0031). Only a linked phone gets it; anything else is 401
 - ``GET /api/health-form``: the current form's wording and the customer's
   details, for the phone to show.
 - ``POST /api/health-form``: the filled-in form with its signature. The
-  answer is the customer's health form status afterwards: ``valid``, or
-  ``needs_doctor_note`` when an answer was "yes". 400 lists every bad
+  answer is the customer's health form status afterwards: ``valid``, even
+  when an answer was "yes" (the manager reviews it, decision 0041). 400 lists every bad
   field; 409 means the form changed while the page was open.
 
 Filling in a form doesn't count as using the phone (``last_seen_at``); a
@@ -45,7 +45,8 @@ NOT_LINKED = {status.HTTP_401_UNAUTHORIZED: {"model": NotLinked}}
 
 
 def status_answer(found: CoreStatus) -> HealthFormStatus:
-    return HealthFormStatus(state=found.state, valid_until=found.valid_until)
+    shown = found.as_entry_status()
+    return HealthFormStatus(state=shown.state, valid_until=shown.valid_until)
 
 
 @router.get("/health-form", response_model=HealthFormPage, responses=NOT_LINKED)

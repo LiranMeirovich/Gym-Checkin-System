@@ -1,9 +1,9 @@
 // The page the wall QR opens. A phone that isn't linked gets the link
 // form (its phone number and the code from the desk), or a new customer
 // signs up on it (SignUpForm, decision 0035). A linked phone with
-// no valid health form gets the form first (decision 0004); one whose
-// form needs a doctor's note is sent to the desk. Otherwise the phone
-// checks in straight away (CheckInStep), right after linking or signing
+// no valid health form gets the form first (decision 0004). Otherwise the
+// phone checks in straight away (a form waiting for a doctor's note is
+// "valid" here: the manager reviews it, decision 0041) (CheckInStep), right after linking or signing
 // the form too.
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,17 +53,6 @@ function Linked({ me }: { me: Me }) {
 
   if (form.state === "missing") {
     return <HealthForm onSigned={setForm} />;
-  }
-  if (form.state === "needs_doctor_note") {
-    return (
-      <>
-        <h1 className={styles.heading}>שלום, {me.first_name}</h1>
-        <p role="alert">
-          הצהרת הבריאות התקבלה. מכיוון שסימנת &quot;כן&quot; באחת השאלות, יש
-          להביא לדלפק אישור רפואי מרופא לפני האימון.
-        </p>
-      </>
-    );
   }
   return (
     <CheckInStep

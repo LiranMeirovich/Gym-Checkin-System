@@ -236,16 +236,20 @@ def test_no_form_is_health_form_required(
     assert visits(db) == []
 
 
-def test_a_form_needing_a_doctors_note_says_so(
+def test_a_form_needing_a_doctors_note_checks_in_like_any_other(
     linked: TestClient, db: Session, customer: Customer
 ) -> None:
+    # The phone shows plain success; the manager reviews the form
+    # (decision 0041). Nor does the phone hear that it's waiting.
     add_monthly(db, customer)
     add_form(db, customer, needs_doctor_note=True)
 
     response = check_in(linked)
 
-    assert response.status_code == 409
-    assert response.json()["health_form"]["state"] == "needs_doctor_note"
+    assert response.status_code == 200
+    assert response.json()["outcome"] == "checked_in"
+    assert len(visits(db)) == 1
+    assert linked.get("/api/me").json()["health_form"]["state"] == "valid"
 
 
 def test_no_plan_is_plan_required_with_the_options(

@@ -6,7 +6,9 @@ React shows:
 
 - ``GET /api/customers/{id}/health-form``: valid, needs a doctor's note,
   or missing, and until when (``health_forms.view_status``, every role).
-  Never the answers.
+  Never the answers. Only staff who review forms (``health_forms.accept``)
+  see "needs a doctor's note"; to the rest a form waiting for review is
+  valid, as it is for getting in (decision 0041).
 - ``GET /api/customers/{id}/health-forms``: every form the customer has
   signed, newest first, with its doctor's notes' ids but without their
   contents (``health_forms.view_contents``, the manager).
@@ -21,6 +23,10 @@ React shows:
   updated status. The image is checked before any database work, so a
   slow check never holds the write lock (decision 0027). 400
   ``invalid_image``; 409 ``no_note_needed`` or ``customer_inactive``.
+- ``POST /api/customers/{id}/health-form/accept``: the manager accepts
+  the form that counts today without a doctor's note; it must be waiting
+  for one (``health_forms.accept``, decision 0041). Logged. The answer is
+  the updated status; 409 ``no_note_needed`` or ``customer_inactive``.
 - ``GET /api/customers/{id}/health-form/fill-in``: the current form's
   wording and the customer's details, for the customer to fill in and
   sign on the admin PC (``health_forms.fill_in``, every role). The PC
@@ -35,14 +41,16 @@ React shows:
   (``health_forms.view_contents``), logged like opening a form. A note
   that isn't this customer's is a 404.
 
-Across all customers, for the dashboard (``health_forms.view_status``,
-every role: status and dates, never the answers). Only active customers,
-each by the form that counts for them today:
+Across all customers (status and dates, never the answers). Only active
+customers, each by the form that counts for them today:
 
-- ``GET /api/health-forms/needing-note``: forms with a "yes" answer and no
-  doctor's note yet, oldest signature first.
+- ``GET /api/health-forms/needing-note``: forms with a "yes" answer the
+  manager hasn't reviewed yet (no doctor's note, not accepted), oldest
+  signature first: the dashboard's "forms to review" (``health_forms.
+  accept``, the manager; decision 0041).
 - ``GET /api/health-forms/expiring``: valid forms whose last day is within
-  30 days, soonest first.
+  30 days, soonest first (``health_forms.view_status``, every role). No
+  screen uses it since decision 0041.
 """
 
 from typing import Annotated
@@ -104,6 +112,9 @@ CanViewContents = Annotated[
 CanAddDoctorNote = Annotated[
     StaffLogin, Depends(require_permission(Permission.HEALTH_FORMS_ADD_DOCTOR_NOTE))
 ]
+CanAccept = Annotated[
+    StaffLogin, Depends(require_permission(Permission.HEALTH_FORMS_ACCEPT))
+]
 CanFillIn = Annotated[
     StaffLogin, Depends(require_permission(Permission.HEALTH_FORMS_FILL_IN))
 ]
@@ -112,7 +123,18 @@ NoteId = Annotated[int, Path(ge=1, le=MAX_ID)]
 
 
 def status_answer(found: health_forms.HealthFormStatus) -> HealthFormStatus:
-    return HealthFormStatus(state=found.state, valid_until=found.valid_until)
+    return HealthFormStatus(
+        state=found.state,
+        valid_until=found.valid_until,
+        allows_check_in=found.allows_check_in,
+    )
+
+
+def status_for(
+    login: StaffLogin, found: health_forms.HealthFormStatus
+) -> HealthFormStatus:
+    """``found`` as ``login``'s staff member sees it (decision 0041)."""
+    return status_answer(found.as_seen_by(login.staff.role))
 
 
 def customer_forms(found: list[health_forms.CustomerForm]) -> CustomerForms:
@@ -129,7 +151,7 @@ def customer_forms(found: list[health_forms.CustomerForm]) -> CustomerForms:
 
 
 @gym_router.get("/needing-note")
-def needing_doctor_note(db: DbSession, _login: CanViewStatus) -> CustomerForms:
+def needing_doctor_note(db: DbSession, _login: CanAccept) -> CustomerForms:
     return customer_forms(health_forms.forms_needing_doctor_note(db, local_today()))
 
 
@@ -140,11 +162,11 @@ def expiring(db: DbSession, _login: CanViewStatus) -> CustomerForms:
 
 @router.get("/health-form")
 def health_form_status(
-    customer_id: CustomerId, db: DbSession, _login: CanViewStatus
+    customer_id: CustomerId, db: DbSession, login: CanViewStatus
 ) -> HealthFormStatus:
     customer = customer_or_404(db, customer_id)
-    return status_answer(
-        health_forms.health_form_status(db, customer, health_forms.local_today())
+    return status_for(
+        login, health_forms.health_form_status(db, customer, health_forms.local_today())
     )
 
 
@@ -155,6 +177,7 @@ def health_form_list(
     customer = customer_or_404(db, customer_id)
     forms = health_forms.list_forms(db, customer)
     notes = doctor_notes.notes_by_form(db, forms)
+    accepted = doctor_notes.accepted_forms(db, forms)
     return HealthFormList(
         forms=[
             HealthFormSummary(
@@ -166,6 +189,7 @@ def health_form_list(
                 signed_by_guardian=form.signed_by_guardian,
                 needs_doctor_note=form.needs_doctor_note,
                 doctor_note_ids=notes[form.id],
+                accepted=form.id in accepted,
             )
             for form in forms
         ]
@@ -264,7 +288,7 @@ def sign_health_form(
     except CustomerInactiveError:
         answer = HealthFormConflict(error="customer_inactive")
         return JSONResponse(answer.model_dump(), status.HTTP_409_CONFLICT)
-    return status_answer(health_forms.health_form_status(db, customer, today))
+    return status_for(login, health_forms.health_form_status(db, customer, today))
 
 
 @router.post(
@@ -301,7 +325,28 @@ def add_doctor_note(
     except doctor_notes.NoNoteNeededError as refused:
         answer = DoctorNoteConflict(error="no_note_needed", state=refused.state)
         return JSONResponse(answer.model_dump(mode="json"), status.HTTP_409_CONFLICT)
-    return status_answer(health_forms.health_form_status(db, customer, today))
+    return status_for(login, health_forms.health_form_status(db, customer, today))
+
+
+@router.post(
+    "/health-form/accept",
+    response_model=HealthFormStatus,
+    responses={status.HTTP_409_CONFLICT: {"model": DoctorNoteConflict}},
+)
+def accept_health_form(
+    customer_id: CustomerId, db: DbSession, login: CanAccept
+) -> HealthFormStatus | JSONResponse:
+    customer = customer_or_404(db, customer_id)
+    today = health_forms.local_today()
+    try:
+        doctor_notes.accept_form(db, customer, by=login.staff, today=today)
+    except CustomerInactiveError:
+        answer = DoctorNoteConflict(error="customer_inactive")
+        return JSONResponse(answer.model_dump(), status.HTTP_409_CONFLICT)
+    except doctor_notes.NoNoteNeededError as refused:
+        answer = DoctorNoteConflict(error="no_note_needed", state=refused.state)
+        return JSONResponse(answer.model_dump(mode="json"), status.HTTP_409_CONFLICT)
+    return status_for(login, health_forms.health_form_status(db, customer, today))
 
 
 @router.post(
