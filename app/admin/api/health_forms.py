@@ -39,14 +39,16 @@ React shows:
   (``health_forms.view_contents``), logged like opening a form. A note
   that isn't this customer's is a 404.
 
-Across all customers, for the dashboard (``health_forms.view_status``,
-every role: status and dates, never the answers). Only active customers,
-each by the form that counts for them today:
+Across all customers (status and dates, never the answers). Only active
+customers, each by the form that counts for them today:
 
-- ``GET /api/health-forms/needing-note``: forms with a "yes" answer and no
-  doctor's note yet, oldest signature first.
+- ``GET /api/health-forms/needing-note``: forms with a "yes" answer the
+  manager hasn't reviewed yet (no doctor's note, not accepted), oldest
+  signature first: the dashboard's "forms to review" (``health_forms.
+  accept``, the manager; decision 0041).
 - ``GET /api/health-forms/expiring``: valid forms whose last day is within
-  30 days, soonest first.
+  30 days, soonest first (``health_forms.view_status``, every role). No
+  screen uses it since decision 0041.
 """
 
 from typing import Annotated
@@ -136,7 +138,7 @@ def customer_forms(found: list[health_forms.CustomerForm]) -> CustomerForms:
 
 
 @gym_router.get("/needing-note")
-def needing_doctor_note(db: DbSession, _login: CanViewStatus) -> CustomerForms:
+def needing_doctor_note(db: DbSession, _login: CanAccept) -> CustomerForms:
     return customer_forms(health_forms.forms_needing_doctor_note(db, local_today()))
 
 

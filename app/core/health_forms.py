@@ -493,8 +493,8 @@ class CustomerForm:
 
 def forms_needing_doctor_note(db: Session, today: date) -> list[CustomerForm]:
     """Active customers whose form that counts on ``today`` has a "yes"
-    answer and no doctor's note yet, so they can't check in until staff add
-    one. Oldest signature first: the longest wait at the top."""
+    answer the manager hasn't reviewed yet: no doctor's note, not accepted
+    (decision 0041). Oldest signature first: the longest wait at the top."""
     return _customer_forms(
         db,
         _counting_forms(today)

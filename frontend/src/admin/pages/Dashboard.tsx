@@ -1,7 +1,8 @@
 // The home screen: what's happening at the gym now (design doc: "Admin:
-// dashboard"). Four lists, each from its own route so other screens can
-// reuse them; the instructor at the desk is the one watching it, and
-// spots a check-in or sign-up that doesn't match who's in the gym.
+// dashboard"). Each list comes from its own route so other screens can
+// reuse it; the instructor at the desk is the one watching it, and spots a
+// check-in or sign-up that doesn't match who's in the gym. The manager also
+// sees the health forms waiting for their review (decision 0041).
 //
 // Each list refreshes itself: today's check-ins every 15 seconds, the rest
 // every minute (they change a few times a day). Only the timed refreshes
@@ -10,7 +11,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { NoConnection } from "../../shared/NoConnection";
-import { StatusBadge } from "../../shared/Status";
 import { api, type Schemas } from "../backend/client";
 import { formatDate, formatPhone, formatTime } from "../customers";
 import { PageHead } from "../layout/ui";
@@ -38,7 +38,7 @@ async function listOf<Answer, Row>(
 
 export function Dashboard() {
   const session = useSession();
-  const formsVisible = can(session, "health_forms.view_status");
+  const reviews = can(session, "health_forms.accept");
   return (
     <>
       <PageHead title={`שלום, ${session.staff.display_name}`} />
@@ -47,8 +47,7 @@ export function Dashboard() {
           <TodaysCheckins />
         </div>
         <div className={styles.side}>
-          {formsVisible && <NeedingNote />}
-          {formsVisible && <Expiring />}
+          {reviews && <FormsToReview />}
           <LatestCustomers />
         </div>
       </div>
@@ -138,66 +137,42 @@ function TodaysCheckins() {
   );
 }
 
-function NeedingNote() {
+/** Forms with a "yes" the manager hasn't reviewed: they let the customer
+ * in meanwhile. On the customer's page the manager opens the form, then
+ * accepts it or adds a doctor's note; either takes it off this list. */
+function FormsToReview() {
   const path = "/api/health-forms/needing-note";
   const query = usePolledQuery({
-    queryKey: ["dashboard", "forms-needing-note"],
+    queryKey: ["dashboard", "forms-to-review"],
     fetch: (headers) =>
       listOf(path, api.GET(path, { headers }), (answer) => answer.forms),
     everyMs: LISTS_EVERY_MS,
   });
   return (
     <ListPanel
-      title="ממתינים לאישור רופא"
+      title="הצהרות לבדיקה"
       query={query}
-      empty="אין הצהרות שממתינות לאישור רופא."
+      empty="אין הצהרות שממתינות לבדיקה."
     >
       {(forms) => (
-        <ul className={styles.list}>
-          {forms.map((entry) => (
-            <li key={entry.customer.id} className={styles.row}>
-              <CustomerLink customer={entry.customer} />
-              <span className={styles.detail}>
-                <StatusBadge tone="stop">אין כניסה</StatusBadge>
-                <span className={ui.muted}>
-                  נחתמה {formatDate(entry.signed_on)}
+        <>
+          <p className={ui.muted}>
+            סומן &quot;כן&quot; באחת השאלות. בכרטיס הלקוח אפשר לאשר את ההצהרה או
+            להוסיף אישור רפואי.
+          </p>
+          <ul className={styles.list}>
+            {forms.map((entry) => (
+              <li key={entry.customer.id} className={styles.row}>
+                <CustomerLink customer={entry.customer} />
+                <span className={styles.detail}>
+                  <span className={ui.muted}>
+                    נחתמה {formatDate(entry.signed_on)}
+                  </span>
                 </span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </ListPanel>
-  );
-}
-
-function Expiring() {
-  const path = "/api/health-forms/expiring";
-  const query = usePolledQuery({
-    queryKey: ["dashboard", "forms-expiring"],
-    fetch: (headers) =>
-      listOf(path, api.GET(path, { headers }), (answer) => answer.forms),
-    everyMs: LISTS_EVERY_MS,
-  });
-  return (
-    <ListPanel
-      title="הצהרות שפגות בקרוב"
-      query={query}
-      empty="אין הצהרות שפגות ב-30 הימים הקרובים."
-    >
-      {(forms) => (
-        <ul className={styles.list}>
-          {forms.map((entry) => (
-            <li key={entry.customer.id} className={styles.row}>
-              <CustomerLink customer={entry.customer} />
-              <span className={styles.detail}>
-                <StatusBadge tone="warn">
-                  בתוקף עד {formatDate(entry.valid_until)}
-                </StatusBadge>
-              </span>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </ListPanel>
   );

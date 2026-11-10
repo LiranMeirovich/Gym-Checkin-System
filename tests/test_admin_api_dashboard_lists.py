@@ -1,5 +1,6 @@
 """The dashboard's list routes on the real admin app: today's check-ins,
-health forms needing a doctor's note or expiring, and the newest customers.
+health forms waiting for the manager's review or expiring, and the newest
+customers.
 Who may read them and what each answer holds; the rules behind each list
 are tested in ``test_dashboard_lists``. Names and numbers are made up."""
 
@@ -10,6 +11,7 @@ from pathlib import Path
 import pytest
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.admin.main import app
@@ -40,6 +42,8 @@ LISTS = [
     "/api/health-forms/expiring",
     "/api/customers/latest",
 ]
+# The forms waiting for review are the manager's (decision 0041).
+INSTRUCTOR_LISTS = [path for path in LISTS if path != "/api/health-forms/needing-note"]
 
 
 @pytest.fixture(autouse=True)
@@ -75,15 +79,19 @@ def instructor(db: Session) -> StaffUser:
     return staff
 
 
-@pytest.fixture
-def as_instructor(client: TestClient, instructor: StaffUser) -> TestClient:
+def log_in(client: TestClient, member: StaffUser) -> TestClient:
     answer = client.post(
         "/api/login",
-        json={"staff_id": instructor.id, "pin": PIN},
+        json={"staff_id": member.id, "pin": PIN},
         headers=SAME_ORIGIN,
     )
     assert answer.status_code == 200
     return client
+
+
+@pytest.fixture
+def as_instructor(client: TestClient, instructor: StaffUser) -> TestClient:
+    return log_in(client, instructor)
 
 
 _numbers = iter(range(1_000_000))
@@ -150,13 +158,19 @@ def test_not_logged_in_gets_401(client: TestClient, path: str) -> None:
     assert answer.status_code == 401
 
 
-@pytest.mark.parametrize("path", LISTS)
-def test_an_instructor_may_read_every_list(
+@pytest.mark.parametrize("path", INSTRUCTOR_LISTS)
+def test_an_instructor_may_read_every_other_list(
     as_instructor: TestClient, path: str
 ) -> None:
     answer = as_instructor.get(path)
 
     assert answer.status_code == 200
+
+
+def test_an_instructor_cant_read_the_forms_to_review(
+    as_instructor: TestClient,
+) -> None:
+    assert as_instructor.get("/api/health-forms/needing-note").status_code == 403
 
 
 def test_todays_check_ins_newest_first_with_who(
@@ -185,8 +199,8 @@ def test_todays_check_ins_newest_first_with_who(
     assert answer["checkins"][0]["method"] == "manual"
 
 
-def test_forms_needing_a_note_and_expiring(
-    db: Session, as_instructor: TestClient
+def test_forms_to_review_and_expiring(
+    db: Session, client: TestClient, instructor: StaffUser
 ) -> None:
     waiting = add_customer(db, "Noa")
     add_form(
@@ -201,8 +215,10 @@ def test_forms_needing_a_note_and_expiring(
     fine = add_customer(db, "Maya")
     add_form(db, fine, signed_on=date(2026, 6, 1), expires_on=date(2027, 5, 31))
 
-    needing = as_instructor.get("/api/health-forms/needing-note").json()
-    expiring = as_instructor.get("/api/health-forms/expiring").json()
+    owner = db.scalars(select(StaffUser).where(StaffUser.role == Role.OWNER)).one()
+    log_in(client, owner)
+    needing = client.get("/api/health-forms/needing-note").json()
+    expiring = client.get("/api/health-forms/expiring").json()
 
     assert needing == {
         "forms": [
