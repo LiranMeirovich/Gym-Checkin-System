@@ -28,6 +28,8 @@ from app.core.models import Plan
 from app.core.months import Month
 from app.core.reports import MonthReport, ReportRow
 
+# The same names as the screens' ``PLAN_NAMES`` (frontend/src/shared/plans.ts):
+# change both together.
 PLAN_NAMES = {
     Plan.MONTHLY: "חודשי",
     Plan.TRI_MONTHLY: "שלושה חודשים",
@@ -175,7 +177,7 @@ def pdf(report: MonthReport) -> bytes:
 def _money(agorot: int) -> str:
     # The screens' format (``formatShekels`` in ``shared/plans.ts``).
     shekels, rest = divmod(agorot, 100)
-    return f"₪{shekels:,}" if rest == 0 else f"₪{shekels:,}.{rest:02d}"
+    return f"₪{shekels}" if rest == 0 else f"₪{shekels}.{rest:02d}"
 
 
 def _day(day: date) -> str:

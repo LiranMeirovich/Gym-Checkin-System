@@ -6,6 +6,8 @@
 
 export type Plan = "monthly" | "tri_monthly" | "single_entry" | "punch_card";
 
+// The report's Excel and PDF files use the same names, written in Python
+// (app/core/report_files.py `PLAN_NAMES`): change both together.
 export const PLAN_NAMES: Record<Plan, string> = {
   monthly: "חודשי",
   tri_monthly: "שלושה חודשים",

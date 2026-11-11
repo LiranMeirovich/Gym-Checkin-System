@@ -21,11 +21,15 @@ month is its report; regenerating adds a row (the table is append-only).
 Only finished months can be generated: the current month isn't over. One
 generation per month runs at a time (the apps run a single worker, so a
 lock in this process is enough); a second is refused while the first runs.
+A claim older than ``CLAIM_LIFETIME`` counts as abandoned, so a claim whose
+job never ran (its request failed after claiming) can't block the month
+until the app restarts.
 """
 
 import json
 import os
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -46,8 +50,13 @@ from app.core.reports import MonthReport, ReportRow, calculate
 EXCEL = "xlsx"
 PDF = "pdf"
 
-_running: set[Month] = set()
-_running_guard = threading.Lock()
+# A generation takes seconds; a claim this old was abandoned.
+CLAIM_LIFETIME = 10 * 60
+
+# Each month being generated: the claim's token and when it was made
+# (``time.monotonic()``).
+_claims: dict[Month, tuple[object, float]] = {}
+_claims_guard = threading.Lock()
 
 
 class MonthNotFinishedError(ValueError):
@@ -78,11 +87,12 @@ def start(month: Month, *, by: StaffUser | None) -> Callable[[], None]:
     """
     if month >= Month.current():
         raise MonthNotFinishedError(f"{month} isn't over yet")
-    with _running_guard:
-        if month in _running:
+    token = object()
+    with _claims_guard:
+        if _is_claimed(month):
             raise GenerationRunningError(f"{month} is being generated")
-        _running.add(month)
-    return partial(_generate, month, None if by is None else by.id)
+        _claims[month] = (token, time.monotonic())
+    return partial(_generate, month, None if by is None else by.id, token)
 
 
 def generate(month: Month, *, by: StaffUser | None) -> None:
@@ -110,8 +120,14 @@ def report_months(db: Session) -> list[Month]:
 
 
 def is_generating(month: Month) -> bool:
-    with _running_guard:
-        return month in _running
+    with _claims_guard:
+        return _is_claimed(month)
+
+
+def _is_claimed(month: Month) -> bool:
+    # The caller holds ``_claims_guard``.
+    claim = _claims.get(month)
+    return claim is not None and time.monotonic() - claim[1] < CLAIM_LIFETIME
 
 
 def latest(db: Session, month: Month) -> SavedReport | None:
@@ -172,7 +188,7 @@ def from_json(month: Month, text: str) -> MonthReport:
     )
 
 
-def _generate(month: Month, staff_id: int | None) -> None:
+def _generate(month: Month, staff_id: int | None, token: object) -> None:
     try:
         with Session(get_engine()) as db, db.begin():
             report = calculate(db, month)
@@ -180,15 +196,23 @@ def _generate(month: Month, staff_id: int | None) -> None:
         _save(file_path(month, PDF), report_files.pdf(report))
         _record(report, staff_id)
     finally:
-        with _running_guard:
-            _running.discard(month)
+        with _claims_guard:
+            # Only this job's own claim: if it was abandoned and the month
+            # claimed again, the newer generation keeps its claim.
+            if _claims.get(month, (None, 0.0))[0] is token:
+                del _claims[month]
 
 
 def _save(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     partial_path = path.with_name(path.name + ".partial")
-    partial_path.write_bytes(data)
-    os.replace(partial_path, path)
+    try:
+        partial_path.write_bytes(data)
+        # On Windows this fails while the file is open (Excel locks it).
+        os.replace(partial_path, path)
+    except BaseException:
+        partial_path.unlink(missing_ok=True)
+        raise
 
 
 def _record(report: MonthReport, staff_id: int | None) -> None:

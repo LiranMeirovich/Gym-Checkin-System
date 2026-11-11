@@ -314,3 +314,38 @@ def test_the_snapshot_reads_back_the_same() -> None:
 
     assert from_json(NOV, text) == report
     assert "דנה" in text  # kept as Hebrew, not \u escapes
+
+
+def test_an_abandoned_claim_stops_blocking_the_month(
+    monkeypatch: pytest.MonkeyPatch, db: Session, manager: StaffUser, noa: Customer
+) -> None:
+    now = [1000.0]
+    monkeypatch.setattr(report_generation.time, "monotonic", lambda: now[0])
+    abandoned = start(NOV, by=manager)  # its request failed: never run
+
+    now[0] += report_generation.CLAIM_LIFETIME
+    assert not is_generating(NOV)
+    newer = start(NOV, by=manager)
+    # The abandoned job, run late, leaves the newer claim alone.
+    abandoned()
+    assert is_generating(NOV)
+
+    newer()
+    assert not is_generating(NOV)
+    assert len(reports(db)) == 2
+
+
+def test_a_file_that_cant_be_replaced_leaves_no_partial_file(
+    monkeypatch: pytest.MonkeyPatch, db: Session, manager: StaffUser, noa: Customer
+) -> None:
+    def locked(_source: object, _target: object) -> None:
+        raise PermissionError("the file is open in another program")
+
+    monkeypatch.setattr(report_generation.os, "replace", locked)
+
+    with pytest.raises(PermissionError):
+        generate(NOV, by=manager)
+
+    assert not Path("reports").exists() or list(Path("reports").iterdir()) == []
+    assert reports(db) == []
+    assert not is_generating(NOV)

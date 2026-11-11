@@ -43,7 +43,9 @@ const REFUSALS: Record<Refused["error"], string> = {
   month_not_finished: "אפשר להפיק דוח רק לחודש שהסתיים.",
   already_generating: "הדוח של החודש הזה כבר בהפקה.",
 };
-const FAILED = "הפקת הדוח לא הצליחה. נסו שוב.";
+const FAILED =
+  "הפקת הדוח לא הצליחה. אם קובץ הדוח פתוח ב־Excel, סגרו אותו ונסו שוב.";
+const DOWNLOAD_FAILED = "הקובץ לא נמצא. הפיקו את הדוח מחדש.";
 const NO_CONNECTION = "אין חיבור לשרת. נסו שוב.";
 
 export function Reports() {
@@ -126,6 +128,32 @@ function MonthReport({
     !data.generating &&
     data.generated_at === waitingToReplace;
 
+  // Through the API client, not a plain link: a 401 (the screen locked
+  // meanwhile) then goes to the lock screen instead of being saved as the
+  // file.
+  async function download(kind: "excel" | "pdf") {
+    setError(null);
+    try {
+      const options = { params: { path: { month } }, parseAs: "blob" } as const;
+      const { data: file, response } =
+        kind === "excel"
+          ? await api.GET("/api/reports/{month}/excel", options)
+          : await api.GET("/api/reports/{month}/pdf", options);
+      if (!file) {
+        if (response.status !== 401) setError(DOWNLOAD_FAILED);
+        return;
+      }
+      const disposition = response.headers.get("content-disposition") ?? "";
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(file);
+      link.download = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    } catch {
+      setError(NO_CONNECTION);
+    }
+  }
+
   async function generate() {
     if (!data) return;
     setSending(true);
@@ -195,20 +223,20 @@ function MonthReport({
               </button>
               {data.files && !generating && (
                 <>
-                  <a
+                  <button
+                    type="button"
                     className={styles.download}
-                    href={`/api/reports/${month}/excel`}
-                    download
+                    onClick={() => void download("excel")}
                   >
                     הורדת Excel
-                  </a>
-                  <a
+                  </button>
+                  <button
+                    type="button"
                     className={styles.download}
-                    href={`/api/reports/${month}/pdf`}
-                    download
+                    onClick={() => void download("pdf")}
                   >
                     הורדת PDF
-                  </a>
+                  </button>
                 </>
               )}
             </div>

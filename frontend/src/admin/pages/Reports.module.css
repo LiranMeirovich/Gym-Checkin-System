@@ -1,17 +1,10 @@
 /* The Reports screen. The rest of the look comes from ui.module.css and
    the base styles. */
 
-/* A download: a link that looks like a quiet button. */
+/* A download: a quiet button beside the main one. */
 .download {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--control-height);
-  padding: 0 var(--space-4);
-  border: 1.5px solid var(--line-strong);
-  border-radius: var(--radius-control);
+  border-color: var(--line-strong);
   color: var(--navy);
-  font-weight: 600;
-  text-decoration: none;
 }
 
 .download:hover {

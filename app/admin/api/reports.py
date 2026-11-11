@@ -121,7 +121,7 @@ def _answer(db: DbSession, month: Month) -> ReportAnswer:
             )
             for row in rows
         ],
-        total_agorot=sum(row.payment_agorot for row in rows),
+        total_agorot=0 if saved is None else saved.report.total_agorot,
         files=saved is not None
         and all(core.file_path(month, kind).is_file() for kind in _MEDIA_TYPES),
     )
