@@ -153,7 +153,9 @@ def test_the_triggers_exist_at_head(db: Session) -> None:
         )
     ).all()
     assert sorted(triggers) == [
+        "checkins_card_entries",
         "checkins_no_delete",
         "checkins_no_update",
+        "checkins_same_customer_card",
         "checkins_same_customer_device",
     ]

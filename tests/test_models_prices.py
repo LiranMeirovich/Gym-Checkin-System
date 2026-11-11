@@ -91,6 +91,12 @@ def test_every_field_is_required(db: Session, missing: str) -> None:
         insert(db, **{missing: None})
 
 
+def test_a_punch_card_has_a_price(db: Session) -> None:
+    # Priced like the other plans (decision 0042).
+    insert(db, plan="punch_card")
+    assert db.query(Price).one().plan is Plan.PUNCH_CARD
+
+
 def test_free_is_allowed_by_the_database(db: Session) -> None:
     insert(db, amount_agorot=0)
     assert db.query(Price).one().amount_agorot == 0

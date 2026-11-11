@@ -408,3 +408,122 @@ def test_no_active_manager_stops_the_owner_upgrade(alembic_config: Config) -> No
         "instructor",
         "manager",
     ]
+
+
+BEFORE_PUNCH_CARDS = "b0ca1ec058f5"
+
+SEED_CUSTOMER = (
+    "INSERT INTO customers (id, first_name, last_name, phone, date_of_birth,"
+    " notes, created_at, active) VALUES (1, 'Dana', 'Levi', '+972501234567',"
+    " '1990-05-01', '', '2026-10-30 09:00:00.000000', 1)"
+)
+
+SEED_CHECKINS = (
+    SEED_CUSTOMER,
+    "INSERT INTO staff_users (id, display_name, role, pin_hash,"
+    " failed_attempts, active, created_at) VALUES (1, 'Noa', 'owner',"
+    " '$argon2id$v=19$m=65536,t=3,p=4$fake', 0, 1,"
+    " '2026-10-30 09:00:00.000000')",
+    "INSERT INTO checkins (id, customer_id, checked_in_at, method,"
+    " staff_user_id) VALUES (1, 1, '2026-11-05 09:00:00.000000', 'manual', 1),"
+    " (2, 1, '2026-11-06 09:00:00.000000', 'manual', 1)",
+    "INSERT INTO prices (id, plan, amount_agorot, valid_from_month,"
+    " created_at) VALUES (1, 'monthly', 25000, '2026-11',"
+    " '2026-11-01 09:00:00.000000')",
+)
+
+CHECKINS_TRIGGERS_BEFORE = {
+    "checkins_no_delete",
+    "checkins_no_update",
+    "checkins_same_customer_device",
+}
+
+
+def checkin_rows() -> list[tuple[object, ...]]:
+    with get_engine().connect() as connection:
+        return connection.exec_driver_sql(
+            "SELECT id, customer_id, checked_in_at, method, device_session_id,"
+            " staff_user_id FROM checkins ORDER BY id"
+        ).fetchall()
+
+
+def checkins_triggers() -> set[str]:
+    with get_engine().connect() as connection:
+        return set(
+            connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master"
+                " WHERE type = 'trigger' AND tbl_name = 'checkins'"
+            ).scalars()
+        )
+
+
+def test_check_ins_and_prices_come_through_the_punch_card_rebuild(
+    alembic_config: Config,
+) -> None:
+    command.upgrade(alembic_config, BEFORE_PUNCH_CARDS)
+    with get_engine().begin() as connection:
+        for statement in SEED_CHECKINS:
+            connection.exec_driver_sql(statement)
+    checkins, prices = checkin_rows(), price_rows()
+
+    command.upgrade(alembic_config, "head")
+
+    assert checkin_rows() == checkins
+    assert price_rows() == prices
+    with get_engine().connect() as connection:
+        assert connection.exec_driver_sql(
+            "SELECT punch_card_id FROM checkins"
+        ).scalars().all() == [None, None]
+    # The old triggers came back with the rebuild, and two joined them.
+    assert checkins_triggers() == CHECKINS_TRIGGERS_BEFORE | {
+        "checkins_same_customer_card",
+        "checkins_card_entries",
+    }
+    with get_engine().begin() as connection, pytest.raises(IntegrityError):
+        connection.exec_driver_sql("DELETE FROM checkins")
+    # A punch card can now be priced.
+    with get_engine().begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO prices (plan, amount_agorot, valid_from_month,"
+            " created_at) VALUES ('punch_card', 50000, '2026-11',"
+            " '2026-11-02 09:00:00.000000')"
+        )
+
+
+def test_the_punch_card_downgrade_restores_check_ins(alembic_config: Config) -> None:
+    command.upgrade(alembic_config, BEFORE_PUNCH_CARDS)
+    with get_engine().begin() as connection:
+        for statement in SEED_CHECKINS:
+            connection.exec_driver_sql(statement)
+    checkins = checkin_rows()
+    command.upgrade(alembic_config, "head")
+
+    command.downgrade(alembic_config, BEFORE_PUNCH_CARDS)
+
+    assert checkin_rows() == checkins
+    assert checkins_triggers() == CHECKINS_TRIGGERS_BEFORE
+
+
+@pytest.mark.parametrize(
+    "paid_for",
+    [
+        "INSERT INTO punch_cards (customer_id, price_agorot, bought_month,"
+        " expires_on, bought_at, bought_by) VALUES (1, 50000, '2026-11',"
+        " '2027-01-01', '2026-11-05 09:00:00.000000', 'customer')",
+        "INSERT INTO prices (plan, amount_agorot, valid_from_month, created_at)"
+        " VALUES ('punch_card', 50000, '2026-11', '2026-11-02 09:00:00.000000')",
+    ],
+)
+def test_a_card_or_its_price_stops_the_punch_card_downgrade(
+    alembic_config: Config, paid_for: str
+) -> None:
+    command.upgrade(alembic_config, "head")
+    with get_engine().begin() as connection:
+        connection.exec_driver_sql(SEED_CUSTOMER)
+        connection.exec_driver_sql(paid_for)
+
+    with pytest.raises(RuntimeError, match="can't undo punch cards"):
+        command.downgrade(alembic_config, BEFORE_PUNCH_CARDS)
+
+    head = ScriptDirectory.from_config(alembic_config).get_current_head()
+    assert current_revision() == head
