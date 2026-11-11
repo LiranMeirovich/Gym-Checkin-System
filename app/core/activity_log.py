@@ -59,6 +59,9 @@ class Action(StrEnum):
     # A customer's own purchase on their phone isn't logged.
     PUNCH_CARD_BUY = "punch_card.buy"
 
+    # The manager generated (or regenerated) a month's report.
+    REPORT_GENERATE = "report.generate"
+
     # A link code for a customer's phone (never the code itself).
     PHONE_ISSUE_CODE = "phone.issue_code"
     PHONE_UNLINK = "phone.unlink"
@@ -97,6 +100,7 @@ class Target(StrEnum):
     HEALTH_FORM = "health_form"
     DOCTOR_NOTE = "doctor_note"
     CHECKIN = "checkin"
+    REPORT = "report"
 
 
 def record(
