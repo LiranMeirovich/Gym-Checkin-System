@@ -377,7 +377,9 @@ def _logged(choice: PlanChoice) -> dict[str, object]:
     }
 
 
-def _is_active() -> ColumnElement[bool]:
+def is_active() -> ColumnElement[bool]:
+    """True for a choice no later row replaces. The report reads choices
+    with this same rule."""
     replacement = aliased(PlanChoice)
     return ~exists().where(replacement.replaces_id == PlanChoice.id)
 
@@ -398,7 +400,7 @@ def _first_active(
         PlanChoice.plan.is_not(None),
         PlanChoice.start_month <= end,
         PlanChoice.end_month >= start,
-        _is_active(),
+        is_active(),
     )
     if besides is not None:
         query = query.where(PlanChoice.id != besides.id)
