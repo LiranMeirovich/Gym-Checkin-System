@@ -1,0 +1,27 @@
+/* The Reports screen. The rest of the look comes from ui.module.css and
+   the base styles. */
+
+/* A download: a link that looks like a quiet button. */
+.download {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-height);
+  padding: 0 var(--space-4);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  color: var(--navy);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.download:hover {
+  border-color: var(--navy);
+  color: var(--navy-deep);
+}
+
+/* The total under the rows. */
+.total > td {
+  font-weight: 800;
+  border-block-start: 2px solid var(--line-strong);
+  border-block-end: none;
+}
