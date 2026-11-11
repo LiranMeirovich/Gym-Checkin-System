@@ -55,6 +55,10 @@ class Action(StrEnum):
     PLAN_CORRECT = "plan.correct"
     PLAN_CLEAR = "plan.clear"
 
+    # The manager bought a punch card for a customer at a manual check-in.
+    # A customer's own purchase on their phone isn't logged.
+    PUNCH_CARD_BUY = "punch_card.buy"
+
     # A link code for a customer's phone (never the code itself).
     PHONE_ISSUE_CODE = "phone.issue_code"
     PHONE_UNLINK = "phone.unlink"
@@ -88,6 +92,7 @@ class Target(StrEnum):
     CUSTOMER = "customer"
     PRICE = "price"
     PLAN_CHOICE = "plan_choice"
+    PUNCH_CARD = "punch_card"
     DEVICE_SESSION = "device_session"
     HEALTH_FORM = "health_form"
     DOCTOR_NOTE = "doctor_note"

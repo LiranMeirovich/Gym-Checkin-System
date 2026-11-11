@@ -94,7 +94,12 @@ def valid_form(db: Session, customer: Customer) -> None:
 @pytest.fixture
 def prices(db: Session) -> None:
     """Every price, set from before this month."""
-    amounts = {Plan.MONTHLY: 25000, Plan.TRI_MONTHLY: 65000, Plan.SINGLE_ENTRY: 4000}
+    amounts = {
+        Plan.MONTHLY: 25000,
+        Plan.TRI_MONTHLY: 65000,
+        Plan.SINGLE_ENTRY: 4000,
+        Plan.PUNCH_CARD: 50000,
+    }
     for plan, amount in amounts.items():
         add_price(db, plan, amount)
 
@@ -428,6 +433,7 @@ def test_no_plan_asks_for_one_with_the_prices(
         (Plan.MONTHLY, 25000),
         (Plan.TRI_MONTHLY, 65000),
         (Plan.SINGLE_ENTRY, 4000),
+        (Plan.PUNCH_CARD, 50000),
     ]
     assert recorded(db) == []
     assert choices(db) == []
@@ -445,6 +451,7 @@ def test_an_under_18_customer_is_offered_the_same_prices(
         25000,
         65000,
         4000,
+        50000,
     ]
 
 
@@ -459,10 +466,11 @@ def test_a_plan_without_a_price_is_offered_as_not_set(
         True,
         False,
         False,
+        False,
     ]
 
 
-@pytest.mark.parametrize("plan", list(Plan))
+@pytest.mark.parametrize("plan", [Plan.MONTHLY, Plan.TRI_MONTHLY, Plan.SINGLE_ENTRY])
 def test_choosing_a_plan_checks_in_with_it(
     db: Session,
     customer: Customer,
@@ -662,6 +670,7 @@ def test_a_manual_check_in_records_and_logs_the_staff_member(
     assert json.loads(entry.after_json or "null") == {
         "customer_id": customer.id,
         "plan_choice_id": plan.id,
+        "punch_card_id": None,
     }
 
 

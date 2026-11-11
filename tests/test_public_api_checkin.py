@@ -275,6 +275,7 @@ def test_no_plan_is_plan_required_with_the_options(
             {"plan": "monthly", "price_agorot": 25000},
             {"plan": "tri_monthly", "price_agorot": None},
             {"plan": "single_entry", "price_agorot": None},
+            {"plan": "punch_card", "price_agorot": None},
         ],
     }
     assert visits(db) == []

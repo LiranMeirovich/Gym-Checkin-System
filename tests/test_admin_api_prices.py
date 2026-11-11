@@ -134,7 +134,13 @@ def test_an_empty_table(as_manager: Staff) -> None:
     assert answer.headers["Cache-Control"] == "no-store"
     body = answer.json()
     assert body["current_month"] == "2026-10"
-    assert len(body["current"]) == 3
+    # The punch card is a fourth row, "not set" like the rest.
+    assert [row["plan"] for row in body["current"]] == [
+        "monthly",
+        "tri_monthly",
+        "single_entry",
+        "punch_card",
+    ]
     assert body["current"][0] == {
         "plan": "monthly",
         "amount_agorot": None,

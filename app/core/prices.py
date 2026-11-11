@@ -58,6 +58,16 @@ class InvalidPricesError(ValueError):
         self.fields = frozenset(fields)
 
 
+class PriceNotSetError(ValueError):
+    """The manager hasn't entered this plan's price yet. Nothing is guessed;
+    prices must be entered first. Raised by plan choices and punch cards
+    alike (``app.core.plans``, ``app.core.punch_cards``)."""
+
+    def __init__(self, plan: Plan) -> None:
+        super().__init__(f"no price for {plan.value}")
+        self.plan = plan
+
+
 @dataclass(frozen=True)
 class PriceInEffect:
     """One cell of the price table. ``price`` is ``None`` if it's not set."""
