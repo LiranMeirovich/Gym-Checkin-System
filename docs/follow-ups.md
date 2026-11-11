@@ -38,7 +38,8 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 ## Punch cards: later
 - Cancelling or refunding a card bought by mistake (decision 0043: not built; the phone has a confirm step instead). Design it with the manager: who may cancel, whether used entries stay charged, and how the report shows it. A cancellation is a new row, never an update (the table is append-only).
 - The phone's plan page still says "the first check-in this month" when a card ran out mid-month. Reword it if customers find it confusing.
-- The card size (20) lives in three places: `CARD_ENTRIES` in `app/core/models/punch_cards.py`, its copy in `frontend/src/shared/plans.ts`, and the `checkins_card_entries` trigger. Changing it needs all three and a migration.
+- The card size (20) lives in two places: `CARD_ENTRIES` in `app/core/models/punch_cards.py` and the `checkins_card_entries` trigger. Changing it needs both, in a migration. (The screens get it from the API.)
+- Small query savings (code review): `plans._refuse_a_card` re-checks for an active card on the check-in path, where `checkins._what_pays` already knows there's none; the admin plan status runs `active_card()` and `card_history()`, counting the active card twice (it could be picked from the history).
 
 ## Milestones 5–6: report, operations and hosting
 - Dashboard cards: the report card (manager only, as its own route with the report permission) and the backup card ("last backup", red after 2 days without one), from the design doc's dashboard. The dashboard's lists are one route each, so a card is a new route and a new panel.

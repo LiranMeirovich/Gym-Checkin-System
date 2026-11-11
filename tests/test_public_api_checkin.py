@@ -274,10 +274,30 @@ def test_no_plan_is_plan_required_with_the_options(
         "detail": "plan_required",
         "month": "2026-11",
         "options": [
-            {"plan": "monthly", "price_agorot": 25000},
-            {"plan": "tri_monthly", "price_agorot": None},
-            {"plan": "single_entry", "price_agorot": None},
-            {"plan": "punch_card", "price_agorot": None},
+            {
+                "plan": "monthly",
+                "price_agorot": 25000,
+                "entries": None,
+                "valid_until": None,
+            },
+            {
+                "plan": "tri_monthly",
+                "price_agorot": None,
+                "entries": None,
+                "valid_until": None,
+            },
+            {
+                "plan": "single_entry",
+                "price_agorot": None,
+                "entries": None,
+                "valid_until": None,
+            },
+            {
+                "plan": "punch_card",
+                "price_agorot": None,
+                "entries": 20,
+                "valid_until": "2026-12-31",
+            },
         ],
     }
     assert visits(db) == []
@@ -324,7 +344,11 @@ def test_buying_a_punch_card_checks_in_with_its_first_entry(
     assert answer["outcome"] == "checked_in"
     assert answer["plan"] is None
     # Valid to the end of December: the card no longer counts on 1 January.
-    assert answer["punch_card"] == {"entries_left": 19, "expires_on": "2027-01-01"}
+    assert answer["punch_card"] == {
+        "entries_left": 19,
+        "expires_on": "2027-01-01",
+        "valid_until": "2026-12-31",
+    }
     [card] = db.scalars(select(PunchCard)).all()
     assert card.customer_id == customer.id
     assert card.bought_by is ChosenBy.CUSTOMER

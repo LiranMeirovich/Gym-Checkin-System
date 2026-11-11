@@ -100,7 +100,9 @@ function Current({ overview }: { overview: Overview }) {
           <tbody>
             {PLANS.map((plan) => (
               <tr key={plan}>
-                <th scope="row">{priceRowName(plan)}</th>
+                <th scope="row">
+                  {priceRowName(plan, overview.punch_card_entries)}
+                </th>
                 <td>{cell(plan)}</td>
               </tr>
             ))}
@@ -259,11 +261,13 @@ function ChangeForm({ overview }: { overview: Overview }) {
           <tbody>
             {PLANS.map((plan) => (
               <tr key={plan}>
-                <th scope="row">{priceRowName(plan)}</th>
+                <th scope="row">
+                  {priceRowName(plan, overview.punch_card_entries)}
+                </th>
                 <td>
                   <input
                     className={styles.amountInput}
-                    aria-label={priceRowName(plan)}
+                    aria-label={priceRowName(plan, overview.punch_card_entries)}
                     inputMode="decimal"
                     dir="ltr"
                     value={amounts[plan] ?? ""}

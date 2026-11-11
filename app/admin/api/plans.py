@@ -45,10 +45,16 @@ from app.core import plans as core
 from app.core.clock import to_local
 from app.core.customers import CustomerInactiveError
 from app.core.db import DbSession
-from app.core.models import Customer, PlanChoice
+from app.core.models import Customer, Plan, PlanChoice
 from app.core.months import Month
 from app.core.permissions import Permission
-from app.core.punch_cards import CardBalance, active_card, card_history
+from app.core.punch_cards import (
+    CARD_ENTRIES,
+    CardBalance,
+    active_card,
+    card_history,
+    valid_until_for,
+)
 
 router = APIRouter(
     prefix="/customers/{customer_id}/plan",
@@ -130,20 +136,28 @@ def _status(db: DbSession, customer: Customer) -> PlanStatus:
             else _row(overview.covering, overview.replaced_by)
         ),
         correctable=overview.correctable,
-        options=plan_offers(overview.options),
-        check_in_options=plan_offers(core.check_in_options(db, overview.current_month)),
+        options=plan_offers(overview.options, overview.current_month),
+        check_in_options=plan_offers(
+            core.check_in_options(db, overview.current_month), overview.current_month
+        ),
         history=[_row(choice, overview.replaced_by) for choice in overview.history],
         punch_card=None if active is None else _card_row(active),
         punch_cards=[_card_row(card) for card in card_history(db, customer)],
     )
 
 
-def plan_offers(options: list[core.PlanOption]) -> list[PlanOption]:
-    """Plans with their prices, as the API sends them."""
+def plan_offers(options: list[core.PlanOption], month: Month) -> list[PlanOption]:
+    """Plans with their prices in ``month``, as the API sends them. The
+    punch card also says its size and the last day a card bought in
+    ``month`` counts."""
     return [
         PlanOption(
             plan=option.plan,
             amount_agorot=None if option.price is None else option.price.amount_agorot,
+            entries=CARD_ENTRIES if option.plan is Plan.PUNCH_CARD else None,
+            valid_until=(
+                valid_until_for(month) if option.plan is Plan.PUNCH_CARD else None
+            ),
         )
         for option in options
     ]
@@ -156,6 +170,8 @@ def _card_row(balance: CardBalance) -> PunchCardRow:
         price_agorot=card.price_agorot,
         bought_month=str(card.bought_month),
         expires_on=card.expires_on,
+        valid_until=balance.valid_until,
+        entries=CARD_ENTRIES,
         bought_at=to_local(card.bought_at),
         bought_by=card.bought_by,
         staff_name=None if card.staff is None else card.staff.display_name,

@@ -145,7 +145,8 @@ def check_in(
     except PlanRequiredError as refused:
         return _conflict(
             CheckInPlanRequired(
-                month=str(refused.month), options=plan_offers(refused.options)
+                month=str(refused.month),
+                options=plan_offers(refused.options, refused.month),
             )
         )
     except PriceNotSetError:
@@ -172,7 +173,9 @@ def check_in(
             None
             if card is None
             else PunchCardBalance(
-                entries_left=card.entries_left, expires_on=card.card.expires_on
+                entries_left=card.entries_left,
+                expires_on=card.card.expires_on,
+                valid_until=card.valid_until,
             )
         ),
     )

@@ -206,13 +206,22 @@ def test_nothing_chosen_yet(as_manager: Staff, customer: Customer) -> None:
         "covering": None,
         "correctable": False,
         "options": [
-            {"plan": plan, "amount_agorot": None}
+            {"plan": plan, "amount_agorot": None, "entries": None, "valid_until": None}
             for plan in ("monthly", "tri_monthly", "single_entry")
         ],
         # A check-in also offers the punch card (decision 0042).
         "check_in_options": [
-            {"plan": plan, "amount_agorot": None}
-            for plan in ("monthly", "tri_monthly", "single_entry", "punch_card")
+            {"plan": plan, "amount_agorot": None, "entries": None, "valid_until": None}
+            for plan in ("monthly", "tri_monthly", "single_entry")
+        ]
+        # The card says its size and the last day a card bought now counts.
+        + [
+            {
+                "plan": "punch_card",
+                "amount_agorot": None,
+                "entries": 20,
+                "valid_until": "2026-12-31",
+            }
         ],
         "history": [],
         "punch_card": None,
@@ -675,6 +684,8 @@ def test_the_status_shows_the_active_card_and_every_card(
         "price_agorot": 50000,
         "bought_month": "2026-11",
         "expires_on": "2027-01-01",
+        "valid_until": "2026-12-31",
+        "entries": 20,
         "bought_by": "staff",
         "staff_name": "מנהלת",
         "entries_used": 0,

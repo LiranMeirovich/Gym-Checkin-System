@@ -3,7 +3,7 @@
 // floating point, so the text is split into its digits instead. Plan names
 // and the money and month formats are shared with the customer app
 // (src/shared/plans.ts).
-import { CARD_ENTRIES, PLAN_NAMES, type Plan } from "../shared/plans";
+import { PLAN_NAMES, type Plan } from "../shared/plans";
 
 export {
   PLAN_NAMES,
@@ -19,10 +19,11 @@ export const PLANS: Plan[] = [
   "punch_card",
 ];
 
-/** A row of the price table: the plan's name, with the card's size. */
-export function priceRowName(plan: Plan): string {
+/** A row of the price table: the plan's name, with the card's size (from
+ * the server). */
+export function priceRowName(plan: Plan, cardEntries: number): string {
   return plan === "punch_card"
-    ? `${PLAN_NAMES.punch_card} (${CARD_ENTRIES} כניסות)`
+    ? `${PLAN_NAMES.punch_card} (${cardEntries} כניסות)`
     : PLAN_NAMES[plan];
 }
 

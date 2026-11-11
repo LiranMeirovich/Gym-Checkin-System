@@ -24,7 +24,7 @@ transaction; the customer's own purchase on their phone isn't (decision
 """
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -65,6 +65,12 @@ class CardBalance:
     def entries_left(self) -> int:
         return CARD_ENTRIES - self.entries_used
 
+    @property
+    def valid_until(self) -> date:
+        """The last Israel-local day the card counts, as the screens show
+        it."""
+        return self.card.expires_on - timedelta(days=1)
+
     def is_active_on(self, day: date) -> bool:
         """Whether the card counts on the Israel-local ``day``."""
         return day < self.card.expires_on and self.entries_left > 0
@@ -75,6 +81,12 @@ def expiry_for(bought: Month) -> date:
     next: the first day it no longer counts."""
     expired = bought.plus(2)
     return date(expired.year, expired.month, 1)
+
+
+def valid_until_for(bought: Month) -> date:
+    """The last day a card bought in ``bought`` counts: the end of the next
+    month. What the plan page promises before the card is bought."""
+    return expiry_for(bought) - timedelta(days=1)
 
 
 def card_balance(db: Session, card: PunchCard) -> CardBalance:

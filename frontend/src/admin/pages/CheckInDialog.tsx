@@ -23,7 +23,7 @@ import {
 } from "../customers";
 import { can } from "../roles";
 import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
-import { cardLastDay, entriesLeftText } from "../../shared/plans";
+import { LAST_CARD_ENTRY, entriesLeftText } from "../../shared/plans";
 import { useSession } from "../session";
 import { fetchStatus } from "./CustomerHealthForm";
 import { describe, fetchPlan } from "./CustomerPlan";
@@ -211,7 +211,9 @@ function CheckInBody({
           : "הלקוח כבר נרשם לפני פחות מ-10 דקות. לא נרשמה כניסה נוספת."}
         {result.plan && ` מסלול: ${PLAN_NAMES[result.plan.plan]}.`}
         {result.punch_card &&
-          ` כרטיסייה: ${entriesLeftText(result.punch_card.entries_left)}, עד ${formatDate(cardLastDay(result.punch_card.expires_on))}.`}
+          (result.punch_card.entries_left === 0
+            ? ` ${LAST_CARD_ENTRY}.`
+            : ` כרטיסייה: ${entriesLeftText(result.punch_card.entries_left)}, עד ${formatDate(result.punch_card.valid_until)}.`)}
       </p>
     );
   }
@@ -284,7 +286,7 @@ function CheckInBody({
             <>
               <StatusBadge tone="ok">כרטיסייה</StatusBadge>{" "}
               {entriesLeftText(card.entries_left)}, עד{" "}
-              {formatDate(cardLastDay(card.expires_on))}
+              {formatDate(card.valid_until)}
             </>
           ) : (
             <StatusBadge tone="warn">אין</StatusBadge>

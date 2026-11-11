@@ -20,6 +20,8 @@ A 200 sets the ``gym_device`` cookie again with the same token, so its
 year starts over (design doc: "Login cookie": refreshed on every check-in).
 """
 
+from datetime import date
+
 from fastapi import APIRouter, Request, Response, status
 from fastapi.responses import JSONResponse
 
@@ -30,7 +32,10 @@ from app.core.checkins import (
 )
 from app.core.customers import CustomerInactiveError
 from app.core.db import DbSession
+from app.core.models import Plan
+from app.core.months import Month
 from app.core.plans import PriceNotSetError
+from app.core.punch_cards import CARD_ENTRIES, valid_until_for
 from app.public.api.health_form import status_answer
 from app.public.api.schemas import (
     CheckedIn,
@@ -85,6 +90,7 @@ def check_in(
                         price_agorot=(
                             None if option.price is None else option.price.amount_agorot
                         ),
+                        **_card_terms(option.plan, refused.month),
                     )
                     for option in refused.options
                 ],
@@ -114,10 +120,19 @@ def check_in(
             None
             if card is None
             else PunchCardBalance(
-                entries_left=card.entries_left, expires_on=card.card.expires_on
+                entries_left=card.entries_left,
+                expires_on=card.card.expires_on,
+                valid_until=card.valid_until,
             )
         ),
     )
+
+
+def _card_terms(plan: Plan, month: Month) -> dict[str, int | date | None]:
+    """A punch card offer's size and last valid day; nothing for a plan."""
+    if plan is not Plan.PUNCH_CARD:
+        return {"entries": None, "valid_until": None}
+    return {"entries": CARD_ENTRIES, "valid_until": valid_until_for(month)}
 
 
 def _conflict(answer: HealthFormRequired | PlanRequired | PriceNotSet) -> JSONResponse:

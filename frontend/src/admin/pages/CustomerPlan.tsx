@@ -11,7 +11,7 @@ import { api, type Schemas } from "../backend/client";
 import { formatDate, planKey, type Customer } from "../customers";
 import { can } from "../roles";
 import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
-import { CARD_ENTRIES, cardLastDay, entriesLeftText } from "../../shared/plans";
+import { entriesLeftText } from "../../shared/plans";
 import { useSession } from "../session";
 import {
   NoConnection,
@@ -105,7 +105,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
             <StatusBadge tone="ok">כרטיסייה</StatusBadge>
             <strong>
               {entriesLeftText(card.entries_left)}, עד{" "}
-              {formatDate(cardLastDay(card.expires_on))}
+              {formatDate(card.valid_until)}
             </strong>
             <span className={ui.muted}>
               {formatShekels(card.price_agorot)}, נקנתה ב־
@@ -378,10 +378,10 @@ function Cards({ cards }: { cards: PunchCard[] }) {
             {cards.map((card) => (
               <tr key={card.id}>
                 <td>{formatDate(card.bought_at)}</td>
-                <td>{formatDate(cardLastDay(card.expires_on))}</td>
+                <td>{formatDate(card.valid_until)}</td>
                 <td>
                   <span dir="ltr">
-                    {card.entries_used}/{CARD_ENTRIES}
+                    {card.entries_used}/{card.entries}
                   </span>
                 </td>
                 <td>{formatShekels(card.price_agorot)}</td>

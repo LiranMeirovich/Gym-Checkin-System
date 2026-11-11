@@ -12,10 +12,8 @@ import { useMutation } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { formatDay } from "../../shared/dates";
 import {
-  CARD_ENTRIES,
+  LAST_CARD_ENTRY,
   PLAN_NAMES,
-  cardLastDay,
-  cardValidUntil,
   entriesLeftText,
   formatMonth,
   formatShekels,
@@ -182,8 +180,14 @@ function CheckedInPage({
         {answer.punch_card && (
           <li>
             <StatusBadge tone="ok">כרטיסייה</StatusBadge>
-            {entriesLeftText(answer.punch_card.entries_left)}, בתוקף עד{" "}
-            <bdi>{formatDay(cardLastDay(answer.punch_card.expires_on))}</bdi>
+            {answer.punch_card.entries_left === 0 ? (
+              `${LAST_CARD_ENTRY}.`
+            ) : (
+              <>
+                {entriesLeftText(answer.punch_card.entries_left)}, בתוקף עד{" "}
+                <bdi>{formatDay(answer.punch_card.valid_until)}</bdi>
+              </>
+            )}
           </li>
         )}
         {formValidUntil && (
@@ -232,15 +236,17 @@ function PlanPage({
         <div className={styles.panel}>
           <p className={styles.planName}>{PLAN_NAMES[tapped.plan]}</p>
           <p className={styles.planPrice}>
-            {priceText(tapped.plan, tapped.price_agorot, answer.month)}
+            {priceText(tapped, tapped.price_agorot, answer.month)}
           </p>
         </div>
-        <div className={styles.confirm}>
-          <button
-            type="submit"
-            className={styles.wide}
-            onClick={() => onChoose(tapped.plan)}
-          >
+        <form
+          className={styles.confirm}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onChoose(tapped.plan);
+          }}
+        >
+          <button type="submit" className={styles.wide}>
             אישור
           </button>
           <button
@@ -250,7 +256,7 @@ function PlanPage({
           >
             חזרה
           </button>
-        </div>
+        </form>
       </>
     );
   }
@@ -282,7 +288,7 @@ function PlanPage({
               <span className={styles.planPrice}>
                 {option.price_agorot === null
                   ? "המחיר עדיין לא נקבע"
-                  : priceText(option.plan, option.price_agorot, answer.month)}
+                  : priceText(option, option.price_agorot, answer.month)}
               </span>
             </button>
           </li>
@@ -292,10 +298,11 @@ function PlanPage({
   );
 }
 
-/** "₪250 לחודש 11/2026", and so on. */
-function priceText(plan: Plan, agorot: number, month: string): string {
+/** "₪250 לחודש 11/2026", and so on. The card's size and last day come
+ * with its offer, from the server. */
+function priceText(offer: PlanOffer, agorot: number, month: string): string {
   const price = formatShekels(agorot);
-  switch (plan) {
+  switch (offer.plan) {
     case "monthly":
       return `${price} לחודש ${formatMonth(month)}`;
     case "tri_monthly":
@@ -303,6 +310,8 @@ function priceText(plan: Plan, agorot: number, month: string): string {
     case "single_entry":
       return `${price} לכל כניסה החודש`;
     case "punch_card":
-      return `${price} ל־${CARD_ENTRIES} כניסות, בתוקף עד ${formatDay(cardValidUntil(month))}`;
+      return offer.entries === null || offer.valid_until === null
+        ? price
+        : `${price} ל־${offer.entries} כניסות, בתוקף עד ${formatDay(offer.valid_until)}`;
   }
 }

@@ -21,9 +21,10 @@ Milestone 5 is "Punch cards and report", punch cards first (decision 0042). It n
 - **No cancellation yet**: instead, tapping any option on the phone's plan page opens a confirm step (the option and its price, Confirm / Back), and nothing is sent until Confirm. The desk is unchanged.
 - **Bought only at a check-in**: on the phone, or by the manager in the check-in dialog. The customer page shows the active card and every card bought, but never sells one. Its plan status carries `check_in_options` (the plans and the card) beside `options` (the plans only) for the dialog's picker.
 - **Logging**: a staff sale is logged as `punch_card.buy`; the customer's own purchase isn't (decision 0021).
+- **The server says the card's size and dates**: a card offer carries `entries` and `valid_until` (the last day a card bought now counts), and a card carries `entries`, `expires_on` and `valid_until`. React never works out the expiry or keeps its own copy of 20 (CLAUDE.md: business rules live only in `app/core`).
 
 ## Consequences
 - A card cannot be cancelled or refunded yet. A mistaken sale stays until it runs out or expires; designing that with the manager is a follow-up.
-- Changing the card size means changing `CARD_ENTRIES`, the frontend's copy of it and the trigger (a migration). Old cards keep the old balance rule unless that migration says otherwise.
+- Changing the card size means changing `CARD_ENTRIES` and the trigger (a migration). Old cards keep the old balance rule unless that migration says otherwise.
 - The migration refuses to downgrade once a card or a card price exists, so real purchases are never dropped.
 - The report (feature 2) must charge a card in the month it was bought and must not count check-ins charged to a card as single entries.

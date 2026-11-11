@@ -31,6 +31,7 @@ from app.core.db import DbSession
 from app.core.models import Price
 from app.core.months import Month
 from app.core.permissions import Permission
+from app.core.punch_cards import CARD_ENTRIES
 
 router = APIRouter(
     prefix="/prices",
@@ -89,6 +90,7 @@ def _overview(db: DbSession) -> PriceOverview:
         ],
         upcoming=[_row(price) for price in overview.upcoming],
         history=[_row(price) for price in overview.history],
+        punch_card_entries=CARD_ENTRIES,
     )
 
 

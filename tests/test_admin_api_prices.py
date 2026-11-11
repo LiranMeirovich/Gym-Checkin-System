@@ -141,6 +141,7 @@ def test_an_empty_table(as_manager: Staff) -> None:
         "single_entry",
         "punch_card",
     ]
+    assert body["punch_card_entries"] == 20
     assert body["current"][0] == {
         "plan": "monthly",
         "amount_agorot": None,

@@ -379,11 +379,18 @@ export interface components {
          * PlanOffer
          * @description One plan at its price this month.
          *     ``price_agorot`` null: the price isn't set, so it can't be chosen.
+         *     For the punch card only, ``entries`` is how many it has and
+         *     ``valid_until`` the last day a card bought now counts; both are null
+         *     for the other plans.
          */
         PlanOffer: {
             plan: components["schemas"]["Plan"];
             /** Price Agorot */
             price_agorot: number | null;
+            /** Entries */
+            entries: number | null;
+            /** Valid Until */
+            valid_until: string | null;
         };
         /**
          * PlanRequired
@@ -415,9 +422,10 @@ export interface components {
         };
         /**
          * PunchCardBalance
-         * @description The punch card that paid for the visit: entries left after it, and
+         * @description The punch card that paid for the visit: entries left after it,
          *     ``expires_on``, the first Israel-local day it no longer counts (the 1st
-         *     of a month).
+         *     of a month), and ``valid_until``, the last day it counts (the day
+         *     before), which is what the phone shows.
          */
         PunchCardBalance: {
             /** Entries Left */
@@ -427,6 +435,11 @@ export interface components {
              * Format: date
              */
             expires_on: string;
+            /**
+             * Valid Until
+             * Format: date
+             */
+            valid_until: string;
         };
         /** Question */
         Question: {

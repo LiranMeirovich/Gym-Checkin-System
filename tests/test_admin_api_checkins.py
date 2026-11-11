@@ -251,6 +251,8 @@ def test_the_manager_is_asked_for_a_plan_with_the_options(
     assert {
         "plan": "monthly",
         "amount_agorot": 25000,
+        "entries": None,
+        "valid_until": None,
     } in body["options"]
     assert recorded(db) == []
 
@@ -360,6 +362,8 @@ def test_the_manager_sells_a_punch_card_with_the_check_in(
     assert refused.json()["options"][-1] == {
         "plan": "punch_card",
         "amount_agorot": 50000,
+        "entries": 20,
+        "valid_until": "2026-12-31",
     }
 
     response = as_manager.check_in(customer.id, {"plan": "punch_card"})
@@ -367,7 +371,11 @@ def test_the_manager_sells_a_punch_card_with_the_check_in(
     assert response.status_code == 200
     body = response.json()
     assert body["plan"] is None
-    assert body["punch_card"] == {"entries_left": 19, "expires_on": "2027-01-01"}
+    assert body["punch_card"] == {
+        "entries_left": 19,
+        "expires_on": "2027-01-01",
+        "valid_until": "2026-12-31",
+    }
     [row] = recorded(db)
     assert row.punch_card_id is not None
     assert choices(db) == []
@@ -399,6 +407,7 @@ def test_an_instructor_uses_the_active_card(
     assert response.json()["punch_card"] == {
         "entries_left": 19,
         "expires_on": "2027-01-01",
+        "valid_until": "2026-12-31",
     }
     # Not single entry: the card paid.
     assert choices(db) == []

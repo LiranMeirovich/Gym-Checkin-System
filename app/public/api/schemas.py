@@ -185,12 +185,14 @@ class CoveringPlan(Answer):
 
 
 class PunchCardBalance(Answer):
-    """The punch card that paid for the visit: entries left after it, and
+    """The punch card that paid for the visit: entries left after it,
     ``expires_on``, the first Israel-local day it no longer counts (the 1st
-    of a month)."""
+    of a month), and ``valid_until``, the last day it counts (the day
+    before), which is what the phone shows."""
 
     entries_left: int
     expires_on: date
+    valid_until: date
 
 
 class CheckedIn(Answer):
@@ -217,10 +219,15 @@ class HealthFormRequired(Answer):
 
 class PlanOffer(Answer):
     """One plan at its price this month.
-    ``price_agorot`` null: the price isn't set, so it can't be chosen."""
+    ``price_agorot`` null: the price isn't set, so it can't be chosen.
+    For the punch card only, ``entries`` is how many it has and
+    ``valid_until`` the last day a card bought now counts; both are null
+    for the other plans."""
 
     plan: Plan
     price_agorot: int | None
+    entries: int | None
+    valid_until: date | None
 
 
 class PlanRequired(Answer):

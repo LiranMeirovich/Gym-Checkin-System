@@ -1525,12 +1525,18 @@ export interface components {
         /**
          * PlanOption
          * @description A plan with its price this month; ``None`` if it's not set, and then
-         *     it can't be chosen.
+         *     it can't be chosen. For the punch card only, ``entries`` is how many it
+         *     has and ``valid_until`` the last day a card bought now counts; both are
+         *     ``None`` for the other plans.
          */
         PlanOption: {
             plan: components["schemas"]["Plan"];
             /** Amount Agorot */
             amount_agorot: number | null;
+            /** Entries */
+            entries: number | null;
+            /** Valid Until */
+            valid_until: string | null;
         };
         /**
          * PlanRefused
@@ -1605,6 +1611,8 @@ export interface components {
          * PriceOverview
          * @description ``upcoming`` is the change waiting for each later month, soonest
          *     first. ``history`` is every row ever entered, latest month first.
+         *     ``punch_card_entries`` is how many entries a punch card has, for the
+         *     card's row name.
          */
         PriceOverview: {
             /** Current Month */
@@ -1615,6 +1623,8 @@ export interface components {
             upcoming: components["schemas"]["PriceRow"][];
             /** History */
             history: components["schemas"]["PriceRow"][];
+            /** Punch Card Entries */
+            punch_card_entries: number;
         };
         /**
          * PriceRow
@@ -1648,8 +1658,9 @@ export interface components {
         };
         /**
          * PunchCardBalance
-         * @description The punch card that paid for the visit: entries left after it, and
-         *     ``expires_on``, the first Israel-local day it no longer counts.
+         * @description The punch card that paid for the visit: entries left after it,
+         *     ``expires_on``, the first Israel-local day it no longer counts, and
+         *     ``valid_until``, the last day it counts.
          */
         PunchCardBalance: {
             /** Entries Left */
@@ -1659,6 +1670,11 @@ export interface components {
              * Format: date
              */
             expires_on: string;
+            /**
+             * Valid Until
+             * Format: date
+             */
+            valid_until: string;
         };
         /**
          * PunchCardRow
@@ -1666,7 +1682,9 @@ export interface components {
          *     Israel-local day it no longer counts (the 1st of a month);
          *     ``bought_at`` is the gym's local time, with its offset. ``staff_name``
          *     is who sold it when staff did. ``entries_used`` counts the check-ins
-         *     charged to it, ``entries_left`` what remains of its 20.
+         *     charged to it, ``entries_left`` what remains of its ``entries``.
+         *     ``valid_until`` is the last day it counts (the day before
+         *     ``expires_on``), which is what the screens show.
          */
         PunchCardRow: {
             /** Id */
@@ -1680,6 +1698,13 @@ export interface components {
              * Format: date
              */
             expires_on: string;
+            /**
+             * Valid Until
+             * Format: date
+             */
+            valid_until: string;
+            /** Entries */
+            entries: number;
             /**
              * Bought At
              * Format: date-time

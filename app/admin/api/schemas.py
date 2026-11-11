@@ -282,12 +282,15 @@ class PriceRow(Answer):
 
 class PriceOverview(Answer):
     """``upcoming`` is the change waiting for each later month, soonest
-    first. ``history`` is every row ever entered, latest month first."""
+    first. ``history`` is every row ever entered, latest month first.
+    ``punch_card_entries`` is how many entries a punch card has, for the
+    card's row name."""
 
     current_month: MonthText
     current: list[PriceInEffect]
     upcoming: list[PriceRow]
     history: list[PriceRow]
+    punch_card_entries: int
 
 
 class PriceChange(BaseModel):
@@ -348,10 +351,14 @@ class PlanChoiceRow(Answer):
 
 class PlanOption(Answer):
     """A plan with its price this month; ``None`` if it's not set, and then
-    it can't be chosen."""
+    it can't be chosen. For the punch card only, ``entries`` is how many it
+    has and ``valid_until`` the last day a card bought now counts; both are
+    ``None`` for the other plans."""
 
     plan: Plan
     amount_agorot: int | None
+    entries: int | None
+    valid_until: date | None
 
 
 class PunchCardRow(Answer):
@@ -359,12 +366,16 @@ class PunchCardRow(Answer):
     Israel-local day it no longer counts (the 1st of a month);
     ``bought_at`` is the gym's local time, with its offset. ``staff_name``
     is who sold it when staff did. ``entries_used`` counts the check-ins
-    charged to it, ``entries_left`` what remains of its 20."""
+    charged to it, ``entries_left`` what remains of its ``entries``.
+    ``valid_until`` is the last day it counts (the day before
+    ``expires_on``), which is what the screens show."""
 
     id: int
     price_agorot: int
     bought_month: MonthText
     expires_on: date
+    valid_until: date
+    entries: int
     bought_at: datetime
     bought_by: ChosenBy
     staff_name: str | None
@@ -653,11 +664,13 @@ class CoveringPlan(Answer):
 
 
 class PunchCardBalance(Answer):
-    """The punch card that paid for the visit: entries left after it, and
-    ``expires_on``, the first Israel-local day it no longer counts."""
+    """The punch card that paid for the visit: entries left after it,
+    ``expires_on``, the first Israel-local day it no longer counts, and
+    ``valid_until``, the last day it counts."""
 
     entries_left: int
     expires_on: date
+    valid_until: date
 
 
 class CheckedIn(Answer):
