@@ -12,7 +12,7 @@ The phone opens the gym's check-in page, which is served from the gym PC through
 
 - Check-in: customers scan a fixed wall QR with their own phone (no personal QR codes, no desk scanner).
 - Hosting: the system runs on the gym PC; Cloudflare Tunnel makes the customer check-in page reachable from phones. No cloud server. **Under review:** the manager wants the system always on, so it will probably move to a server (the village's server or a paid VPS). See Open questions.
-- Plans: customers choose their own plan (monthly, tri-monthly or single entry) on their phone at their first check-in of each month, which also confirms they're continuing. Punch cards are coming as a fourth option (see Punch cards).
+- Plans: customers choose their own plan (monthly, tri-monthly or single entry) on their phone at their first check-in of each month, which also confirms they're continuing. Punch cards are a fourth option (see Punch cards; decision 0042).
 - Health form: every customer must have a valid signed health form before any check-in. It's filled in on the phone, or on a gym device at the desk (see Health form).
 - Prices: the manager keeps an editable price table with one price for every plan, the same for every customer (decision 0036).
 - Report: generated automatically on the 1st, emailed to the manager, and sent on to the other recipients once the manager approves it.
@@ -195,16 +195,17 @@ Choices are never overwritten. Each one is a row with plan, months covered, pric
 - Clearing is a "no plan" row: it replaces the choice, has no plan or price, and covers nothing, so the months can be chosen again.
 - The customer page's history shows every row and which ones were replaced.
 
-**Punch cards** (*upcoming; details pending from the manager*)
+**Punch cards** (decision 0042; built first in milestone 5, before the report)
 
-A punch card is a fixed number of entries (e.g. 12) bought for one price; each check-in uses one entry, and the customer pays again only when they buy a new card. The planned approach, to be confirmed:
+A punch card is 20 entries bought for one price; each check-in uses one entry, and the customer pays again only when they buy a new card.
 
-- Its own table (`punch_cards`), not `plan_choices`, because a card isn't tied to calendar months.
-- The remaining balance is never stored. It's calculated as entries minus the check-ins charged to the card (`checkins.punch_card_id`), so history stays intact and reports stay reproducible.
-- A monthly or tri-monthly plan covering the month takes priority; otherwise a check-in uses an active card; otherwise the plan page appears.
-- The report shows the card's price in the month it was bought.
-
-Nothing is built for this yet; the rest of the design must simply not rule it out.
+- **Buying**: chosen like a plan, on the phone's plan page or by the manager at a manual check-in (an instructor's check-in falls back to single entry, decision 0017). The price at that moment is copied onto the card; a later price change never touches it.
+- **Expiry**: fixed by the month it was bought. Bought on any day of month X, it's valid until the end of month X+1 and expired on the 1st of month X+2 (bought on 1 or 28 January, it expires on 1 March). Unused entries are lost.
+- **One at a time**: no new card while one is active, and never a card alongside a monthly or tri-monthly plan.
+- **Across months**: like tri-monthly, an active card covers the next month too; the check-in uses an entry with no plan page. When it runs out or expires mid-month, the next check-in shows the plan page, as at the start of a month.
+- **Storage**: its own table (`punch_cards`), not `plan_choices`, because a card isn't tied to calendar months. The remaining balance is never stored: it's 20 minus the check-ins charged to the card (`checkins.punch_card_id`), so history stays intact and reports stay reproducible.
+- **Report**: the card's price in the month it was bought, with its expiry as the end date; 0 in the next month.
+- Single entry stays as it is.
 
 ## Health form
 
@@ -238,7 +239,7 @@ Every customer needs a valid signed health declaration before they can train. Wi
 
 ## Data model
 
-One SQLite file (`gym.db`, WAL mode) with fourteen tables (fifteen once punch cards are added). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
+One SQLite file (`gym.db`, WAL mode) with fourteen tables (fifteen once punch cards are added, decision 0042). All timestamps are stored in UTC and shown in Israel local time, so daylight-saving switches never shift a check-in. Money is stored in whole agorot (integers), never as floats.
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
@@ -288,6 +289,7 @@ The dashboard shows where the current month's report stands (generated, emailed,
 | Lior | Ben-David | Tri-monthly price (first month of the period) | 31 Dec 2026 |
 | Noa | Friedman | 0 (covered by a tri-monthly plan) | 30 Nov 2026 |
 | Yossi | Cohen | 3 × single-entry price | (empty) |
+| Maya | Katz | Punch card price (month it was bought) | 1 Mar 2027 (card expiry) |
 
 Payment uses the price saved on each customer's choice. The last row shows the total to be collected.
 
@@ -395,7 +397,7 @@ Each answer replaces an *assumption* above; none of them changes the architectur
 - [ ] Photos: do we want them at all? (Left out for now, decision 0022; a nullable column can be added later.)
 - [ ] Health form: which official form to copy, how long it stays valid, and whether minors need a parent's signature.
 - [ ] Health form: confirm that instructors see only valid / expired, and only the manager opens the contents.
-- [ ] Punch cards: number of entries, price, expiry, who records the purchase, whether unused entries carry over, and whether single entry is still needed.
+- [x] Punch cards: 20 entries, one price, expiry on the 1st of the month after next, bought like a plan, unused entries lost, single entry stays (decision 0042).
 
 **Setup**
 
@@ -416,7 +418,7 @@ Build in six milestones, each usable and testable on its own; hand them to Claud
 2. **Customers, prices and plans**: customer create/edit/archive with date of birth, the price table with valid-from months, plan choices and corrections, and the monthly plan logic, with unit tests for every rule in Plans, prices and billing. Split into four features (decision 0022): Customers, Prices, Plan choices and monthly status, Plan corrections. Each ships its core logic, admin JSON routes and a plain, unstyled React page; freezes are dropped for now.
 3. **Phone linking and check-in**: link codes, device sessions and the login cookie, the public check-in, link, health form and plan-choice pages, status pages, the health-form block, double-check-in guard, and manual check-in with plan selection and the health form on the desk PC. Split into four features, phone path first (decision 0028): Phone linking, Health forms on the phone (the official form's questions, decision 0031), Phone check-in and plan page, Manual check-in, doctor's notes and the form on the desk PC (decision 0033); then self sign-up on the phone (decision 0035).
 4. **Admin screens**: dashboard with live check-ins and the manager's forms to review (decision 0041), customer list with search, customer page with linked phones, health-form status and plan history, prices screen, settings, staff accounts, lock screen, menus filtered by role, building on the pages from milestones 2 and 3. The styling pass comes first, before milestone 3's last feature (decision 0034): the look is designed once with the `frontend-design` skill and applied to every existing screen, admin and customer (including the milestone 3 phone pages); the new screens here use it. Test every manager-only action as an instructor and confirm it's refused. Split into five features (decision 0037): Activity log screen and role-filtered menus, Staff accounts, Settings, Customer list search and filters, Dashboard; no "customer mode" for the form on the desk PC (staff stay with the customer).
-5. **Report**: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan and edge case.
+5. **Punch cards and report** (decision 0042): punch cards first (the card, buying it on the phone or at the desk, check-ins using its entries), then the report: payment calculation from plan choices and check-ins, Excel and PDF export, automatic generation on or after the 1st, email to the manager, Approve and send to recipients, regenerate. Unit tests with fixed sample data for each plan and edge case.
 6. **Operations**: encrypted backups and restore, Windows services for both apps and `cloudflared`, the named Cloudflare tunnel on the gym domain, SMTP setup, a printable wall-QR page, and a setup guide for the gym PC. All deployment testing happens here, through the chosen host: proxy headers, https and the login cookie on real phones, and edge rate limiting (decisions 0029, 0030).
 
 **Notes for Claude Code**
