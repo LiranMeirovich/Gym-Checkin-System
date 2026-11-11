@@ -16,6 +16,11 @@ earlier is already in a past month's report.
 
 Each plan has one price, the same for every customer (decision 0036).
 
+A punch card is priced like a plan but isn't one: it's bought into its own
+table (``app.core.punch_cards``), never chosen here. While a customer has an
+active card, every choice and correction is refused, single entry and
+clearing included, so a card never sits alongside a plan (decision 0042).
+
 A customer chooses their own plan on their phone, for the month of the
 check-in it comes with (``choose_plan_by_customer``), under the same rules
 as staff; the row names no staff member.
@@ -44,9 +49,11 @@ from app.core.models import (
     StaffUser,
 )
 from app.core.months import Month
-from app.core.prices import price_for
+from app.core.prices import PriceNotSetError, price_for
+from app.core.punch_cards import PunchCardActiveError, active_card
 
-# How many months each plan covers, counting the one it's chosen in.
+# How many months each plan covers, counting the one it's chosen in. These
+# are the plans a month can be chosen for: a punch card isn't one.
 MONTHS_COVERED = {Plan.MONTHLY: 1, Plan.TRI_MONTHLY: 3, Plan.SINGLE_ENTRY: 1}
 
 
@@ -54,13 +61,9 @@ class MonthNotChoosableError(ValueError):
     """Staff choose a plan for the current month only."""
 
 
-class PriceNotSetError(ValueError):
-    """The manager hasn't entered this plan's price yet. Nothing is guessed;
-    prices must be entered first."""
-
-    def __init__(self, plan: Plan) -> None:
-        super().__init__(f"no price for {plan.value}")
-        self.plan = plan
+class NotAChoiceError(ValueError):
+    """A punch card is bought at a check-in, never chosen for a month
+    (decision 0042)."""
 
 
 class ChoiceReplacedError(ValueError):
@@ -108,7 +111,8 @@ class PlanOverview:
     covering: PlanChoice | None
     # Whether ``covering`` may be corrected or cleared (``is_correctable``).
     correctable: bool
-    # Every plan with its price for this month, in a fixed order.
+    # Every plan that can be chosen here, with its price for this month, in
+    # a fixed order. Never a punch card: it's bought only at a check-in.
     options: list[PlanOption]
     # Every choice ever made for the customer, latest month first, newest
     # first within it, replaced ones and "no plan" rows included.
@@ -124,7 +128,14 @@ def end_month(plan: Plan, start: Month) -> Month:
 
 
 def plan_options(db: Session, month: Month) -> list[PlanOption]:
-    """Each plan with what it costs in ``month``."""
+    """Each plan that can be chosen for a month, with what it costs in
+    ``month``: what the customer page offers."""
+    return [PlanOption(plan, price_for(db, plan, month)) for plan in MONTHS_COVERED]
+
+
+def check_in_options(db: Session, month: Month) -> list[PlanOption]:
+    """What a check-in with no plan offers: the plans, then the punch
+    card, each with what it costs in ``month``."""
     return [PlanOption(plan, price_for(db, plan, month)) for plan in Plan]
 
 
@@ -181,7 +192,8 @@ def choose_plan(
     price.
 
     Raises ``CustomerInactiveError``, ``MonthNotChoosableError``,
-    ``MonthCoveredError`` or ``PriceNotSetError``, checked in that order.
+    ``NotAChoiceError``, ``PunchCardActiveError``, ``MonthCoveredError`` or
+    ``PriceNotSetError``, checked in that order.
     """
     if not customer.active:
         raise CustomerInactiveError("reactivate the customer first")
@@ -201,8 +213,9 @@ def choose_plan_at_check_in(
     the same "now" as the visit, so it isn't checked against the clock
     again (as with ``choose_plan_by_customer``).
 
-    Raises ``CustomerInactiveError``, ``MonthCoveredError`` or
-    ``PriceNotSetError``, checked in that order.
+    Raises ``CustomerInactiveError``, ``NotAChoiceError``,
+    ``PunchCardActiveError``, ``MonthCoveredError`` or ``PriceNotSetError``,
+    checked in that order.
     """
     choice = _new_choice(db, customer, plan, month, by=by)
     record(
@@ -226,8 +239,9 @@ def choose_plan_by_customer(
     Not written to the activity log: the log is for staff changes, and the
     customer acting for themselves is not one (as with linking a phone).
 
-    Raises ``CustomerInactiveError``, ``MonthCoveredError`` or
-    ``PriceNotSetError``, checked in that order.
+    Raises ``CustomerInactiveError``, ``NotAChoiceError``,
+    ``PunchCardActiveError``, ``MonthCoveredError`` or ``PriceNotSetError``,
+    checked in that order.
     """
     return _new_choice(db, customer, plan, month, by=None)
 
@@ -240,6 +254,7 @@ def _new_choice(
     may be chosen is the caller's check."""
     if not customer.active:
         raise CustomerInactiveError("reactivate the customer first")
+    _refuse_a_card(db, customer, plan)
     last = end_month(plan, month)
     covered = _first_active(db, customer, month, last)
     if covered is not None:
@@ -273,7 +288,8 @@ def correct_plan(
     month, at this month's price, or clear it with a
     "no plan" row if ``plan`` is ``None``. Returns the new row.
 
-    Raises ``CustomerInactiveError``, ``ChoiceReplacedError``,
+    Raises ``CustomerInactiveError``, ``NotAChoiceError``,
+    ``PunchCardActiveError``, ``ChoiceReplacedError``,
     ``NotCorrectableError``, ``MonthCoveredError``, ``PriceNotSetError`` or
     ``NoChangeError``, checked in that order.
     """
@@ -281,6 +297,7 @@ def correct_plan(
         raise ValueError(f"plan choice {choice.id} isn't customer {customer.id}'s")
     if not customer.active:
         raise CustomerInactiveError("reactivate the customer first")
+    _refuse_a_card(db, customer, plan)
     replacement = db.scalar(
         select(PlanChoice).where(PlanChoice.replaces_id == choice.id)
     )
@@ -337,6 +354,16 @@ def correct_plan(
         after={**_logged(new), "replaces_id": choice.id},
     )
     return new
+
+
+def _refuse_a_card(db: Session, customer: Customer, plan: Plan | None) -> None:
+    """A punch card is never a choice, and nothing is chosen or corrected
+    while the customer has an active card (decision 0042)."""
+    if plan is not None and plan not in MONTHS_COVERED:
+        raise NotAChoiceError(f"{plan.value} isn't chosen for a month")
+    card = active_card(db, customer)
+    if card is not None:
+        raise PunchCardActiveError(card.card)
 
 
 def _logged(choice: PlanChoice) -> dict[str, object]:

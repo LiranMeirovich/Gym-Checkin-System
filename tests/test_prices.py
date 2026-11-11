@@ -321,6 +321,7 @@ def test_an_empty_table_shows_every_price_as_not_set(db: Session) -> None:
         (Plan.MONTHLY, None),
         (Plan.TRI_MONTHLY, None),
         (Plan.SINGLE_ENTRY, None),
+        (Plan.PUNCH_CARD, None),
     ]
     assert overview.upcoming == []
     assert overview.history == []

@@ -21,12 +21,17 @@ from app.core.months import Month
 
 
 class Plan(StrEnum):
-    """What a customer can choose for a month. The values are what the
-    database stores."""
+    """What a customer can choose, and what the price table prices. The
+    values are what the database stores.
+
+    A punch card is priced here like the others but bought into
+    ``punch_cards``, never chosen into ``plan_choices`` (whose CHECK allows
+    only the first three; decision 0042)."""
 
     MONTHLY = "monthly"
     TRI_MONTHLY = "tri_monthly"
     SINGLE_ENTRY = "single_entry"
+    PUNCH_CARD = "punch_card"
 
 
 class Price(Base):

@@ -43,6 +43,9 @@ from app.core.plans import (
 )
 from app.core.prices import PriceChange, set_prices
 
+# The plans a month can be chosen for: never a punch card (decision 0042).
+CHOOSABLE = [Plan.MONTHLY, Plan.TRI_MONTHLY, Plan.SINGLE_ENTRY]
+
 # Not a real hash; it only has to look like one to pass the CHECK.
 FAKE_PIN_HASH = "$argon2id$v=19$m=65536,t=3,p=4$fake"
 THIS_MONTH = Month(2026, 11)
@@ -163,7 +166,9 @@ def test_an_option_without_a_price_says_so(db: Session) -> None:
     add_price(db, Plan.MONTHLY, 25000)
 
     options = plan_options(db, THIS_MONTH)
-    assert [o.plan for o in options] == list(Plan)
+    # The customer page's options: never a punch card (bought only at a
+    # check-in).
+    assert [o.plan for o in options] == CHOOSABLE
     assert [o.price is not None for o in options] == [True, False, False]
 
 
@@ -284,7 +289,7 @@ def test_the_current_month_is_the_gyms_not_utcs(
     choose_plan(db, adult, Plan.MONTHLY, Month(2026, 12), by=manager)
 
 
-@pytest.mark.parametrize("plan", list(Plan))
+@pytest.mark.parametrize("plan", CHOOSABLE)
 def test_a_covered_month_is_refused(
     db: Session, manager: StaffUser, adult: Customer, prices: None, plan: Plan
 ) -> None:
@@ -483,7 +488,7 @@ def test_the_overview_has_this_month_the_options_and_the_history(
 
     assert overview.current_month == THIS_MONTH
     assert overview.covering == current
-    assert [o.plan for o in overview.options] == list(Plan)
+    assert [o.plan for o in overview.options] == CHOOSABLE
     assert overview.history == [current, correction, replaced, old]
 
 

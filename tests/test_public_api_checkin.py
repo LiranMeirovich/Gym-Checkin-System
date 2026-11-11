@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core import checkins, health_forms, months, phone_links
+from app.core import checkins, health_forms, months, phone_links, punch_cards
 from app.core.db import get_engine
 from app.core.health_forms import expires_on
 from app.core.models import (
@@ -23,6 +23,7 @@ from app.core.models import (
     Plan,
     PlanChoice,
     Price,
+    PunchCard,
     StaffUser,
 )
 from app.core.months import Month
@@ -47,7 +48,7 @@ THIS_MONTH = Month(2026, 11)
 
 @pytest.fixture(autouse=True)
 def fixed_now(monkeypatch: pytest.MonkeyPatch) -> None:
-    for module in (checkins, health_forms, months, phone_links):
+    for module in (checkins, health_forms, months, phone_links, punch_cards):
         monkeypatch.setattr(module, "utc_now", lambda: NOW)
 
 
@@ -164,6 +165,7 @@ def test_a_covered_month_checks_in(
         "start_month": month,
         "end_month": month,
     }
+    assert answer["punch_card"] is None
     [visit] = visits(db)
     assert visit.customer_id == customer.id
     assert visit.method == "phone"
@@ -272,9 +274,30 @@ def test_no_plan_is_plan_required_with_the_options(
         "detail": "plan_required",
         "month": "2026-11",
         "options": [
-            {"plan": "monthly", "price_agorot": 25000},
-            {"plan": "tri_monthly", "price_agorot": None},
-            {"plan": "single_entry", "price_agorot": None},
+            {
+                "plan": "monthly",
+                "price_agorot": 25000,
+                "entries": None,
+                "valid_until": None,
+            },
+            {
+                "plan": "tri_monthly",
+                "price_agorot": None,
+                "entries": None,
+                "valid_until": None,
+            },
+            {
+                "plan": "single_entry",
+                "price_agorot": None,
+                "entries": None,
+                "valid_until": None,
+            },
+            {
+                "plan": "punch_card",
+                "price_agorot": None,
+                "entries": 20,
+                "valid_until": "2026-12-31",
+            },
         ],
     }
     assert visits(db) == []
@@ -303,6 +326,51 @@ def test_a_plan_without_a_price_is_price_not_set(
     assert response.status_code == 409
     assert response.json() == {"detail": "price_not_set"}
     assert db.scalars(select(PlanChoice)).all() == []
+    assert visits(db) == []
+
+
+def test_buying_a_punch_card_checks_in_with_its_first_entry(
+    linked: TestClient, db: Session, customer: Customer, valid_form: None
+) -> None:
+    db.add(
+        Price(plan=Plan.PUNCH_CARD, amount_agorot=50000, valid_from_month=EARLY_MONTH)
+    )
+    db.commit()
+
+    response = check_in(linked, "punch_card")
+
+    assert response.status_code == 200
+    answer = response.json()
+    assert answer["outcome"] == "checked_in"
+    assert answer["plan"] is None
+    # Valid to the end of December: the card no longer counts on 1 January.
+    assert answer["punch_card"] == {
+        "entries_left": 19,
+        "expires_on": "2027-01-01",
+        "valid_until": "2026-12-31",
+    }
+    [card] = db.scalars(select(PunchCard)).all()
+    assert card.customer_id == customer.id
+    assert card.bought_by is ChosenBy.CUSTOMER
+    [visit] = visits(db)
+    assert visit.punch_card_id == card.id
+    assert db.scalars(select(PlanChoice)).all() == []
+
+    # A repeat within 10 minutes shows the card again, no entry used.
+    again = check_in(linked)
+    assert again.json()["outcome"] == "already_checked_in"
+    assert again.json()["punch_card"] == answer["punch_card"]
+    assert len(visits(db)) == 1
+
+
+def test_a_punch_card_without_a_price_is_price_not_set(
+    linked: TestClient, db: Session, valid_form: None, prices: None
+) -> None:
+    response = check_in(linked, "punch_card")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "price_not_set"}
+    assert db.scalars(select(PunchCard)).all() == []
     assert visits(db) == []
 
 

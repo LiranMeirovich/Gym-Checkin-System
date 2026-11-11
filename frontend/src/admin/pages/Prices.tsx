@@ -11,6 +11,7 @@ import {
   PLAN_NAMES,
   formatMonth,
   formatShekels,
+  priceRowName,
   shekelsToAgorot,
 } from "../prices";
 import { useSession } from "../session";
@@ -99,7 +100,9 @@ function Current({ overview }: { overview: Overview }) {
           <tbody>
             {PLANS.map((plan) => (
               <tr key={plan}>
-                <th scope="row">{PLAN_NAMES[plan]}</th>
+                <th scope="row">
+                  {priceRowName(plan, overview.punch_card_entries)}
+                </th>
                 <td>{cell(plan)}</td>
               </tr>
             ))}
@@ -258,11 +261,13 @@ function ChangeForm({ overview }: { overview: Overview }) {
           <tbody>
             {PLANS.map((plan) => (
               <tr key={plan}>
-                <th scope="row">{PLAN_NAMES[plan]}</th>
+                <th scope="row">
+                  {priceRowName(plan, overview.punch_card_entries)}
+                </th>
                 <td>
                   <input
                     className={styles.amountInput}
-                    aria-label={PLAN_NAMES[plan]}
+                    aria-label={priceRowName(plan, overview.punch_card_entries)}
                     inputMode="decimal"
                     dir="ltr"
                     value={amounts[plan] ?? ""}

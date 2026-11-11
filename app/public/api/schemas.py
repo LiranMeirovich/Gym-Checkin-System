@@ -163,31 +163,49 @@ MonthText = Annotated[str, Field(pattern=r"^[1-9][0-9]{3}-(0[1-9]|1[0-2])$")]
 
 
 class CheckInRequest(BaseModel):
-    """``plan``: the plan the customer tapped on the plan page, chosen
-    first if no plan covers this month (ignored if one does). Leave it out
-    for a plain check-in."""
+    """``plan``: the option the customer confirmed on the plan page: a plan
+    chosen for this month, or ``punch_card`` to buy a card and use its
+    first entry. Ignored if a plan or an active card already covers them.
+    Leave it out for a plain check-in."""
 
     plan: Plan | None = None
+
+
+# The plans a month is chosen for: a punch card never covers a month.
+ChosenPlan = Literal["monthly", "tri_monthly", "single_entry"]
 
 
 class CoveringPlan(Answer):
     """The plan covering this month: one month, or three for tri-monthly
     (``end_month`` is the last)."""
 
-    plan: Plan
+    plan: ChosenPlan
     start_month: MonthText
     end_month: MonthText
+
+
+class PunchCardBalance(Answer):
+    """The punch card that paid for the visit: entries left after it,
+    ``expires_on``, the first Israel-local day it no longer counts (the 1st
+    of a month), and ``valid_until``, the last day it counts (the day
+    before), which is what the phone shows."""
+
+    entries_left: int
+    expires_on: date
+    valid_until: date
 
 
 class CheckedIn(Answer):
     """``checked_in``: a visit was recorded. ``already_checked_in``: the
     customer checked in less than 10 minutes ago, and ``checked_in_at`` is
-    that visit; nothing new was recorded. ``plan`` is null only for a
-    repeat whose month has since lost its plan."""
+    that visit; nothing new was recorded. Exactly one of ``plan`` and
+    ``punch_card`` is set, except for a repeat whose month has since lost
+    its plan (both null)."""
 
     outcome: Outcome
     checked_in_at: datetime
     plan: CoveringPlan | None
+    punch_card: PunchCardBalance | None
 
 
 class HealthFormRequired(Answer):
@@ -201,10 +219,15 @@ class HealthFormRequired(Answer):
 
 class PlanOffer(Answer):
     """One plan at its price this month.
-    ``price_agorot`` null: the price isn't set, so it can't be chosen."""
+    ``price_agorot`` null: the price isn't set, so it can't be chosen.
+    For the punch card only, ``entries`` is how many it has and
+    ``valid_until`` the last day a card bought now counts; both are null
+    for the other plans."""
 
     plan: Plan
     price_agorot: int | None
+    entries: int | None
+    valid_until: date | None
 
 
 class PlanRequired(Answer):

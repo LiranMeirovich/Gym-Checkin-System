@@ -83,6 +83,13 @@ class PlanChoice(Base):
             "(chosen_by = 'staff') = (staff_user_id IS NOT NULL)",
             name="staff_choice_names_staff",
         ),
+        # The plans a month can be chosen for: never a punch card, which
+        # has its own table (decision 0042). Written out rather than made by
+        # the Enum, which would allow every ``Plan``; the same name and
+        # values as before punch cards existed.
+        CheckConstraint(
+            "\"plan\" IN ('monthly', 'tri_monthly', 'single_entry')", name="plan"
+        ),
         Index(None, "customer_id", "start_month"),
     )
 
@@ -94,7 +101,7 @@ class PlanChoice(Base):
             Plan,
             name="plan",
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             length=20,
             values_callable=lambda plans: [plan.value for plan in plans],
         )

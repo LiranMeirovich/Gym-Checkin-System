@@ -6,14 +6,15 @@ choice"; decisions 0004, 0017, 0032).
   the phone: health form, the 10-minute repeat, a plan for this month.
 
   - 200 ``checked_in`` or ``already_checked_in``, with the plan covering
-    this month.
+    this month or the punch card that paid (decision 0042). An active
+    card pays whoever checks the customer in.
   - 403 ``plan_not_allowed``: a plan was sent by staff who may not choose
-    plans. Instructors send none: with no plan this month, their
-    check-in records single entry (decision 0017).
+    plans. Instructors send none: with no plan this month and no active
+    card, their check-in records single entry (decision 0017).
   - 409 ``health_form_required``: show the form's status; nothing else
     can let the customer in (decision 0004).
-  - 409 ``plan_required``: the manager picks one of ``options`` and sends
-    it.
+  - 409 ``plan_required``: the manager picks one of ``options`` (the
+    plans and the punch card) and sends it.
   - 409 ``price_not_set`` or ``customer_inactive``.
 
 - ``GET /api/customers/{id}/checkins`` (``customers.view``, every role):
@@ -36,6 +37,7 @@ from fastapi.responses import JSONResponse
 
 from app.admin.api.customers import NOT_FOUND, CanView, CustomerId, customer_or_404
 from app.admin.api.health_forms import status_answer
+from app.admin.api.plans import plan_offers
 from app.admin.api.schemas import (
     CheckedIn,
     CheckInForbidden,
@@ -49,7 +51,7 @@ from app.admin.api.schemas import (
     CustomerName,
     ManualCheckInRequest,
     NotLoggedIn,
-    PlanOption,
+    PunchCardBalance,
     TodaysCheckIn,
     TodaysCheckIns,
 )
@@ -144,15 +146,7 @@ def check_in(
         return _conflict(
             CheckInPlanRequired(
                 month=str(refused.month),
-                options=[
-                    PlanOption(
-                        plan=option.plan,
-                        amount_agorot=(
-                            None if option.price is None else option.price.amount_agorot
-                        ),
-                    )
-                    for option in refused.options
-                ],
+                options=plan_offers(refused.options, refused.month),
             )
         )
     except PriceNotSetError:
@@ -160,7 +154,7 @@ def check_in(
     except CustomerInactiveError:
         return _conflict(CheckInRefusedOther(error="customer_inactive"))
 
-    plan = result.plan
+    plan, card = result.plan, result.card
     return CheckedIn(
         outcome=result.outcome,
         checked_in_at=to_local(result.check_in.checked_in_at),
@@ -173,6 +167,15 @@ def check_in(
                 plan=plan.plan,
                 start_month=str(plan.start_month),
                 end_month=str(plan.end_month),
+            )
+        ),
+        punch_card=(
+            None
+            if card is None
+            else PunchCardBalance(
+                entries_left=card.entries_left,
+                expires_on=card.card.expires_on,
+                valid_until=card.valid_until,
             )
         ),
     )

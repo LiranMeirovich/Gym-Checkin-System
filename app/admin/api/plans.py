@@ -5,11 +5,13 @@ Every route needs its own named permission, checked on the server whatever
 React shows:
 
 - ``GET /api/customers/{id}/plan``: this month's plan, the plans on offer
-  with this customer's prices, and their history (``customers.view``, so
-  instructors see the plan status too).
+  with this customer's prices, and their history, plus the active punch
+  card and every card bought (``customers.view``, so instructors see the
+  plan status too).
 - ``POST /api/customers/{id}/plan``: choose a plan for the current month,
   answering with the updated status. Manager only (``plans.choose``). A
-  wrong month or an unset price is a 400; a covered month or an inactive
+  wrong month, the punch card (bought only at a check-in) or an unset
+  price is a 400; a covered month, an active punch card or an inactive
   customer is a 409. Nothing is saved on either.
 - ``POST /api/customers/{id}/plan/corrections``: replace one of the
   customer's choices with another plan, or clear it (``plan: null``),
@@ -36,15 +38,23 @@ from app.admin.api.schemas import (
     PlanOption,
     PlanRefused,
     PlanStatus,
+    PunchCardRow,
 )
 from app.admin.security import StaffLogin, require_permission
 from app.core import plans as core
 from app.core.clock import to_local
 from app.core.customers import CustomerInactiveError
 from app.core.db import DbSession
-from app.core.models import Customer, PlanChoice
+from app.core.models import Customer, Plan, PlanChoice
 from app.core.months import Month
 from app.core.permissions import Permission
+from app.core.punch_cards import (
+    CARD_ENTRIES,
+    CardBalance,
+    active_card,
+    card_history,
+    valid_until_for,
+)
 
 router = APIRouter(
     prefix="/customers/{customer_id}/plan",
@@ -117,6 +127,7 @@ def correct(
 
 def _status(db: DbSession, customer: Customer) -> PlanStatus:
     overview = core.plan_overview(db, customer)
+    active = active_card(db, customer)
     return PlanStatus(
         current_month=str(overview.current_month),
         covering=(
@@ -125,16 +136,47 @@ def _status(db: DbSession, customer: Customer) -> PlanStatus:
             else _row(overview.covering, overview.replaced_by)
         ),
         correctable=overview.correctable,
-        options=[
-            PlanOption(
-                plan=option.plan,
-                amount_agorot=(
-                    None if option.price is None else option.price.amount_agorot
-                ),
-            )
-            for option in overview.options
-        ],
+        options=plan_offers(overview.options, overview.current_month),
+        check_in_options=plan_offers(
+            core.check_in_options(db, overview.current_month), overview.current_month
+        ),
         history=[_row(choice, overview.replaced_by) for choice in overview.history],
+        punch_card=None if active is None else _card_row(active),
+        punch_cards=[_card_row(card) for card in card_history(db, customer)],
+    )
+
+
+def plan_offers(options: list[core.PlanOption], month: Month) -> list[PlanOption]:
+    """Plans with their prices in ``month``, as the API sends them. The
+    punch card also says its size and the last day a card bought in
+    ``month`` counts."""
+    return [
+        PlanOption(
+            plan=option.plan,
+            amount_agorot=None if option.price is None else option.price.amount_agorot,
+            entries=CARD_ENTRIES if option.plan is Plan.PUNCH_CARD else None,
+            valid_until=(
+                valid_until_for(month) if option.plan is Plan.PUNCH_CARD else None
+            ),
+        )
+        for option in options
+    ]
+
+
+def _card_row(balance: CardBalance) -> PunchCardRow:
+    card = balance.card
+    return PunchCardRow(
+        id=card.id,
+        price_agorot=card.price_agorot,
+        bought_month=str(card.bought_month),
+        expires_on=card.expires_on,
+        valid_until=balance.valid_until,
+        entries=CARD_ENTRIES,
+        bought_at=to_local(card.bought_at),
+        bought_by=card.bought_by,
+        staff_name=None if card.staff is None else card.staff.display_name,
+        entries_used=balance.entries_used,
+        entries_left=balance.entries_left,
     )
 
 
@@ -162,7 +204,9 @@ REFUSALS: dict[type[ValueError], tuple[int, str]] = {
     CustomerInactiveError: (status.HTTP_409_CONFLICT, "customer_inactive"),
     core.ChoiceReplacedError: (status.HTTP_409_CONFLICT, "choice_replaced"),
     core.MonthCoveredError: (status.HTTP_409_CONFLICT, "month_covered"),
+    core.PunchCardActiveError: (status.HTTP_409_CONFLICT, "punch_card_active"),
     core.MonthNotChoosableError: (status.HTTP_400_BAD_REQUEST, "month_not_choosable"),
+    core.NotAChoiceError: (status.HTTP_400_BAD_REQUEST, "not_a_choice"),
     core.NotCorrectableError: (status.HTTP_400_BAD_REQUEST, "not_correctable"),
     core.PriceNotSetError: (status.HTTP_400_BAD_REQUEST, "price_not_set"),
     core.NoChangeError: (status.HTTP_400_BAD_REQUEST, "no_change"),

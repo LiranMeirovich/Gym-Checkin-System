@@ -148,6 +148,8 @@ def test_the_database_accepts_good_rows(db: Session, good: dict[str, object]) ->
         {"chosen_by": "customer", "staff_user_id": 1},
         {"staff_user_id": 99},
         {"replaces_id": 99},
+        # A punch card has its own table, never a choice (decision 0042).
+        {"plan": "punch_card"},
     ],
 )
 def test_the_database_refuses_bad_rows(db: Session, bad: dict[str, object]) -> None:

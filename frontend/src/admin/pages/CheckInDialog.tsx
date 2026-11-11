@@ -2,11 +2,13 @@
 // 0004, 0017, 0032), from the customer list and the customer's page.
 //
 // The dialog shows only what check-in needs (decision 0023): the name,
-// whether the health form is valid, and this month's plan. It reads them
-// from GET .../health-form and GET .../plan; POST .../check-in decides
-// again on the server, in the same order as the phone. With no plan this
-// month, the manager picks one; an instructor's check-in records single
-// entry (decision 0017). No valid health form, no check-in (decision 0004).
+// whether the health form is valid, and this month's plan or the active
+// punch card. It reads them from GET .../health-form and GET .../plan;
+// POST .../check-in decides again on the server, in the same order as the
+// phone. An active card pays with an entry, whoever checks in. With no plan
+// and no card, the manager picks a plan or sells a card; an instructor's
+// check-in records single entry (decisions 0017, 0042). No valid health
+// form, no check-in (decision 0004).
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
@@ -14,12 +16,14 @@ import { api, type Schemas } from "../backend/client";
 import {
   CUSTOMER_LIST_KEY,
   checkinsKey,
+  formatDate,
   formatTime,
   healthFormKey,
   planKey,
 } from "../customers";
 import { can } from "../roles";
 import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
+import { LAST_CARD_ENTRY, entriesLeftText } from "../../shared/plans";
 import { useSession } from "../session";
 import { fetchStatus } from "./CustomerHealthForm";
 import { describe, fetchPlan } from "./CustomerPlan";
@@ -154,6 +158,7 @@ function CheckInBody({
         // A check-in can choose this month's plan (single entry, or the
         // manager's pick). The list's last visit waits for the dialog to
         // close (CheckInButton).
+        // A card's entries change with every check-in.
         void queryClient.invalidateQueries({ queryKey: planKey(customerId) });
         void queryClient.invalidateQueries({
           queryKey: checkinsKey(customerId),
@@ -205,6 +210,10 @@ function CheckInBody({
           ? "הכניסה נרשמה."
           : "הלקוח כבר נרשם לפני פחות מ-10 דקות. לא נרשמה כניסה נוספת."}
         {result.plan && ` מסלול: ${PLAN_NAMES[result.plan.plan]}.`}
+        {result.punch_card &&
+          (result.punch_card.entries_left === 0
+            ? ` ${LAST_CARD_ENTRY}.`
+            : ` כרטיסייה: ${entriesLeftText(result.punch_card.entries_left)}, עד ${formatDate(result.punch_card.valid_until)}.`)}
       </p>
     );
   }
@@ -215,6 +224,7 @@ function CheckInBody({
   // Only staff who review forms are ever sent "waiting for review".
   const waiting = health.data.state === "needs_doctor_note";
   const covering = plan.data.covering;
+  const card = plan.data.punch_card;
   const singleEntry = plan.data.options.find(
     (option) => option.plan === "single_entry",
   );
@@ -229,12 +239,12 @@ function CheckInBody({
         </Link>
       </p>
     );
-  } else if (covering) {
+  } else if (covering || card) {
     action = <CheckInSubmit sending={sending} onClick={checkIn} />;
   } else if (manager) {
     action = (
       <PlanPicker
-        options={plan.data.options}
+        options={plan.data.check_in_options}
         picked={picked}
         onPick={setPicked}
         sending={sending}
@@ -272,6 +282,12 @@ function CheckInBody({
         <dd>
           {covering ? (
             describe(covering)
+          ) : card ? (
+            <>
+              <StatusBadge tone="ok">כרטיסייה</StatusBadge>{" "}
+              {entriesLeftText(card.entries_left)}, עד{" "}
+              {formatDate(card.valid_until)}
+            </>
           ) : (
             <StatusBadge tone="warn">אין</StatusBadge>
           )}
@@ -304,8 +320,8 @@ function CheckInSubmit({
   );
 }
 
-/** The manager's pick for a month with no plan, at this customer's price.
- * A plan without a price can't be picked. */
+/** The manager's pick for a month with no plan: a plan, or a punch card,
+ * at its price. One without a price can't be picked. */
 function PlanPicker({
   options,
   picked,

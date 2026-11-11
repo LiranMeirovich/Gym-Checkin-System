@@ -197,3 +197,10 @@
   font-weight: 500;
   font-size: var(--text-m);
 }
+
+/* Confirm / Back under the tapped option: nothing is sent until Confirm. */
+.confirm {
+  display: grid;
+  gap: var(--space-3);
+  margin-block-start: var(--space-4);
+}

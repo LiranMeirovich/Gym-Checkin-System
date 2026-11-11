@@ -12,8 +12,14 @@ choice it was billed under: a later correction (single entry to monthly)
 changes which choice is active, and the report works that out from
 ``plan_choices``.
 
+A check-in that used a punch card entry names the card
+(``punch_card_id``); the card's balance is counted from these rows
+(decision 0042). Triggers refuse a card of another customer's and one
+entry more than the card has.
+
 The rules the database can't check (a valid health form, the 10-minute
-repeat window, a plan for the month) live in ``app.core.checkins``.
+repeat window, a plan for the month, a card that hasn't expired) live in
+``app.core.checkins``.
 """
 
 from datetime import datetime
@@ -26,6 +32,7 @@ from app.core.clock import utc_now
 from app.core.models.base import Base
 from app.core.models.customers import Customer
 from app.core.models.phone_links import DeviceSession
+from app.core.models.punch_cards import PunchCard
 from app.core.models.staff import StaffUser
 
 
@@ -52,6 +59,8 @@ class CheckIn(Base):
         # Everyone's check-ins in a stretch of time: today's on the
         # dashboard, a month's for the report.
         Index(None, "checked_in_at"),
+        # A card's check-ins, for its balance.
+        Index(None, "punch_card_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -74,7 +83,10 @@ class CheckIn(Base):
     )
     # Set for a manual check-in: who entered it.
     staff_user_id: Mapped[int | None] = mapped_column(ForeignKey("staff_users.id"))
+    # Set when the visit used one of the customer's punch card entries.
+    punch_card_id: Mapped[int | None] = mapped_column(ForeignKey("punch_cards.id"))
 
     customer: Mapped[Customer] = relationship()
     device: Mapped[DeviceSession | None] = relationship()
     staff: Mapped[StaffUser | None] = relationship()
+    punch_card: Mapped[PunchCard | None] = relationship()
