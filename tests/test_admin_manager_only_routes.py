@@ -49,6 +49,11 @@ MANAGER_ONLY = {
     ("GET", "/api/activity-log"),
     ("GET", "/api/settings"),
     ("PUT", "/api/settings"),
+    ("GET", "/api/reports"),
+    ("GET", "/api/reports/{month}"),
+    ("POST", "/api/reports/{month}/generate"),
+    ("GET", "/api/reports/{month}/excel"),
+    ("GET", "/api/reports/{month}/pdf"),
 }
 
 
@@ -115,7 +120,7 @@ def test_an_instructor_is_refused(
     client, headers = as_instructor
     # Ids of things that don't exist and an empty body: the permission
     # check comes first, so the answer is a 403, not a 404 or a 422.
-    url = path.format(customer_id=1, form_id=1, note_id=1, staff_id=1)
+    url = path.format(customer_id=1, form_id=1, note_id=1, staff_id=1, month="2026-11")
     answer = client.request(method, url, headers=headers, json={})
 
     assert answer.status_code == 403

@@ -32,14 +32,14 @@ from datetime import date, datetime
 from functools import partial
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import report_files
 from app.core.activity_log import Action, Target, record
 from app.core.config import get_settings
 from app.core.db import IMMEDIATE, get_engine
-from app.core.models import Plan, Report, StaffUser
+from app.core.models import Plan, PlanChoice, PunchCard, Report, StaffUser
 from app.core.months import Month
 from app.core.reports import MonthReport, ReportRow, calculate
 
@@ -89,6 +89,24 @@ def generate(month: Month, *, by: StaffUser | None) -> None:
     """Generate ``month``'s report now, in this thread. Raises what
     ``start()`` raises."""
     start(month, by=by)()
+
+
+def report_months(db: Session) -> list[Month]:
+    """The months a report can be opened for, newest first: every finished
+    month from the first one with a plan choice or a punch card, or just
+    last month when there's none yet. Only reads."""
+    last = Month.current().plus(-1)
+    starts = [
+        db.scalar(select(func.min(PlanChoice.start_month))),
+        db.scalar(select(func.min(PunchCard.bought_month))),
+    ]
+    first = min((m for m in starts if m is not None), default=last)
+    months = []
+    month = last
+    while month >= first:
+        months.append(month)
+        month = month.plus(-1)
+    return months or [last]
 
 
 def is_generating(month: Month) -> bool:
