@@ -774,8 +774,9 @@ export interface components {
         CheckInMethod: "phone" | "manual";
         /**
          * CheckInPlanRequired
-         * @description 409: no plan covers ``month`` and the manager didn't pick one;
-         *     nothing was recorded. Ask for one from ``options`` and send it.
+         * @description 409: no plan covers ``month``, no punch card counts today, and the
+         *     manager didn't pick one; nothing was recorded. Ask for one from
+         *     ``options`` (the plans and the punch card) and send it.
          */
         CheckInPlanRequired: {
             /**
@@ -806,8 +807,8 @@ export interface components {
          * @description ``checked_in``: a visit was recorded. ``already_checked_in``: the
          *     customer checked in less than 10 minutes ago, by any method, and
          *     ``checked_in_at`` (the gym's local time) is that visit; nothing new was
-         *     recorded. ``plan`` is null only for a repeat whose month has since
-         *     lost its plan.
+         *     recorded. Exactly one of ``plan`` and ``punch_card`` is set, except for
+         *     a repeat whose month has since lost its plan (both null).
          */
         CheckedIn: {
             outcome: components["schemas"]["Outcome"];
@@ -817,6 +818,7 @@ export interface components {
              */
             checked_in_at: string;
             plan: components["schemas"]["CoveringPlan"] | null;
+            punch_card: components["schemas"]["PunchCardBalance"] | null;
         };
         /**
          * ChosenBy
@@ -828,30 +830,31 @@ export interface components {
          * CorrectionConflict
          * @description 409. ``choice_replaced``: already corrected or cleared, by
          *     ``choice_id``. ``month_covered``: a month the new plan would cover has
-         *     another choice, ``choice_id``. ``customer_inactive``: reactivate them
-         *     first.
+         *     another choice, ``choice_id``. ``punch_card_active``: the customer has
+         *     an active punch card, so nothing is corrected or cleared.
+         *     ``customer_inactive``: reactivate them first.
          */
         CorrectionConflict: {
             /**
              * Error
              * @enum {string}
              */
-            error: "choice_replaced" | "month_covered" | "customer_inactive";
+            error: "choice_replaced" | "month_covered" | "punch_card_active" | "customer_inactive";
             /** Choice Id */
             choice_id: number | null;
         };
         /**
          * CorrectionRefused
          * @description 400. ``not_correctable``: the choice started before this month, or
-         *     it's a "no plan" row. ``price_not_set``: as for a choice.
-         *     ``no_change``: same plan, same price. Nothing was saved.
+         *     it's a "no plan" row. ``not_a_choice``, ``price_not_set``: as for a
+         *     choice. ``no_change``: same plan, same price. Nothing was saved.
          */
         CorrectionRefused: {
             /**
              * Error
              * @enum {string}
              */
-            error: "not_correctable" | "price_not_set" | "no_change";
+            error: "not_correctable" | "not_a_choice" | "price_not_set" | "no_change";
         };
         /**
          * CoveringPlan
@@ -859,7 +862,11 @@ export interface components {
          *     (``end_month`` is the last).
          */
         CoveringPlan: {
-            plan: components["schemas"]["Plan"];
+            /**
+             * Plan
+             * @enum {string}
+             */
+            plan: "monthly" | "tri_monthly" | "single_entry";
             /** Start Month */
             start_month: string;
             /** End Month */
@@ -1371,9 +1378,11 @@ export interface components {
         /**
          * ManualCheckInRequest
          * @description ``plan``: the plan the manager picked, chosen first if no plan
-         *     covers this month (ignored if one does). Only staff with
-         *     ``plans.choose`` may send one; an instructor leaves it out and gets
-         *     single entry when the month has no plan (decision 0017).
+         *     covers this month, or ``punch_card`` to sell a card and use its first
+         *     entry (ignored if a plan or an active card covers the customer). Only
+         *     staff with ``plans.choose`` may send one; an instructor leaves it out
+         *     and gets single entry when nothing covers the customer (decision
+         *     0017).
          */
         ManualCheckInRequest: {
             plan?: components["schemas"]["Plan"] | null;
@@ -1471,7 +1480,8 @@ export interface components {
         PlanChoiceRow: {
             /** Id */
             id: number;
-            plan: components["schemas"]["Plan"] | null;
+            /** Plan */
+            plan: ("monthly" | "tri_monthly" | "single_entry") | null;
             /** Start Month */
             start_month: string;
             /** End Month */
@@ -1494,14 +1504,15 @@ export interface components {
         /**
          * PlanConflict
          * @description 409. ``month_covered``: a month the plan would cover already has a
-         *     choice, ``choice_id``. ``customer_inactive``: reactivate them first.
+         *     choice, ``choice_id``. ``punch_card_active``: the customer has an
+         *     active punch card. ``customer_inactive``: reactivate them first.
          */
         PlanConflict: {
             /**
              * Error
              * @enum {string}
              */
-            error: "month_covered" | "customer_inactive";
+            error: "month_covered" | "punch_card_active" | "customer_inactive";
             /** Choice Id */
             choice_id: number | null;
         };
@@ -1524,7 +1535,8 @@ export interface components {
         /**
          * PlanRefused
          * @description 400. ``month_not_choosable``: not the current month.
-         *     ``price_not_set``: the manager hasn't entered this plan's price.
+         *     ``not_a_choice``: a punch card is bought at a check-in, never chosen
+         *     here. ``price_not_set``: the manager hasn't entered this plan's price.
          *     Nothing was saved.
          */
         PlanRefused: {
@@ -1532,13 +1544,19 @@ export interface components {
              * Error
              * @enum {string}
              */
-            error: "month_not_choosable" | "price_not_set";
+            error: "month_not_choosable" | "not_a_choice" | "price_not_set";
         };
         /**
          * PlanStatus
          * @description ``covering`` is the choice covering ``current_month``, or ``None``;
          *     ``correctable`` says whether it may be changed or cleared (it started
-         *     this month). ``history`` is every choice, latest month first.
+         *     this month). ``options`` are the plans the customer page offers;
+         *     ``check_in_options`` what a check-in with no plan offers (the plans and
+         *     the punch card). ``history`` is every choice, latest month first.
+         *
+         *     ``punch_card`` is the card that counts today, or ``None``; while it's
+         *     set, no plan is chosen or corrected. ``punch_cards`` is every card
+         *     bought, newest first, the active one included.
          */
         PlanStatus: {
             /** Current Month */
@@ -1548,8 +1566,13 @@ export interface components {
             correctable: boolean;
             /** Options */
             options: components["schemas"]["PlanOption"][];
+            /** Check In Options */
+            check_in_options: components["schemas"]["PlanOption"][];
             /** History */
             history: components["schemas"]["PlanChoiceRow"][];
+            punch_card: components["schemas"]["PunchCardRow"] | null;
+            /** Punch Cards */
+            punch_cards: components["schemas"]["PunchCardRow"][];
         };
         /** PriceChange */
         PriceChange: {
@@ -1622,6 +1645,53 @@ export interface components {
             errors: {
                 [key: string]: "invalid";
             };
+        };
+        /**
+         * PunchCardBalance
+         * @description The punch card that paid for the visit: entries left after it, and
+         *     ``expires_on``, the first Israel-local day it no longer counts.
+         */
+        PunchCardBalance: {
+            /** Entries Left */
+            entries_left: number;
+            /**
+             * Expires On
+             * Format: date
+             */
+            expires_on: string;
+        };
+        /**
+         * PunchCardRow
+         * @description A punch card as bought (decision 0042). ``expires_on`` is the first
+         *     Israel-local day it no longer counts (the 1st of a month);
+         *     ``bought_at`` is the gym's local time, with its offset. ``staff_name``
+         *     is who sold it when staff did. ``entries_used`` counts the check-ins
+         *     charged to it, ``entries_left`` what remains of its 20.
+         */
+        PunchCardRow: {
+            /** Id */
+            id: number;
+            /** Price Agorot */
+            price_agorot: number;
+            /** Bought Month */
+            bought_month: string;
+            /**
+             * Expires On
+             * Format: date
+             */
+            expires_on: string;
+            /**
+             * Bought At
+             * Format: date-time
+             */
+            bought_at: string;
+            bought_by: components["schemas"]["ChosenBy"];
+            /** Staff Name */
+            staff_name: string | null;
+            /** Entries Used */
+            entries_used: number;
+            /** Entries Left */
+            entries_left: number;
         };
         /**
          * Role

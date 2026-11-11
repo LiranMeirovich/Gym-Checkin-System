@@ -14,11 +14,11 @@ import { formatDay } from "../../shared/dates";
 import {
   CARD_ENTRIES,
   PLAN_NAMES,
-  addMonths,
+  cardLastDay,
+  cardValidUntil,
   entriesLeftText,
   formatMonth,
   formatShekels,
-  lastCardMonth,
   type Plan,
 } from "../../shared/plans";
 import { formatTime, lastDayOf } from "../times";
@@ -183,7 +183,7 @@ function CheckedInPage({
           <li>
             <StatusBadge tone="ok">כרטיסייה</StatusBadge>
             {entriesLeftText(answer.punch_card.entries_left)}, בתוקף עד{" "}
-            <bdi>{lastDayOf(lastCardMonth(answer.punch_card.expires_on))}</bdi>
+            <bdi>{formatDay(cardLastDay(answer.punch_card.expires_on))}</bdi>
           </li>
         )}
         {formValidUntil && (
@@ -303,6 +303,6 @@ function priceText(plan: Plan, agorot: number, month: string): string {
     case "single_entry":
       return `${price} לכל כניסה החודש`;
     case "punch_card":
-      return `${price} ל־${CARD_ENTRIES} כניסות, בתוקף עד ${lastDayOf(addMonths(month, 1))}`;
+      return `${price} ל־${CARD_ENTRIES} כניסות, בתוקף עד ${formatDay(cardValidUntil(month))}`;
   }
 }

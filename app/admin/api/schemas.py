@@ -320,6 +320,10 @@ class PricesRefused(Answer):
 # looked up on the server and copied onto the choice; a request never
 # carries it.
 
+# The plans a month is chosen for: a punch card never covers a month
+# (decision 0042).
+ChosenPlan = Literal["monthly", "tri_monthly", "single_entry"]
+
 
 class PlanChoiceRow(Answer):
     """A choice as it was made. ``chosen_at`` is the gym's local time, with
@@ -331,7 +335,7 @@ class PlanChoiceRow(Answer):
     cleared the choice it replaces; it's never ``covering``."""
 
     id: int
-    plan: Plan | None
+    plan: ChosenPlan | None
     start_month: MonthText
     end_month: MonthText
     unit_price_agorot: int | None
@@ -350,16 +354,43 @@ class PlanOption(Answer):
     amount_agorot: int | None
 
 
+class PunchCardRow(Answer):
+    """A punch card as bought (decision 0042). ``expires_on`` is the first
+    Israel-local day it no longer counts (the 1st of a month);
+    ``bought_at`` is the gym's local time, with its offset. ``staff_name``
+    is who sold it when staff did. ``entries_used`` counts the check-ins
+    charged to it, ``entries_left`` what remains of its 20."""
+
+    id: int
+    price_agorot: int
+    bought_month: MonthText
+    expires_on: date
+    bought_at: datetime
+    bought_by: ChosenBy
+    staff_name: str | None
+    entries_used: int
+    entries_left: int
+
+
 class PlanStatus(Answer):
     """``covering`` is the choice covering ``current_month``, or ``None``;
     ``correctable`` says whether it may be changed or cleared (it started
-    this month). ``history`` is every choice, latest month first."""
+    this month). ``options`` are the plans the customer page offers;
+    ``check_in_options`` what a check-in with no plan offers (the plans and
+    the punch card). ``history`` is every choice, latest month first.
+
+    ``punch_card`` is the card that counts today, or ``None``; while it's
+    set, no plan is chosen or corrected. ``punch_cards`` is every card
+    bought, newest first, the active one included."""
 
     current_month: MonthText
     covering: PlanChoiceRow | None
     correctable: bool
     options: list[PlanOption]
+    check_in_options: list[PlanOption]
     history: list[PlanChoiceRow]
+    punch_card: PunchCardRow | None
+    punch_cards: list[PunchCardRow]
 
 
 class PlanChoiceRequest(BaseModel):
@@ -371,17 +402,19 @@ class PlanChoiceRequest(BaseModel):
 
 class PlanRefused(Answer):
     """400. ``month_not_choosable``: not the current month.
-    ``price_not_set``: the manager hasn't entered this plan's price.
+    ``not_a_choice``: a punch card is bought at a check-in, never chosen
+    here. ``price_not_set``: the manager hasn't entered this plan's price.
     Nothing was saved."""
 
-    error: Literal["month_not_choosable", "price_not_set"]
+    error: Literal["month_not_choosable", "not_a_choice", "price_not_set"]
 
 
 class PlanConflict(Answer):
     """409. ``month_covered``: a month the plan would cover already has a
-    choice, ``choice_id``. ``customer_inactive``: reactivate them first."""
+    choice, ``choice_id``. ``punch_card_active``: the customer has an
+    active punch card. ``customer_inactive``: reactivate them first."""
 
-    error: Literal["month_covered", "customer_inactive"]
+    error: Literal["month_covered", "punch_card_active", "customer_inactive"]
     choice_id: int | None = None
 
 
@@ -394,19 +427,22 @@ class PlanCorrectionRequest(BaseModel):
 
 class CorrectionRefused(Answer):
     """400. ``not_correctable``: the choice started before this month, or
-    it's a "no plan" row. ``price_not_set``: as for a choice.
-    ``no_change``: same plan, same price. Nothing was saved."""
+    it's a "no plan" row. ``not_a_choice``, ``price_not_set``: as for a
+    choice. ``no_change``: same plan, same price. Nothing was saved."""
 
-    error: Literal["not_correctable", "price_not_set", "no_change"]
+    error: Literal["not_correctable", "not_a_choice", "price_not_set", "no_change"]
 
 
 class CorrectionConflict(Answer):
     """409. ``choice_replaced``: already corrected or cleared, by
     ``choice_id``. ``month_covered``: a month the new plan would cover has
-    another choice, ``choice_id``. ``customer_inactive``: reactivate them
-    first."""
+    another choice, ``choice_id``. ``punch_card_active``: the customer has
+    an active punch card, so nothing is corrected or cleared.
+    ``customer_inactive``: reactivate them first."""
 
-    error: Literal["choice_replaced", "month_covered", "customer_inactive"]
+    error: Literal[
+        "choice_replaced", "month_covered", "punch_card_active", "customer_inactive"
+    ]
     choice_id: int | None = None
 
 
@@ -598,9 +634,11 @@ class DoctorNoteConflict(Answer):
 
 class ManualCheckInRequest(BaseModel):
     """``plan``: the plan the manager picked, chosen first if no plan
-    covers this month (ignored if one does). Only staff with
-    ``plans.choose`` may send one; an instructor leaves it out and gets
-    single entry when the month has no plan (decision 0017)."""
+    covers this month, or ``punch_card`` to sell a card and use its first
+    entry (ignored if a plan or an active card covers the customer). Only
+    staff with ``plans.choose`` may send one; an instructor leaves it out
+    and gets single entry when nothing covers the customer (decision
+    0017)."""
 
     plan: Plan | None = None
 
@@ -609,21 +647,30 @@ class CoveringPlan(Answer):
     """The plan covering this month: one month, or three for tri-monthly
     (``end_month`` is the last)."""
 
-    plan: Plan
+    plan: ChosenPlan
     start_month: MonthText
     end_month: MonthText
+
+
+class PunchCardBalance(Answer):
+    """The punch card that paid for the visit: entries left after it, and
+    ``expires_on``, the first Israel-local day it no longer counts."""
+
+    entries_left: int
+    expires_on: date
 
 
 class CheckedIn(Answer):
     """``checked_in``: a visit was recorded. ``already_checked_in``: the
     customer checked in less than 10 minutes ago, by any method, and
     ``checked_in_at`` (the gym's local time) is that visit; nothing new was
-    recorded. ``plan`` is null only for a repeat whose month has since
-    lost its plan."""
+    recorded. Exactly one of ``plan`` and ``punch_card`` is set, except for
+    a repeat whose month has since lost its plan (both null)."""
 
     outcome: Outcome
     checked_in_at: datetime
     plan: CoveringPlan | None
+    punch_card: PunchCardBalance | None
 
 
 class CheckInHealthFormRequired(Answer):
@@ -635,8 +682,9 @@ class CheckInHealthFormRequired(Answer):
 
 
 class CheckInPlanRequired(Answer):
-    """409: no plan covers ``month`` and the manager didn't pick one;
-    nothing was recorded. Ask for one from ``options`` and send it."""
+    """409: no plan covers ``month``, no punch card counts today, and the
+    manager didn't pick one; nothing was recorded. Ask for one from
+    ``options`` (the plans and the punch card) and send it."""
 
     error: Literal["plan_required"] = "plan_required"
     month: MonthText

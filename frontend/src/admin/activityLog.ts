@@ -35,6 +35,7 @@ export const ACTION_NAMES: Record<string, string> = {
   "plan.choose": "מסלול נבחר",
   "plan.correct": "מסלול תוקן",
   "plan.clear": "מסלול בוטל",
+  "punch_card.buy": "כרטיסייה נמכרה",
   "phone.issue_code": "קוד חיבור טלפון הונפק",
   "phone.unlink": "טלפון נותק",
   "health_form.open": "הצהרת בריאות נפתחה",
@@ -50,6 +51,7 @@ export const TARGET_NAMES: Record<string, string> = {
   customer: "לקוח",
   staff_user: "איש צוות",
   plan_choice: "בחירת מסלול",
+  punch_card: "כרטיסייה",
   checkin: "כניסה",
   price: "מחיר",
   health_form: "הצהרת בריאות",
@@ -76,6 +78,10 @@ const FIELD_NAMES: Record<string, string> = {
   valid_from_month: "בתוקף מ־",
   start_month: "מחודש",
   end_month: "עד חודש",
+  price_agorot: "מחיר",
+  bought_month: "חודש הקנייה",
+  // The first day the card no longer counts.
+  expires_on: "פג תוקף ב־",
   // Written before one price per plan (decision 0036).
   age_group: "קבוצת גיל",
   // Settings
@@ -88,6 +94,7 @@ const FIELD_NAMES: Record<string, string> = {
   id: "מזהה",
   customer_id: "לקוח",
   plan_choice_id: "בחירת מסלול",
+  punch_card_id: "כרטיסייה",
   link_code_id: "קוד חיבור",
   doctor_note_id: "אישור רפואי",
   revoked: "נותק",
@@ -127,7 +134,10 @@ export function formatValue(field: string, value: unknown): string {
     }
     if (field === "age_group") return AGE_GROUPS[value] ?? value;
     if (field === "phone") return formatPhone(value);
-    if (field === "date_of_birth" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    if (
+      (field === "date_of_birth" || field === "expires_on") &&
+      /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ) {
       return formatDate(value);
     }
     if (field.endsWith("_month") && /^\d{4}-\d{2}$/.test(value)) {

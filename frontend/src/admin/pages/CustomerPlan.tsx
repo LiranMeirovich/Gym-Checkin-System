@@ -1,14 +1,17 @@
-// The Plan section of a customer's page: what covers this month, the
-// manager's choice for a month with no plan, changing or clearing this
-// month's choice, and every choice so far. The price comes from the
-// server; the forms only send the plan and which month or choice
-// they showed.
+// The Plan section of a customer's page: what covers this month (a plan,
+// or an active punch card), the manager's choice for a month with no plan,
+// changing or clearing this month's choice, every choice so far, and every
+// punch card bought. The price comes from the server; the forms only send
+// the plan and which month or choice they showed. A card is bought only at
+// a check-in, never here, and nothing is chosen while one is active
+// (decision 0042).
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { formatDate, planKey, type Customer } from "../customers";
 import { can } from "../roles";
 import { PLAN_NAMES, formatMonth, formatShekels, type Plan } from "../prices";
+import { CARD_ENTRIES, cardLastDay, entriesLeftText } from "../../shared/plans";
 import { useSession } from "../session";
 import {
   NoConnection,
@@ -21,14 +24,18 @@ import styles from "./CustomerPlan.module.css";
 type PlanStatus = Schemas["PlanStatus"];
 type PlanChoice = Schemas["PlanChoiceRow"];
 type PlanOption = Schemas["PlanOption"];
+type PunchCard = Schemas["PunchCardRow"];
 
 const PRICE_NOT_SET = "המחיר למסלול הזה לא נקבע. יש להזין אותו במסך המחירים.";
 const CUSTOMER_INACTIVE = "הלקוח לא פעיל. יש להפעיל אותו מחדש קודם.";
+const PUNCH_CARD_ACTIVE =
+  "ללקוח יש כרטיסייה פעילה. אי אפשר לבחור או לשנות מסלול עד שהיא נגמרת.";
 
 const REFUSALS: Record<string, string> = {
   month_not_choosable: "החודש התחלף מאז שהדף נפתח. רעננו את הדף.",
   price_not_set: PRICE_NOT_SET,
   month_covered: "לחודש הזה כבר יש מסלול.",
+  punch_card_active: PUNCH_CARD_ACTIVE,
   customer_inactive: CUSTOMER_INACTIVE,
 };
 
@@ -38,11 +45,16 @@ const CORRECTION_REFUSALS: Record<string, string> = {
   no_change: "זה כבר המסלול והמחיר של החודש.",
   choice_replaced: "המסלול כבר שונה מאז שהדף נפתח. מוצג המצב העדכני.",
   month_covered: "המסלול החדש חופף לחודש שכבר יש לו מסלול.",
+  punch_card_active: PUNCH_CARD_ACTIVE,
   customer_inactive: CUSTOMER_INACTIVE,
 };
 
 // Refusals after which the page was out of date: show what's there now.
-const STALE = new Set(["month_covered", "choice_replaced"]);
+const STALE = new Set([
+  "month_covered",
+  "choice_replaced",
+  "punch_card_active",
+]);
 
 export async function fetchPlan(id: number): Promise<PlanStatus> {
   const { data, response } = await api.GET(
@@ -77,6 +89,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
   const canChoose = customer.active && can(session, "plans.choose");
   const canCorrect = customer.active && can(session, "plans.correct");
   const covering = data.covering;
+  const card = data.punch_card;
   return (
     <section className={ui.panel}>
       <h2>מסלול לחודש {formatMonth(data.current_month)}</h2>
@@ -87,6 +100,18 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
             <StatusBadge tone="ok">יש מסלול</StatusBadge>
             <strong>{describe(covering)}</strong>
           </>
+        ) : card ? (
+          <>
+            <StatusBadge tone="ok">כרטיסייה</StatusBadge>
+            <strong>
+              {entriesLeftText(card.entries_left)}, עד{" "}
+              {formatDate(cardLastDay(card.expires_on))}
+            </strong>
+            <span className={ui.muted}>
+              {formatShekels(card.price_agorot)}, נקנתה ב־
+              {formatDate(card.bought_at)}
+            </span>
+          </>
         ) : (
           <>
             <StatusBadge tone="warn">אין מסלול</StatusBadge>
@@ -94,7 +119,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
           </>
         )}
       </div>
-      {canChoose && !covering && (
+      {canChoose && !covering && !card && (
         <ChooseForm
           customerId={customer.id}
           month={data.current_month}
@@ -120,6 +145,7 @@ export function CustomerPlan({ customer }: { customer: Customer }) {
           </p>
         ))}
       <History choices={data.history} />
+      <Cards cards={data.punch_cards} />
     </section>
   );
 }
@@ -329,6 +355,47 @@ function PlanOptions({
         ))}
       </div>
     </fieldset>
+  );
+}
+
+function Cards({ cards }: { cards: PunchCard[] }) {
+  if (cards.length === 0) return null;
+  return (
+    <div className={ui.subsection}>
+      <h3>כרטיסיות</h3>
+      <div className={ui.flushTable}>
+        <table>
+          <thead>
+            <tr>
+              <th>נקנתה</th>
+              <th>בתוקף עד</th>
+              <th>כניסות</th>
+              <th>מחיר</th>
+              <th>נקנתה על ידי</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cards.map((card) => (
+              <tr key={card.id}>
+                <td>{formatDate(card.bought_at)}</td>
+                <td>{formatDate(cardLastDay(card.expires_on))}</td>
+                <td>
+                  <span dir="ltr">
+                    {card.entries_used}/{CARD_ENTRIES}
+                  </span>
+                </td>
+                <td>{formatShekels(card.price_agorot)}</td>
+                <td>
+                  {card.bought_by === "customer"
+                    ? "הלקוח"
+                    : (card.staff_name ?? "צוות")}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

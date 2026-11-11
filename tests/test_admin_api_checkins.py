@@ -13,16 +13,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.admin.main import app
-from app.core import checkins, months, pins
+from app.core import checkins, months, pins, punch_cards
 from app.core.db import get_engine
 from app.core.models import (
     CheckIn,
     CheckInMethod,
+    ChosenBy,
     Customer,
     HealthForm,
     Plan,
     PlanChoice,
     Price,
+    PunchCard,
     StaffUser,
 )
 from app.core.months import Month
@@ -49,6 +51,7 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
     clock = Clock()
     monkeypatch.setattr(checkins, "utc_now", clock)
     monkeypatch.setattr(months, "utc_now", clock)
+    monkeypatch.setattr(punch_cards, "utc_now", clock)
     return clock
 
 
@@ -217,6 +220,7 @@ def test_an_instructor_checks_in_a_customer_with_no_plan_as_single_entry(
             "start_month": "2026-11",
             "end_month": "2026-11",
         },
+        "punch_card": None,
     }
     [row] = recorded(db)
     assert row.method is CheckInMethod.MANUAL
@@ -333,3 +337,68 @@ def test_a_second_check_in_within_ten_minutes_is_already_checked_in(
     assert response.json()["outcome"] == "already_checked_in"
     assert response.json()["checked_in_at"] == "2026-11-15T14:00:00+02:00"
     assert len(recorded(db)) == 1
+
+
+# Punch cards at the desk (decision 0042)
+
+
+def card_price(db: Session) -> None:
+    db.add(
+        Price(
+            plan=Plan.PUNCH_CARD, amount_agorot=50000, valid_from_month=Month(2026, 1)
+        )
+    )
+    db.commit()
+
+
+def test_the_manager_sells_a_punch_card_with_the_check_in(
+    as_manager: Staff, db: Session, customer: Customer, valid_form: None, prices: None
+) -> None:
+    card_price(db)
+    refused = as_manager.check_in(customer.id)
+    assert refused.status_code == 409
+    assert refused.json()["options"][-1] == {
+        "plan": "punch_card",
+        "amount_agorot": 50000,
+    }
+
+    response = as_manager.check_in(customer.id, {"plan": "punch_card"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["plan"] is None
+    assert body["punch_card"] == {"entries_left": 19, "expires_on": "2027-01-01"}
+    [row] = recorded(db)
+    assert row.punch_card_id is not None
+    assert choices(db) == []
+
+
+def test_an_instructor_uses_the_active_card(
+    as_instructor: Staff,
+    db: Session,
+    customer: Customer,
+    valid_form: None,
+    prices: None,
+) -> None:
+    # The customer bought a card on their phone earlier this month.
+    db.add(
+        PunchCard(
+            customer_id=customer.id,
+            price_agorot=50000,
+            bought_month=Month(2026, 11),
+            expires_on=date(2027, 1, 1),
+            bought_by=ChosenBy.CUSTOMER,
+        )
+    )
+    db.commit()
+
+    response = as_instructor.check_in(customer.id)
+
+    assert response.status_code == 200
+    assert response.json()["plan"] is None
+    assert response.json()["punch_card"] == {
+        "entries_left": 19,
+        "expires_on": "2027-01-01",
+    }
+    # Not single entry: the card paid.
+    assert choices(db) == []

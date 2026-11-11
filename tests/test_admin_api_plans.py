@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.admin.main import app
-from app.core import months, pins
+from app.core import months, pins, punch_cards
 from app.core.db import get_engine
 from app.core.models import (
     ActivityLogEntry,
@@ -22,6 +22,7 @@ from app.core.models import (
     Plan,
     PlanChoice,
     Price,
+    PunchCard,
     StaffUser,
 )
 from app.core.months import Month
@@ -36,9 +37,10 @@ MONTHLY = {"plan": "monthly", "month": "2026-11"}
 
 @pytest.fixture(autouse=True)
 def fixed_month(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        months, "utc_now", lambda: datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
-    )
+    for module in (months, punch_cards):
+        monkeypatch.setattr(
+            module, "utc_now", lambda: datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -207,7 +209,14 @@ def test_nothing_chosen_yet(as_manager: Staff, customer: Customer) -> None:
             {"plan": plan, "amount_agorot": None}
             for plan in ("monthly", "tri_monthly", "single_entry")
         ],
+        # A check-in also offers the punch card (decision 0042).
+        "check_in_options": [
+            {"plan": plan, "amount_agorot": None}
+            for plan in ("monthly", "tri_monthly", "single_entry", "punch_card")
+        ],
         "history": [],
+        "punch_card": None,
+        "punch_cards": [],
     }
 
 
@@ -632,4 +641,101 @@ def test_a_malformed_correction_is_422(
     as_manager.choose(customer.id)
 
     assert as_manager.correct(customer.id, body).status_code == 422
+    assert choices_in_db(db) == 1
+
+
+# Punch cards (decision 0042)
+
+
+def add_card(db: Session, customer: Customer, by: StaffUser | None = None) -> int:
+    """A card bought this month, still active."""
+    card = PunchCard(
+        customer_id=customer.id,
+        price_agorot=50000,
+        bought_month=Month(2026, 11),
+        expires_on=date(2027, 1, 1),
+        bought_by=ChosenBy.CUSTOMER if by is None else ChosenBy.STAFF,
+        staff_user_id=None if by is None else by.id,
+    )
+    db.add(card)
+    db.commit()
+    return card.id
+
+
+def test_the_status_shows_the_active_card_and_every_card(
+    as_instructor: Staff, db: Session, manager: StaffUser, customer: Customer
+) -> None:
+    card_id = add_card(db, customer, by=manager)
+
+    body = as_instructor.get(customer.id).json()
+
+    row = body["punch_card"]
+    assert {k: v for k, v in row.items() if k != "bought_at"} == {
+        "id": card_id,
+        "price_agorot": 50000,
+        "bought_month": "2026-11",
+        "expires_on": "2027-01-01",
+        "bought_by": "staff",
+        "staff_name": "מנהלת",
+        "entries_used": 0,
+        "entries_left": 20,
+    }
+    assert body["punch_cards"] == [row]
+    assert body["covering"] is None
+
+
+def test_the_punch_card_is_not_a_choice(
+    as_manager: Staff, db: Session, customer: Customer
+) -> None:
+    db.add(
+        Price(
+            plan=Plan.PUNCH_CARD, amount_agorot=50000, valid_from_month=Month(2026, 1)
+        )
+    )
+    db.commit()
+
+    answer = as_manager.post(customer.id, {"plan": "punch_card", "month": "2026-11"})
+
+    assert answer.status_code == 400
+    assert answer.json() == {"error": "not_a_choice"}
+    assert choices_in_db(db) == 0
+
+
+def test_no_choice_while_a_card_is_active(
+    as_manager: Staff, db: Session, customer: Customer, prices: None
+) -> None:
+    add_card(db, customer)
+
+    answer = as_manager.post(customer.id, MONTHLY)
+
+    assert answer.status_code == 409
+    assert answer.json() == {"error": "punch_card_active", "choice_id": None}
+    assert choices_in_db(db) == 0
+
+
+@pytest.mark.parametrize("plan", ["monthly", None])
+def test_no_correction_while_a_card_is_active(
+    as_manager: Staff, db: Session, customer: Customer, prices: None, plan: str | None
+) -> None:
+    single = as_manager.choose(customer.id, "single_entry")
+    add_card(db, customer)
+
+    answer = as_manager.correct(customer.id, {"replaces_id": single, "plan": plan})
+
+    assert answer.status_code == 409
+    assert answer.json() == {"error": "punch_card_active", "choice_id": None}
+    assert choices_in_db(db) == 1
+
+
+def test_correcting_to_the_punch_card_is_refused(
+    as_manager: Staff, db: Session, customer: Customer, prices: None
+) -> None:
+    monthly = as_manager.choose(customer.id)
+
+    answer = as_manager.correct(
+        customer.id, {"replaces_id": monthly, "plan": "punch_card"}
+    )
+
+    assert answer.status_code == 400
+    assert answer.json() == {"error": "not_a_choice"}
     assert choices_in_db(db) == 1

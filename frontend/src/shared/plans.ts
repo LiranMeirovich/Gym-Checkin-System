@@ -39,10 +39,26 @@ export function addMonths(month: string, count: number): string {
   return `${year}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
-/** A punch card's `expires_on` ("2027-01-01", always a month's 1st) as
- * the month it's last valid in ("2026-12"). */
-export function lastCardMonth(expiresOn: string): string {
-  return addMonths(expiresOn.slice(0, 7), -1);
+/** The last day a card bought in `month` ("2026-11") counts: the end of
+ * the next month, as an ISO date ("2026-12-31"). Each app formats it its
+ * own way. */
+export function cardValidUntil(month: string): string {
+  return lastDayOf(addMonths(month, 1));
+}
+
+/** A punch card's `expires_on` ("2027-01-01", the first day it no longer
+ * counts) as its last valid day, an ISO date ("2026-12-31"). */
+export function cardLastDay(expiresOn: string): string {
+  return lastDayOf(addMonths(expiresOn.slice(0, 7), -1));
+}
+
+/** "2026-12" → "2026-12-31": the month's last day. */
+function lastDayOf(month: string): string {
+  const year = Number(month.slice(0, 4));
+  const number = Number(month.slice(5, 7));
+  // Day 0 of the next month is this month's last day.
+  const day = new Date(Date.UTC(year, number, 0)).getUTCDate();
+  return `${month}-${String(day).padStart(2, "0")}`;
 }
 
 /** "נותרו 12 כניסות", "נותרה כניסה אחת". */
