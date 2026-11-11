@@ -124,9 +124,10 @@ export interface components {
         };
         /**
          * CheckInRequest
-         * @description ``plan``: the plan the customer tapped on the plan page, chosen
-         *     first if no plan covers this month (ignored if one does). Leave it out
-         *     for a plain check-in.
+         * @description ``plan``: the option the customer confirmed on the plan page: a plan
+         *     chosen for this month, or ``punch_card`` to buy a card and use its
+         *     first entry. Ignored if a plan or an active card already covers them.
+         *     Leave it out for a plain check-in.
          */
         CheckInRequest: {
             plan?: components["schemas"]["Plan"] | null;
@@ -135,8 +136,9 @@ export interface components {
          * CheckedIn
          * @description ``checked_in``: a visit was recorded. ``already_checked_in``: the
          *     customer checked in less than 10 minutes ago, and ``checked_in_at`` is
-         *     that visit; nothing new was recorded. ``plan`` is null only for a
-         *     repeat whose month has since lost its plan.
+         *     that visit; nothing new was recorded. Exactly one of ``plan`` and
+         *     ``punch_card`` is set, except for a repeat whose month has since lost
+         *     its plan (both null).
          */
         CheckedIn: {
             outcome: components["schemas"]["Outcome"];
@@ -146,6 +148,7 @@ export interface components {
              */
             checked_in_at: string;
             plan: components["schemas"]["CoveringPlan"] | null;
+            punch_card: components["schemas"]["PunchCardBalance"] | null;
         };
         /**
          * CoveringPlan
@@ -153,7 +156,11 @@ export interface components {
          *     (``end_month`` is the last).
          */
         CoveringPlan: {
-            plan: components["schemas"]["Plan"];
+            /**
+             * Plan
+             * @enum {string}
+             */
+            plan: "monthly" | "tri_monthly" | "single_entry";
             /** Start Month */
             start_month: string;
             /** End Month */
@@ -359,11 +366,15 @@ export interface components {
         };
         /**
          * Plan
-         * @description What a customer can choose for a month. The values are what the
-         *     database stores.
+         * @description What a customer can choose, and what the price table prices. The
+         *     values are what the database stores.
+         *
+         *     A punch card is priced here like the others but bought into
+         *     ``punch_cards``, never chosen into ``plan_choices`` (whose CHECK allows
+         *     only the first three; decision 0042).
          * @enum {string}
          */
-        Plan: "monthly" | "tri_monthly" | "single_entry";
+        Plan: "monthly" | "tri_monthly" | "single_entry" | "punch_card";
         /**
          * PlanOffer
          * @description One plan at its price this month.
@@ -401,6 +412,21 @@ export interface components {
              * @enum {string}
              */
             detail: "price_not_set";
+        };
+        /**
+         * PunchCardBalance
+         * @description The punch card that paid for the visit: entries left after it, and
+         *     ``expires_on``, the first Israel-local day it no longer counts (the 1st
+         *     of a month).
+         */
+        PunchCardBalance: {
+            /** Entries Left */
+            entries_left: number;
+            /**
+             * Expires On
+             * Format: date
+             */
+            expires_on: string;
         };
         /** Question */
         Question: {

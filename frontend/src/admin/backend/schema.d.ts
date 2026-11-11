@@ -1443,11 +1443,15 @@ export interface components {
         };
         /**
          * Plan
-         * @description What a customer can choose for a month. The values are what the
-         *     database stores.
+         * @description What a customer can choose, and what the price table prices. The
+         *     values are what the database stores.
+         *
+         *     A punch card is priced here like the others but bought into
+         *     ``punch_cards``, never chosen into ``plan_choices`` (whose CHECK allows
+         *     only the first three; decision 0042).
          * @enum {string}
          */
-        Plan: "monthly" | "tri_monthly" | "single_entry";
+        Plan: "monthly" | "tri_monthly" | "single_entry" | "punch_card";
         /** PlanChoiceRequest */
         PlanChoiceRequest: {
             plan: components["schemas"]["Plan"];

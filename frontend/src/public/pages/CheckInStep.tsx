@@ -1,8 +1,9 @@
 // Checking in, once the phone is linked and its health form is valid
 // (design doc: "Check-in flow"). The check-in is sent as soon as this
-// step shows, so one scan of the wall QR is enough. If no plan covers the
-// month, the plan page shows this customer's prices; tapping one chooses
-// it and checks in, in the same request.
+// step shows, so one scan of the wall QR is enough. If no plan or punch
+// card covers the customer, the plan page shows the plans and the punch
+// card with their prices; tapping one asks to confirm it, and confirming
+// chooses it (or buys the card) and checks in, in the same request.
 //
 // The server decides everything: a refusal for the health form sends the
 // page back to the form, a 401 back to the link form.
@@ -11,9 +12,13 @@ import { useMutation } from "@tanstack/react-query";
 import { api, type Schemas } from "../backend/client";
 import { formatDay } from "../../shared/dates";
 import {
+  CARD_ENTRIES,
   PLAN_NAMES,
+  addMonths,
+  entriesLeftText,
   formatMonth,
   formatShekels,
+  lastCardMonth,
   type Plan,
 } from "../../shared/plans";
 import { formatTime, lastDayOf } from "../times";
@@ -22,6 +27,7 @@ import styles from "./Phone.module.css";
 
 type CheckedIn = Schemas["CheckedIn"];
 type PlanRequired = Schemas["PlanRequired"];
+type PlanOffer = Schemas["PlanOffer"];
 type HealthFormStatus = Schemas["HealthFormStatus"];
 
 type Answer =
@@ -173,6 +179,13 @@ function CheckedInPage({
             {planLine(answer.plan)}
           </li>
         )}
+        {answer.punch_card && (
+          <li>
+            <StatusBadge tone="ok">כרטיסייה</StatusBadge>
+            {entriesLeftText(answer.punch_card.entries_left)}, בתוקף עד{" "}
+            <bdi>{lastDayOf(lastCardMonth(answer.punch_card.expires_on))}</bdi>
+          </li>
+        )}
         {formValidUntil && (
           <li>
             <StatusBadge tone="ok">הצהרת בריאות</StatusBadge>
@@ -207,8 +220,40 @@ function PlanPage({
   priceGone: boolean;
   onChoose: (plan: Plan) => void;
 }) {
+  // The option tapped, waiting for Confirm; nothing is sent until then.
+  const [tapped, setTapped] = useState<PlanOffer | null>(null);
   const month = formatMonth(answer.month);
   const anyPrice = answer.options.some((o) => o.price_agorot !== null);
+  if (tapped !== null && tapped.price_agorot !== null) {
+    return (
+      <>
+        <p className={styles.lead}>שלום, {firstName}</p>
+        <h1 className={styles.heading}>אישור הבחירה</h1>
+        <div className={styles.panel}>
+          <p className={styles.planName}>{PLAN_NAMES[tapped.plan]}</p>
+          <p className={styles.planPrice}>
+            {priceText(tapped.plan, tapped.price_agorot, answer.month)}
+          </p>
+        </div>
+        <div className={styles.confirm}>
+          <button
+            type="submit"
+            className={styles.wide}
+            onClick={() => onChoose(tapped.plan)}
+          >
+            אישור
+          </button>
+          <button
+            type="button"
+            className={styles.wide}
+            onClick={() => setTapped(null)}
+          >
+            חזרה
+          </button>
+        </div>
+      </>
+    );
+  }
   return (
     <>
       <p className={styles.lead}>שלום, {firstName}</p>
@@ -231,7 +276,7 @@ function PlanPage({
               type="button"
               className={styles.plan}
               disabled={option.price_agorot === null}
-              onClick={() => onChoose(option.plan)}
+              onClick={() => setTapped(option)}
             >
               <span className={styles.planName}>{PLAN_NAMES[option.plan]}</span>
               <span className={styles.planPrice}>
@@ -257,5 +302,7 @@ function priceText(plan: Plan, agorot: number, month: string): string {
       return `${price} לשלושה חודשים, מ־${formatMonth(month)}`;
     case "single_entry":
       return `${price} לכל כניסה החודש`;
+    case "punch_card":
+      return `${price} ל־${CARD_ENTRIES} כניסות, בתוקף עד ${lastDayOf(addMonths(month, 1))}`;
   }
 }

@@ -6,13 +6,15 @@ choice"; decisions 0004, 0017, 0025).
   link preview or a prefetch can't record a visit.
 
   - 200 ``checked_in`` or ``already_checked_in`` (within 10 minutes of
-    the last check-in), with the plan covering this month.
+    the last check-in), with the plan covering this month or the punch
+    card that paid (decision 0042).
   - 401 ``not_linked``: show the link form.
   - 409 ``health_form_required``: no form, or it has expired; show the
     form.
-  - 409 ``plan_required``: show the plan page with ``options``; the tapped
-    plan comes back in ``plan`` and is chosen with the check-in.
-  - 409 ``price_not_set``: the tapped plan's price went away meanwhile.
+  - 409 ``plan_required``: show the plan page with ``options`` (the plans
+    and the punch card); the confirmed option comes back in ``plan`` and
+    is chosen (or the card bought) with the check-in.
+  - 409 ``price_not_set``: the tapped option's price went away meanwhile.
 
 A 200 sets the ``gym_device`` cookie again with the same token, so its
 year starts over (design doc: "Login cookie": refreshed on every check-in).
@@ -40,6 +42,7 @@ from app.public.api.schemas import (
     PlanOffer,
     PlanRequired,
     PriceNotSet,
+    PunchCardBalance,
 )
 from app.public.device import (
     DEVICE_COOKIE,
@@ -92,7 +95,7 @@ def check_in(
 
     # this_device() found the session by this very cookie.
     set_device_cookie(response, request.cookies[DEVICE_COOKIE])
-    plan = result.plan
+    plan, card = result.plan, result.card
     return CheckedIn(
         outcome=result.outcome,
         checked_in_at=result.check_in.checked_in_at,
@@ -105,6 +108,13 @@ def check_in(
                 plan=plan.plan,
                 start_month=str(plan.start_month),
                 end_month=str(plan.end_month),
+            )
+        ),
+        punch_card=(
+            None
+            if card is None
+            else PunchCardBalance(
+                entries_left=card.entries_left, expires_on=card.card.expires_on
             )
         ),
     )
