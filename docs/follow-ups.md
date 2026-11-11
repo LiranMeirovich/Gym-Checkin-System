@@ -30,6 +30,16 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Generate the report outside a request's transaction (a scheduled job or its own short transactions): requests hold the write lock for their whole transaction (decision 0027), so a slow report inside one would hold up every other request.
 - Staff choose and correct only choices starting in the current month (decisions 0025, 0026). If the manager needs to fix last month before approving its report, or to stop a tri-monthly period that started earlier, widen that rule once report approval exists.
 
+## Milestone 5: report (from Punch cards)
+- Single-entry billing counts a month's check-ins: leave out the ones charged to a punch card (`checkins.punch_card_id IS NOT NULL`). A card that runs out mid-month followed by single entry must charge only the visits after it (decisions 0042, 0043).
+- A card is paid in full in its `bought_month`, with `expires_on` as the end date (the design doc's sample: "1 Mar 2027 (card expiry)"), and 0 in the next month. Read `punch_cards.price_agorot`, never the price table. The screens show the last valid day instead (the day before); check with the developer whether the report should match them.
+- A card running out mid-month and then a monthly plan the same month charges both (the card and the month). Confirm with the manager that this is right before the report is approved.
+
+## Punch cards: later
+- Cancelling or refunding a card bought by mistake (decision 0043: not built; the phone has a confirm step instead). Design it with the manager: who may cancel, whether used entries stay charged, and how the report shows it. A cancellation is a new row, never an update (the table is append-only).
+- The phone's plan page still says "the first check-in this month" when a card ran out mid-month. Reword it if customers find it confusing.
+- The card size (20) lives in three places: `CARD_ENTRIES` in `app/core/models/punch_cards.py`, its copy in `frontend/src/shared/plans.ts`, and the `checkins_card_entries` trigger. Changing it needs all three and a migration.
+
 ## Milestones 5–6: report, operations and hosting
 - Dashboard cards: the report card (manager only, as its own route with the report permission) and the backup card ("last backup", red after 2 days without one), from the design doc's dashboard. The dashboard's lists are one route each, so a card is a new route and a new panel.
 - Every request, a dashboard's timed refresh included, takes SQLite's write lock (`BEGIN IMMEDIATE`, decision 0027) although a refresh writes nothing. Milliseconds each today; if many screens poll, give background refreshes a read-only transaction.
