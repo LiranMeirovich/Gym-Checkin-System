@@ -61,6 +61,11 @@ class Action(StrEnum):
 
     # The manager generated (or regenerated) a month's report.
     REPORT_GENERATE = "report.generate"
+    # The manager approved a generation and sent it to the recipients (the
+    # addresses in after). The email's outcome is in report_deliveries.
+    REPORT_APPROVE_AND_SEND = "report.approve_and_send"
+    # The manager sent a failed report email again (which one in after).
+    REPORT_RESEND = "report.resend"
 
     # A link code for a customer's phone (never the code itself).
     PHONE_ISSUE_CODE = "phone.issue_code"
