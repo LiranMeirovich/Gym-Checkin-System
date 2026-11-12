@@ -49,7 +49,7 @@ _stop = threading.Event()
 
 def run_due() -> None:
     """Do whatever is due for last month's report, in this thread."""
-    month = Month.current().plus(-1)
+    month = report_delivery.last_month()
     try:
         current = _status(month)
         if current.stage is Stage.NOT_GENERATED:

@@ -54,6 +54,9 @@ MANAGER_ONLY = {
     ("POST", "/api/reports/{month}/generate"),
     ("GET", "/api/reports/{month}/excel"),
     ("GET", "/api/reports/{month}/pdf"),
+    ("POST", "/api/reports/{month}/approve"),
+    ("POST", "/api/reports/{month}/resend"),
+    ("GET", "/api/reports/latest"),
 }
 
 

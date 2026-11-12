@@ -159,6 +159,13 @@ class DeliveryStatus:
         return kind
 
 
+def last_month() -> Month:
+    """The month whose report is delivered now: the one before this one,
+    in Israel time. The scheduled job works on it and the dashboard's
+    report card shows it."""
+    return Month.current().plus(-1)
+
+
 def status(db: Session, month: Month) -> DeliveryStatus:
     """Where ``month``'s report stands. Only reads."""
     newest_report = db.scalar(
@@ -312,6 +319,10 @@ def body(month: Month, kind: DeliveryKind) -> str:
 def _check_newest(db: Session, month: Month, report_id: int) -> None:
     if report_generation.is_generating(month):
         raise GenerationRunningError(f"{month} is being generated")
+    # Checked again when claiming; first here, so it's the answer while an
+    # email goes out (not "already approved" or "nothing to resend").
+    if is_sending(month):
+        raise SendingError(f"an email for {month} is going out")
     if _newest_report_id(db, month) != report_id:
         raise ReportChangedError(f"report {report_id} isn't {month}'s newest")
 

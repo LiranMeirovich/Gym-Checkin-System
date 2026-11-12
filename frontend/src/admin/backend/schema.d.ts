@@ -658,6 +658,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest Report */
+        get: operations["latest_report_api_reports_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reports/{month}": {
         parameters: {
             query?: never;
@@ -720,6 +737,40 @@ export interface paths {
         get: operations["report_pdf_api_reports__month__pdf_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{month}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Report */
+        post: operations["approve_report_api_reports__month__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/{month}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resend Report */
+        post: operations["resend_report_api_reports__month__resend_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1391,6 +1442,16 @@ export interface components {
             customers: components["schemas"]["LatestCustomer"][];
         };
         /**
+         * LatestReportAnswer
+         * @description The dashboard's report card: where last month's report stands (the
+         *     server decides which month that is).
+         */
+        LatestReportAnswer: {
+            /** Month */
+            month: string;
+            delivery: components["schemas"]["ReportDeliveryAnswer"];
+        };
+        /**
          * LinkCodeIssued
          * @description The code to read out to the customer. Shown once: only its hash is
          *     kept, and a new code cancels this one.
@@ -1809,7 +1870,7 @@ export interface components {
          *     the gym's local time; ``generated_by`` is ``None`` for the scheduled
          *     job. ``generating`` is true while a generation of the month runs: the
          *     screen asks again until it's false. ``files`` says whether the Excel
-         *     and PDF files can be downloaded.
+         *     and PDF files can be downloaded. ``delivery`` is where it stands.
          */
         ReportAnswer: {
             /** Month */
@@ -1826,6 +1887,88 @@ export interface components {
             total_agorot: number;
             /** Files */
             files: boolean;
+            delivery: components["schemas"]["ReportDeliveryAnswer"];
+        };
+        /** ReportApprovalAnswer */
+        ReportApprovalAnswer: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** By */
+            by: string;
+        };
+        /**
+         * ReportDeliveryAnswer
+         * @description Where a month's report stands (its newest generation, ``report_id``;
+         *     ``None`` if never generated). ``stage`` in order: ``not_generated``,
+         *     ``generated``, ``emailed`` (to the manager), ``approved``, ``sent`` (to
+         *     the recipients). ``failed_email`` names the email "Send again" would
+         *     resend, if its newest attempt failed. ``sending`` is true while an
+         *     email for the month is going out: the screen asks again until it's
+         *     false. Approve and send and Send again name ``report_id``.
+         */
+        ReportDeliveryAnswer: {
+            /** Report Id */
+            report_id: number | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "not_generated" | "generated" | "emailed" | "approved" | "sent";
+            manager_email: components["schemas"]["ReportEmailAnswer"] | null;
+            approval: components["schemas"]["ReportApprovalAnswer"] | null;
+            recipients_email: components["schemas"]["ReportEmailAnswer"] | null;
+            /** Failed Email */
+            failed_email: ("manager_email" | "recipients_email") | null;
+            /** Sending */
+            sending: boolean;
+        };
+        /**
+         * ReportDeliveryRefused
+         * @description 409. ``report_changed``: ``report_id`` isn't the month's newest
+         *     generation (it was regenerated, or never generated).
+         *     ``already_generating``: the month is being generated now.
+         *     ``already_sending``: an email for the month is going out now.
+         *     ``already_approved``: this generation was approved before.
+         *     ``no_recipients``: Settings list no report recipients.
+         *     ``nothing_to_resend``: no email of this generation failed.
+         */
+        ReportDeliveryRefused: {
+            /**
+             * Error
+             * @enum {string}
+             */
+            error: "report_changed" | "already_generating" | "already_sending" | "already_approved" | "no_recipients" | "nothing_to_resend";
+        };
+        /**
+         * ReportDeliveryRequest
+         * @description Approve and send, or Send again: the generation the screen showed
+         *     (``delivery.report_id``).
+         */
+        ReportDeliveryRequest: {
+            /** Report Id */
+            report_id: number;
+        };
+        /**
+         * ReportEmailAnswer
+         * @description One email of the report: the newest attempt. ``at`` is the gym's
+         *     local time; ``by`` is ``None`` for the scheduled job. ``recipients`` is
+         *     empty when no manager address was set.
+         */
+        ReportEmailAnswer: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Sent */
+            sent: boolean;
+            /** Recipients */
+            recipients: string[];
+            /** By */
+            by: string | null;
         };
         /**
          * ReportMonths
@@ -4518,6 +4661,42 @@ export interface operations {
             };
         };
     };
+    latest_report_api_reports_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestReportAnswer"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     report_api_reports__month__get: {
         parameters: {
             query?: never;
@@ -4703,6 +4882,126 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_report_api_reports__month__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                month: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportDeliveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportAnswer"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportDeliveryRefused"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_report_api_reports__month__resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                month: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportDeliveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportAnswer"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportDeliveryRefused"];
+                };
             };
             /** @description Validation Error */
             422: {
