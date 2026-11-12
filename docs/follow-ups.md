@@ -25,15 +25,11 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Customer list: the search text sits in the desk PC's address bar and browser history (the server log drops it). Acceptable on a staff-only PC; revisit if the admin app is ever used elsewhere.
 - Styling pass leftovers (decision 0034): the health form's yes/no answers hide their radio buttons visually (the labels are the controls), so check them with a real screen reader (NVDA on the desk PC, VoiceOver on a phone).
 
-## Milestone 5: report (from Plan corrections)
-- The report reads plan choices with the same rule as `_first_active()` in `app/core/plans.py`: active means no row replaces it, and a "no plan" row (`plan IS NULL`) covers nothing (decision 0026).
-- Generate the report outside a request's transaction (a scheduled job or its own short transactions): requests hold the write lock for their whole transaction (decision 0027), so a slow report inside one would hold up every other request.
-- Staff choose and correct only choices starting in the current month (decisions 0025, 0026). If the manager needs to fix last month before approving its report, or to stop a tri-monthly period that started earlier, widen that rule once report approval exists.
-
-## Milestone 5: report (from Punch cards)
-- Single-entry billing counts a month's check-ins: leave out the ones charged to a punch card (`checkins.punch_card_id IS NOT NULL`). A card that runs out mid-month followed by single entry must charge only the visits after it (decisions 0042, 0043).
-- A card is paid in full in its `bought_month`, with `expires_on` as the end date (the design doc's sample: "1 Mar 2027 (card expiry)"), and 0 in the next month. Read `punch_cards.price_agorot`, never the price table. The screens show the last valid day instead (the day before); check with the developer whether the report should match them.
-- A card running out mid-month and then a monthly plan the same month charges both (the card and the month). Confirm with the manager that this is right before the report is approved.
+## Milestone 5: report delivery
+- Staff choose and correct only choices starting in the current month (decisions 0025, 0026). If the manager needs to fix last month before approving its report, or to stop a tri-monthly period that started earlier, widen that rule now that approval is being built.
+- `reports` is append-only (decision 0044): emailed, approved and sent are rows of their own that name the generation, never columns on `reports`. A regeneration after approval is a new, unapproved generation.
+- The scheduled job calls `report_generation.generate(month, by=None)`: not logged, the row names no one. It runs in the job's own thread, not a request.
+- A failed generation shows on the Reports screen only as "failed" (with a hint to close the file in Excel); the cause is in the server log. A claim on a month expires after 10 minutes (`CLAIM_LIFETIME`) in case its job never ran.
 
 ## Punch cards: later
 - Cancelling or refunding a card bought by mistake (decision 0043: not built; the phone has a confirm step instead). Design it with the manager: who may cancel, whether used entries stay charged, and how the report shows it. A cancellation is a new row, never an update (the table is append-only).
@@ -45,6 +41,7 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Dashboard cards: the report card (manager only, as its own route with the report permission) and the backup card ("last backup", red after 2 days without one), from the design doc's dashboard. The dashboard's lists are one route each, so a card is a new route and a new panel.
 - Every request, a dashboard's timed refresh included, takes SQLite's write lock (`BEGIN IMMEDIATE`, decision 0027) although a refresh writes nothing. Milliseconds each today; if many screens poll, give background refreshes a read-only transaction.
 - SMTP host/user and the backup folder become settings (after hosting).
+- The reports folder (`GYM_REPORTS_DIR`, default `reports/` relative to the working directory) holds names and amounts: include it in backups, and pin it to an absolute path in prod with the database path.
 - Relative `GYM_DATABASE_PATH` and the `.env` lookup depend on the process's working directory. A missing DB file stops startup, but the two apps could still open different files if started from different folders. Pin a base folder or require absolute paths in prod.
 - Packaging: the apps need `alembic.ini` and `migrations/` next to the code at runtime (the startup check reads them), and `npm ci` + `npm run build` must run before they start (a missing build is a 503 page, not a startup error).
 - Deployment checks (decision 0030), through the chosen host or tunnel: `X-Forwarded-Proto: https` reaches the public app so the same-origin check passes (otherwise compare against a configured public hostname, `app/core/http.py`); linking and the `Secure` `gym_device` cookie work on a real iPhone and Android phone and survive a reload; `CF-Connecting-IP` (or the host's equivalent) carries the client IP.
@@ -67,14 +64,16 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - The lock times (managers 5 min, instructors 60).
 - The instructor/manager permission split, still the design doc's proposal (one-line change in `ROLE_PERMISSIONS` plus its test). That now includes instructors seeing prices and their history (`prices.view`).
 - Enter the real prices on the Prices screen; none ship with the system.
+- The report (decision 0044): a card that runs out mid-month followed by a monthly plan the same month charges both; last month's card shows a 0 row only if it still had entries on the 1st; a row with two plans shows both names and the latest plan's end date; a card's end date is its last valid day. Compare the first real report by hand during the pilot.
 - Insurance with a "yes" on the health form (decision 0041): a customer whose form has a "yes" now trains before the manager reviews it. Confirm with the insurer that a signed form with a "yes" covers them, or go back to blocking until a doctor's note.
 - Health form: 12 months from signing (the paper form says "valid for <year>"), the confirmation checkbox's wording, whether the doctor's note must be at most 3 months old, and that names on the form must be in Hebrew or Latin letters (decision 0031).
 
 ## Code review leftovers (low priority)
 - Forms waiting for review (decision 0041): the public API's health form state still lists `needs_doctor_note`, which the phone can no longer receive; `FormState.NEEDS_DOCTOR_NOTE`, `forms_needing_doctor_note()` and `/api/health-forms/needing-note` now mean "waiting for the manager's review" (a note or an acceptance). Rename them (API contract changes) before more screens use them. `AcceptForm` and `DoctorNoteUpload` on the customer page repeat the same answer handling; share it if a third review action comes.
-- The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two, `plan_choices`' five (append-only, overlap, same customer, same months) and `checkins`' three (append-only, same customer's phone).
+- The triggers live only in the migrations, not the models (a `create_all` schema would lack them): `activity_log`'s two, `plan_choices`' five (append-only, overlap, same customer, same months), `checkins`' five (append-only, same customer's phone and card, a card's 20 entries), `punch_cards`' two and `reports`' two (append-only).
 - Test helpers copied across test files belong in `tests/conftest.py`: `log()`, `FAKE_HASH`, `Clock`, `FAKE_PIN_HASH`, `fast_hashing`, `SAME_ORIGIN` (also in `test_admin_api_*.py`, now including the customer and price tests), and the `both_apps` marker (`test_apps.py`, `test_startup.py`).
 - Setup validates the gym name twice.
+- The Hebrew plan names are in two places: `PLAN_NAMES` in `frontend/src/shared/plans.ts` (screens) and in `app/core/report_files.py` (the report's files, made on the server). Each points to the other; change both together.
 - `MonthText` (the `YYYY-MM` pattern) is in both `app/admin/api/schemas.py` and `app/public/api/schemas.py`, since the public app can't import admin code. Move it to a shared core module (e.g. `app/core/months.py`).
 - `test_a_repeat_comes_before_the_plan_check` (`tests/test_checkins.py`) makes its "no plan" row as the customer; only the manager clears plans. Make it through `correct_plan()` with a manager.
 - Two migration heads give Alembic's raw error at startup instead of `DatabaseNotReadyError`.

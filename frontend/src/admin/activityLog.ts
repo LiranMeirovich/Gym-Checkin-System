@@ -44,6 +44,7 @@ export const ACTION_NAMES: Record<string, string> = {
   "health_form.fill_in": "הצהרת בריאות מולאה בעמדה",
   "doctor_note.open": "אישור רפואי נפתח",
   "checkin.manual": "כניסה ידנית",
+  "report.generate": "דוח חודשי הופק",
 };
 
 /** The targets the filter offers, in the order it lists them. */
@@ -58,6 +59,7 @@ export const TARGET_NAMES: Record<string, string> = {
   doctor_note: "אישור רפואי",
   device_session: "טלפון מחובר",
   settings: "הגדרות",
+  report: "דוח חודשי",
 };
 
 const FIELD_NAMES: Record<string, string> = {
@@ -90,6 +92,10 @@ const FIELD_NAMES: Record<string, string> = {
   report_recipients: "מקבלי הדוח",
   lock_screen_minutes: "נעילה אחרי (דקות, מנהל)",
   instructor_lock_screen_minutes: "נעילה אחרי (דקות, מדריך)",
+  // Reports
+  month: "חודש",
+  rows: "שורות",
+  total_agorot: 'סה"כ',
   // Links to other rows
   id: "מזהה",
   customer_id: "לקוח",
@@ -140,7 +146,10 @@ export function formatValue(field: string, value: unknown): string {
     ) {
       return formatDate(value);
     }
-    if (field.endsWith("_month") && /^\d{4}-\d{2}$/.test(value)) {
+    if (
+      (field === "month" || field.endsWith("_month")) &&
+      /^\d{4}-\d{2}$/.test(value)
+    ) {
       return formatMonth(value);
     }
     return value;

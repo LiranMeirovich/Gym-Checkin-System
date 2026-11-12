@@ -924,3 +924,47 @@ class SettingsRefused(Answer):
 
     errors: dict[SettingsField, Literal["invalid", "duplicate"]]
     bad_recipients: list[int]
+
+
+# --- Reports (design doc: "Monthly report") -------------------------------
+
+
+class ReportMonths(Answer):
+    """The months a report can be opened for, newest first: last month,
+    back to the first month with a plan or a punch card."""
+
+    months: list[MonthText]
+
+
+class ReportRowAnswer(Answer):
+    """One customer's line. ``plans`` in the order they were made;
+    ``ends_on`` is the latest one's end, ``None`` for single entry."""
+
+    first_name: str
+    last_name: str
+    plans: list[Plan]
+    payment_agorot: int
+    ends_on: date | None
+
+
+class ReportAnswer(Answer):
+    """A month's report: its newest generation, if any. ``generated_at`` is
+    the gym's local time; ``generated_by`` is ``None`` for the scheduled
+    job. ``generating`` is true while a generation of the month runs: the
+    screen asks again until it's false. ``files`` says whether the Excel
+    and PDF files can be downloaded."""
+
+    month: MonthText
+    generating: bool
+    generated_at: datetime | None
+    generated_by: str | None
+    rows: list[ReportRowAnswer]
+    total_agorot: int
+    files: bool
+
+
+class ReportRefused(Answer):
+    """409. ``month_not_finished``: the current month or later.
+    ``already_generating``: this month is being generated now."""
+
+    error: Literal["month_not_finished", "already_generating"]

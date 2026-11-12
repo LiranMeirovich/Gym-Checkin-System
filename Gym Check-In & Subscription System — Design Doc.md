@@ -204,7 +204,7 @@ A punch card is 20 entries bought for one price; each check-in uses one entry, a
 - **One at a time**: no new card while one is active, and never a card alongside a monthly or tri-monthly plan.
 - **Across months**: like tri-monthly, an active card covers the next month too; the check-in uses an entry with no plan page. When it runs out or expires mid-month, the next check-in shows the plan page, as at the start of a month.
 - **Storage**: its own table (`punch_cards`), not `plan_choices`, because a card isn't tied to calendar months. The remaining balance is never stored: it's 20 minus the check-ins charged to the card (`checkins.punch_card_id`), so history stays intact and reports stay reproducible.
-- **Report**: the card's price in the month it was bought, with its expiry as the end date; 0 in the next month.
+- **Report**: the card's price in the month it was bought, with its last valid day as the end date; 0 in the next month if it still had entries on the 1st (decision 0044).
 - Single entry stays as it is.
 
 ## Health form
@@ -250,7 +250,7 @@ One SQLite file (`gym.db`, WAL mode) with fifteen tables (`punch_cards` added in
 | `prices` | id, plan (monthly / tri\_monthly / single\_entry / punch\_card), amount\_agorot, valid\_from\_month, created\_at | The manager's price table and its history; rows are only added. The row with the latest valid\_from\_month up to a month applies, and the newest row among those for the same month wins |
 | `punch_cards` | id, customer\_id, price\_agorot, bought\_month, expires\_on, bought\_at, bought\_by (customer / staff), staff\_user\_id (nullable) | One row per card bought (decisions 0042, 0043). The price is copied in; `expires_on` is the 1st of the month after next (a CHECK ties it to bought\_month). Append-only; the balance is never stored |
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable, phone only), staff\_user\_id (nullable, manual only), punch\_card\_id (nullable) | Single-entry payments count these, leaving out those charged to a punch card. Append-only (triggers refuse UPDATE and DELETE); no link to a plan choice, since a correction changes which one is active (decision 0032). Triggers refuse another customer's card and a 21st entry on one card |
-| `reports` | id, month, xlsx\_path, pdf\_path, generated\_at, emailed\_to\_manager\_at, approved\_at, sent\_to\_recipients\_at | One row per month; tracks the send-and-approve steps |
+| `reports` | id, month, generated\_at, staff\_user\_id (nullable: the scheduled job), rows\_json | One row per generation, append-only (decision 0044): the newest row for a month is its report. `rows_json` is the snapshot the preview and both files come from; the files' paths follow from the month. The delivery steps (emailed, approved, sent) are rows of their own naming a generation (milestone 5, report delivery) |
 | `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
 | staff\_users | id, display\_name, role (owner / manager / instructor; at most one owner), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
 | staff\_sessions | id, staff\_user\_id, token\_hash (unique), created\_at, last\_seen\_at, ended\_at | One row per staff login; the `gym_staff` cookie holds the token, only its SHA-256 hash is stored. Ends on Lock, a new login, the role's idle time or 12 hours; ended, never deleted |
@@ -275,24 +275,25 @@ On the 1st of each month the system builds the previous month's report and email
 
 **Steps**
 
-1. **Generate**: on the 1st, the app builds the report for the previous month. If the PC is off on the 1st, it does this at the first startup on or after the 1st. It never generates the same month twice on its own.
+1. **Generate**: on the 1st, the app builds the report for the previous month (the manager can also generate any finished month from the Reports screen). Generation runs outside any request's transaction, so check-ins aren't held up. If the PC is off on the 1st, it does this at the first startup on or after the 1st. It never generates the same month twice on its own.
 2. **Email the manager**: the report goes to the manager's address with the Excel and PDF attached.
 3. **Review**: the manager opens the report on the admin Reports screen. If something is wrong, the manager fixes the data (a plan choice, a check-in) and clicks "Regenerate".
 4. **Approve and send**: the manager clicks "Approve and send", and the app emails the report to the recipient list in Settings. Forwarding the email by hand also works.
 
 The dashboard shows where the current month's report stands (generated, emailed, approved, sent) and flags a failed email so it can be retried.
 
-**Columns** (one row per customer who had a plan that month)
+**Columns** (one row per customer who had a plan or a punch card that month; decision 0044)
 
-| First name | Last name | Payment (₪) | Subscription ends |
-| --- | --- | --- | --- |
-| Dana | Levi | Monthly price | 31 Oct 2026 |
-| Lior | Ben-David | Tri-monthly price (first month of the period) | 31 Dec 2026 |
-| Noa | Friedman | 0 (covered by a tri-monthly plan) | 30 Nov 2026 |
-| Yossi | Cohen | 3 × single-entry price | (empty) |
-| Maya | Katz | Punch card price (month it was bought) | 1 Mar 2027 (card expiry) |
+| First name | Last name | Plan | Payment (₪) | Subscription ends |
+| --- | --- | --- | --- | --- |
+| Dana | Levi | Monthly | Monthly price | 31 Oct 2026 |
+| Lior | Ben-David | Tri-monthly | Tri-monthly price (first month of the period) | 31 Dec 2026 |
+| Noa | Friedman | Tri-monthly | 0 (covered by a tri-monthly plan) | 30 Nov 2026 |
+| Yossi | Cohen | Single entry | 3 × single-entry price (check-ins not charged to a card) | (empty) |
+| Maya | Katz | Punch card | Punch card price (month it was bought) | 28 Feb 2027 (the card's last valid day) |
+| Avi | Peretz | Punch card + Monthly | Card price + monthly price (the card ran out mid-month) | 31 Oct 2026 (the latest plan's end) |
 
-Payment uses the price saved on each customer's choice. The last row shows the total to be collected.
+Payment uses the price saved on each customer's choice or card, never the price table. A customer with two plans in one month gets one row: the plans in the order they were made, the payments added up, and the latest plan's end date. The last row shows the total to be collected.
 
 **Format and storage**
 
@@ -394,7 +395,7 @@ Each answer replaces an *assumption* above; none of them changes the architectur
 - [ ] Tri-monthly: once chosen, can the customer switch plans before the 3 months are up?
 - [x] Freezes: the manager probably doesn't want them; dropped for now (decision 0022).
 - [ ] Report: the manager's email, and the recipients who get it after approval.
-- [ ] Should the report show the plan type as an extra column, to make checking it easier?
+- [x] Should the report show the plan type as an extra column? Yes; two plans in one month are joined, "Punch card + Monthly" (decision 0044).
 - [ ] Photos: do we want them at all? (Left out for now, decision 0022; a nullable column can be added later.)
 - [ ] Health form: which official form to copy, how long it stays valid, and whether minors need a parent's signature.
 - [ ] Health form: confirm that instructors see only valid / expired, and only the manager opens the contents.

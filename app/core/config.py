@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     # working directory the app is started from.
     database_path: Path = Path("gym.db")
 
+    # Folder the monthly reports' Excel and PDF files are saved in
+    # (report-2026-11.xlsx). Relative paths are resolved against the working
+    # directory the app is started from. Created when the first report is.
+    reports_dir: Path = Path("reports")
+
     # IANA timezone for showing times (all timestamps are stored in UTC).
     timezone: str = "Asia/Jerusalem"
 

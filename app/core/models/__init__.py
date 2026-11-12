@@ -13,6 +13,7 @@ from app.core.models.phone_links import DeviceSession, LinkCode
 from app.core.models.plan_choices import ChosenBy, PlanChoice
 from app.core.models.prices import Plan, Price
 from app.core.models.punch_cards import CARD_ENTRIES, PunchCard
+from app.core.models.reports import Report
 from app.core.models.settings import Setting
 from app.core.models.staff import StaffUser
 from app.core.models.staff_sessions import StaffSession
@@ -36,6 +37,7 @@ __all__ = [
     "PlanChoice",
     "Price",
     "PunchCard",
+    "Report",
     "Setting",
     "StaffSession",
     "StaffUser",
