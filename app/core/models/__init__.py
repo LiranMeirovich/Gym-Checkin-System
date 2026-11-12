@@ -13,6 +13,11 @@ from app.core.models.phone_links import DeviceSession, LinkCode
 from app.core.models.plan_choices import ChosenBy, PlanChoice
 from app.core.models.prices import Plan, Price
 from app.core.models.punch_cards import CARD_ENTRIES, PunchCard
+from app.core.models.report_deliveries import (
+    DeliveryKind,
+    EmailOutcome,
+    ReportDelivery,
+)
 from app.core.models.reports import Report
 from app.core.models.settings import Setting
 from app.core.models.staff import StaffUser
@@ -26,8 +31,10 @@ __all__ = [
     "CheckInMethod",
     "ChosenBy",
     "Customer",
+    "DeliveryKind",
     "DeviceSession",
     "DoctorNote",
+    "EmailOutcome",
     "HealthForm",
     "HealthFormAcceptance",
     "ImageType",
@@ -38,6 +45,7 @@ __all__ = [
     "Price",
     "PunchCard",
     "Report",
+    "ReportDelivery",
     "Setting",
     "StaffSession",
     "StaffUser",
