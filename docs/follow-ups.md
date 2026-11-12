@@ -64,7 +64,6 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - The lock times (managers 5 min, instructors 60).
 - The instructor/manager permission split, still the design doc's proposal (one-line change in `ROLE_PERMISSIONS` plus its test). That now includes instructors seeing prices and their history (`prices.view`).
 - Enter the real prices on the Prices screen; none ship with the system.
-- The report (decision 0044): a card that runs out mid-month followed by a monthly plan the same month charges both; last month's card shows a 0 row only if it still had entries on the 1st; a row with two plans shows both names and the latest plan's end date; a card's end date is its last valid day. Compare the first real report by hand during the pilot.
 - Insurance with a "yes" on the health form (decision 0041): a customer whose form has a "yes" now trains before the manager reviews it. Confirm with the insurer that a signed form with a "yes" covers them, or go back to blocking until a doctor's note.
 - Health form: 12 months from signing (the paper form says "valid for <year>"), the confirmation checkbox's wording, whether the doctor's note must be at most 3 months old, and that names on the form must be in Hebrew or Latin letters (decision 0031).
 
