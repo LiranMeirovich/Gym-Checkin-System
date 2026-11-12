@@ -9,6 +9,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
+from app.core import report_schedule
 from app.core.config import get_settings
 from app.core.db import get_engine
 from app.core.startup import ALEMBIC_INI
@@ -31,6 +32,15 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
         get_engine().dispose()
     get_engine.cache_clear()
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def no_scheduled_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The admin app starts the report job's thread at startup; in tests it
+    would generate and email last month on its own. Tests of the job call
+    ``run_due()`` themselves (``tests/test_report_schedule.py``)."""
+    monkeypatch.setattr(report_schedule, "start", lambda: None)
+    monkeypatch.setattr(report_schedule, "stop", lambda: None)
 
 
 @pytest.fixture

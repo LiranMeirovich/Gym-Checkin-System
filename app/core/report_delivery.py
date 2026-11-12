@@ -125,6 +125,8 @@ class DeliveryStatus:
 
     month: Month
     report_id: int | None
+    # The scheduled job made the generation (nobody pressed Generate).
+    scheduled: bool
     manager_email: EmailStep | None
     approval: ApprovalStep | None
     recipients_email: EmailStep | None
@@ -159,9 +161,14 @@ class DeliveryStatus:
 
 def status(db: Session, month: Month) -> DeliveryStatus:
     """Where ``month``'s report stands. Only reads."""
-    report_id = _newest_report_id(db, month)
-    if report_id is None:
-        return DeliveryStatus(month, None, None, None, None, is_sending(month))
+    newest_report = db.scalar(
+        select(Report).where(Report.month == month).order_by(Report.id.desc()).limit(1)
+    )
+    if newest_report is None:
+        return DeliveryStatus(
+            month, None, False, None, None, None, sending=is_sending(month)
+        )
+    report_id = newest_report.id
     newest: dict[DeliveryKind, ReportDelivery] = {}
     for step in db.scalars(
         select(ReportDelivery)
@@ -173,6 +180,7 @@ def status(db: Session, month: Month) -> DeliveryStatus:
     return DeliveryStatus(
         month=month,
         report_id=report_id,
+        scheduled=newest_report.staff_user_id is None,
         manager_email=_email_step(newest.get(DeliveryKind.MANAGER_EMAIL)),
         approval=None
         if approval is None or approval.staff is None
@@ -261,6 +269,19 @@ def start_resend(
         _release(month, token)
         raise
     return _send_job(month, report_id, kind, by.id, token)
+
+
+def retry_failed(month: Month) -> None:
+    """Send ``month``'s failed email again now, in this thread (the
+    scheduled job): not logged, the row names no one. Does nothing if no
+    email failed. Raises ``SendingError``."""
+    with Session(get_engine()) as db, db.begin():
+        current = status(db, month)
+    kind = current.failed_email
+    if kind is None or current.report_id is None:
+        return
+    token = _claim(month)
+    _send_job(month, current.report_id, kind, None, token)()
 
 
 def is_sending(month: Month) -> bool:
