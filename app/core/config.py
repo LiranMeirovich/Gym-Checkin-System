@@ -37,7 +37,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         # An unknown key in the .env *file* is an error, not ignored: a
-        # misspelt one (GYM_TIMEZNE) or a foreign one (SMTP_HOST). .env is
+        # misspelt one (GYM_TIMEZNE) or a foreign one (MAIL_SERVER). .env is
         # ours alone. Known gaps, both silently ignored: an unprefixed key
         # that matches a field name (TIMEZONE), and any misspelt *real*
         # environment variable, since those are only read by field name.
@@ -78,6 +78,17 @@ class Settings(BaseSettings):
     # are already open fail once (a reload fixes them); nothing stored
     # depends on it.
     secret_key: SecretStr | None = Field(default=None, min_length=32)
+
+    # The mail server that sends the monthly report (design doc: "Monthly
+    # report"), e.g. smtp.gmail.com with the gym Google account's app
+    # password. STARTTLS on ``smtp_port``; the user is also the From
+    # address. Host, user and password come together or not at all.
+    # Required in prod. In dev, with no host, emails are written as .eml
+    # files to the outbox folder instead of being sent (app.core.email).
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str | None = None
+    smtp_password: SecretStr | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -121,6 +132,35 @@ class Settings(BaseSettings):
             raise ValueError(f"{value!r} is an IP address, not a hostname")
         return value
 
+    @field_validator("smtp_host", "smtp_user")
+    @classmethod
+    def _one_line(cls, value: str | None) -> str | None:
+        # Both reach the SMTP conversation; the user is a From header too.
+        if value is not None and (
+            value != value.strip() or any(c.isspace() for c in value)
+        ):
+            raise ValueError("must not contain spaces or line breaks")
+        return value
+
+    @field_validator("smtp_user")
+    @classmethod
+    def _user_is_an_address(cls, value: str | None) -> str | None:
+        # It's the From address, so the recipients see who sent it.
+        if value is not None and value.count("@") != 1:
+            raise ValueError("must be the sending email address")
+        return value
+
+    @model_validator(mode="after")
+    def _smtp_all_or_nothing(self) -> Self:
+        given = {
+            name: getattr(self, name) is not None
+            for name in ("smtp_host", "smtp_user", "smtp_password")
+        }
+        if any(given.values()) and not all(given.values()):
+            missing = ", ".join(f"GYM_{n.upper()}" for n, ok in given.items() if not ok)
+            raise ValueError(f"SMTP is only partly set up: {missing} missing")
+        return self
+
     @model_validator(mode="after")
     def _prod_needs_these(self) -> Self:
         if self.environment != "prod":
@@ -128,7 +168,13 @@ class Settings(BaseSettings):
         # Every missing one at once, so a new install is fixed in one go.
         missing = [
             f"GYM_{name.upper()} is required in prod"
-            for name in ("public_hostname", "secret_key")
+            for name in (
+                "public_hostname",
+                "secret_key",
+                "smtp_host",
+                "smtp_user",
+                "smtp_password",
+            )
             if getattr(self, name) is None
         ]
         if missing:
@@ -139,6 +185,11 @@ class Settings(BaseSettings):
     def tz(self) -> ZoneInfo:
         """The display timezone as a ``ZoneInfo``."""
         return ZoneInfo(self.timezone)
+
+    @property
+    def sends_email(self) -> bool:
+        """Whether emails go through SMTP (otherwise to the dev outbox)."""
+        return self.smtp_host is not None
 
     @property
     def signing_key(self) -> bytes:

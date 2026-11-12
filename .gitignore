@@ -10,6 +10,9 @@
 # Generated reports (contain real customer names and amounts)
 reports/
 
+# Dev emails saved instead of sent (the report with its attachments)
+outbox/
+
 # Backups (encrypted, but still never public)
 backups/
 *.zip
