@@ -14,16 +14,21 @@ from app.core.config import get_settings
 from app.core.db import get_engine
 from app.core.startup import ALEMBIC_INI
 
+# Every test's database is encrypted with this key, as in prod, unless the
+# test removes GYM_DATABASE_KEY. Made up; real keys never appear in the repo.
+TEST_DATABASE_KEY = "ab" * 32
+
 
 @pytest.fixture(autouse=True)
 def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
-    """Run each test in an empty directory with no GYM_* variables, so the
-    developer's own .env or environment never leaks into a test. The cached
-    settings and engine are reset around each test, so each test's database
-    is a file in its own directory."""
+    """Run each test in an empty directory with no GYM_* variables but the
+    test database key, so the developer's own .env or environment never
+    leaks into a test. The cached settings and engine are reset around each
+    test, so each test's database is a file in its own directory."""
     for name in list(os.environ):
         if name.startswith("GYM_"):
             monkeypatch.delenv(name)
+    monkeypatch.setenv("GYM_DATABASE_KEY", TEST_DATABASE_KEY)
     monkeypatch.chdir(tmp_path)
     get_settings.cache_clear()
     get_engine.cache_clear()

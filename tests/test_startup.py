@@ -110,6 +110,14 @@ def encrypted_db(alembic_config: Config, monkeypatch: pytest.MonkeyPatch) -> Pat
     return get_settings().database_path
 
 
+@pytest.fixture
+def plain_db(alembic_config: Config, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A migrated database that isn't encrypted (dev without a key)."""
+    use_key(monkeypatch, None)
+    command.upgrade(alembic_config, "head")
+    return get_settings().database_path
+
+
 @both_apps
 @pytest.mark.usefixtures("encrypted_db")
 def test_starts_on_an_encrypted_database_with_its_key(app: FastAPI) -> None:
@@ -117,7 +125,13 @@ def test_starts_on_an_encrypted_database_with_its_key(app: FastAPI) -> None:
 
 
 @both_apps
-@pytest.mark.usefixtures("migrated_db")
+@pytest.mark.usefixtures("plain_db")
+def test_starts_on_a_plain_database_without_a_key(app: FastAPI) -> None:
+    start(app)
+
+
+@both_apps
+@pytest.mark.usefixtures("plain_db")
 def test_refuses_a_plain_database_when_a_key_is_set(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -171,7 +185,7 @@ def test_alembic_refuses_a_key_that_cant_open_the_database(
     assert encrypted_db.read_bytes() == before
 
 
-@pytest.mark.usefixtures("migrated_db")
+@pytest.mark.usefixtures("plain_db")
 def test_alembic_refuses_to_upgrade_a_plain_database_with_a_key(
     alembic_config: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:

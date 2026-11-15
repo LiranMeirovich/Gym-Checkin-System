@@ -33,9 +33,12 @@ def test_dev_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.public_hostname is None
 
 
-def test_environment_defaults_to_prod_and_then_needs_a_hostname_and_key() -> None:
+def test_environment_defaults_to_prod_and_then_needs_a_hostname_and_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Fails closed: no config at all means prod, which refuses to start
-    # without its public hostname and secret key. Both are reported at once.
+    # without its public hostname and keys. All are reported at once.
+    monkeypatch.delenv("GYM_DATABASE_KEY")  # set for every test by conftest
     with pytest.raises(ValidationError) as error:
         Settings()
 
@@ -60,6 +63,7 @@ def test_prod_with_hostname_keys_and_smtp(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_dev_without_a_database_key_is_plain(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    monkeypatch.delenv("GYM_DATABASE_KEY")  # set for every test by conftest
 
     assert Settings().database_key_hex is None
 
