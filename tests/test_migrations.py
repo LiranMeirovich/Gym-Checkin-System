@@ -527,3 +527,30 @@ def test_a_card_or_its_price_stops_the_punch_card_downgrade(
 
     head = ScriptDirectory.from_config(alembic_config).get_current_head()
     assert current_revision() == head
+
+
+# --- Report deliveries (763184ea3315) ---
+
+BEFORE_REPORT_DELIVERIES = "5870901556ac"
+
+
+def test_a_delivery_step_stops_the_report_deliveries_downgrade(
+    alembic_config: Config,
+) -> None:
+    command.upgrade(alembic_config, "head")
+    with get_engine().begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO reports (month, generated_at, rows_json)"
+            " VALUES ('2026-10', '2026-11-01 00:05:00.000000', '[]')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO report_deliveries (report_id, kind, outcome,"
+            " recipients_json, at) VALUES (1, 'manager_email', 'sent',"
+            " '[\"manager@example.com\"]', '2026-11-01 00:05:01.000000')"
+        )
+
+    with pytest.raises(RuntimeError, match="can't undo report deliveries"):
+        command.downgrade(alembic_config, BEFORE_REPORT_DELIVERIES)
+
+    head = ScriptDirectory.from_config(alembic_config).get_current_head()
+    assert current_revision() == head

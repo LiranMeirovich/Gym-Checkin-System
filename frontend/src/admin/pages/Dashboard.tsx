@@ -2,7 +2,9 @@
 // dashboard"). Each list comes from its own route so other screens can
 // reuse it; the instructor at the desk is the one watching it, and spots a
 // check-in or sign-up that doesn't match who's in the gym. The manager also
-// sees the health forms waiting for their review (decision 0041).
+// sees the health forms waiting for their review (decision 0041), and where
+// last month's report stands (generated, emailed, approved, sent; red when
+// an email failed).
 //
 // Each list refreshes itself: today's check-ins every 15 seconds, the rest
 // every minute (they change a few times a day). Only the timed refreshes
@@ -11,11 +13,13 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { NoConnection } from "../../shared/NoConnection";
+import { formatMonth } from "../../shared/plans";
 import { api, type Schemas } from "../backend/client";
 import { formatDate, formatPhone, formatTime } from "../customers";
 import { PageHead } from "../layout/ui";
 import ui from "../layout/ui.module.css";
 import { usePolledQuery } from "../polling";
+import { DeliveryBadge } from "../reportDelivery";
 import { can } from "../roles";
 import { useSession } from "../session";
 import styles from "./Dashboard.module.css";
@@ -39,6 +43,7 @@ async function listOf<Answer, Row>(
 export function Dashboard() {
   const session = useSession();
   const reviews = can(session, "health_forms.accept");
+  const reports = can(session, "reports.manage");
   return (
     <>
       <PageHead title={`שלום, ${session.staff.display_name}`} />
@@ -47,6 +52,7 @@ export function Dashboard() {
           <TodaysCheckins />
         </div>
         <div className={styles.side}>
+          {reports && <ReportCard />}
           {reviews && <FormsToReview />}
           <LatestCustomers />
         </div>
@@ -175,6 +181,40 @@ function FormsToReview() {
         </>
       )}
     </ListPanel>
+  );
+}
+
+/** Last month's report: the server says which month and where it stands.
+ * Opens the Reports screen on that month. */
+function ReportCard() {
+  const query = usePolledQuery({
+    queryKey: ["dashboard", "report"],
+    fetch: async (headers) => {
+      const { data, response } = await api.GET("/api/reports/latest", {
+        headers,
+      });
+      if (data) return data;
+      throw new Error(`GET /api/reports/latest failed: ${response.status}`);
+    },
+    everyMs: LISTS_EVERY_MS,
+  });
+  const { data } = query;
+  return (
+    <section className={ui.panel}>
+      <h2 className={styles.title}>
+        דוח חודשי{data && ` · ${formatMonth(data.month)}`}
+      </h2>
+      {data ? (
+        <div className={styles.row}>
+          <DeliveryBadge delivery={data.delivery} />
+          <Link className={ui.rowLink} to={`/reports?month=${data.month}`}>
+            למסך הדוחות
+          </Link>
+        </div>
+      ) : query.isPending ? null : query.isError ? (
+        <NoConnection />
+      ) : null}
+    </section>
   );
 }
 

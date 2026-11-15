@@ -4,20 +4,22 @@ response), the preview, the downloads and the refusals. Names and amounts
 are made up."""
 
 import io
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
+from httpx import Response
 from openpyxl import load_workbook
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.admin.main import app
-from app.core import months, pins, report_generation
+from app.core import email, months, pins, report_delivery, report_generation
 from app.core.db import get_engine
+from app.core.gym_settings import update_gym_settings
 from app.core.models import (
     ActivityLogEntry,
     ChosenBy,
@@ -206,6 +208,15 @@ def test_a_month_never_generated_is_empty(as_manager: Staff) -> None:
         "rows": [],
         "total_agorot": 0,
         "files": False,
+        "delivery": {
+            "report_id": None,
+            "stage": "not_generated",
+            "manager_email": None,
+            "approval": None,
+            "recipients_email": None,
+            "failed_email": None,
+            "sending": False,
+        },
     }
 
 
@@ -305,3 +316,220 @@ def test_the_files_download_once_generated(as_manager: Staff, customers: None) -
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
     assert pdf.content.startswith(b"%PDF")
+
+
+# --- Delivery: Approve and send, Send again, the dashboard card ------------
+
+
+RECIPIENTS = ["accounts@example.com", "owner@example.com"]
+
+
+class FakeSend:
+    """Stands in for ``email.send``: keeps the addresses, or fails."""
+
+    def __init__(self) -> None:
+        self.to: list[tuple[str, ...]] = []
+        self.failing = False
+
+    def __call__(
+        self,
+        to: Sequence[str],
+        subject: str,
+        body: str,
+        attachments: Sequence[email.Attachment] = (),
+    ) -> None:
+        if self.failing:
+            raise email.EmailNotSentError(subject)
+        self.to.append(tuple(to))
+
+
+@pytest.fixture
+def sent(monkeypatch: pytest.MonkeyPatch) -> FakeSend:
+    fake = FakeSend()
+    monkeypatch.setattr(email, "send", fake)
+    return fake
+
+
+@pytest.fixture(autouse=True)
+def no_claims() -> Iterator[None]:
+    yield
+    report_delivery._claims.clear()  # noqa: SLF001
+
+
+def set_recipients(db: Session, manager: StaffUser) -> None:
+    db.rollback()
+    update_gym_settings(
+        db,
+        {"manager_email": "manager@example.com", "report_recipients": RECIPIENTS},
+        by=manager,
+    )
+    db.commit()
+
+
+@pytest.fixture
+def recipients(db: Session, manager: StaffUser) -> None:
+    set_recipients(db, manager)
+
+
+def approve(staff: Staff, month: str, report_id: object) -> Response:
+    return staff.client.post(
+        f"/api/reports/{month}/approve",
+        json={"report_id": report_id},
+        headers=staff.headers,
+    )
+
+
+def resend(staff: Staff, month: str, report_id: object) -> Response:
+    return staff.client.post(
+        f"/api/reports/{month}/resend",
+        json={"report_id": report_id},
+        headers=staff.headers,
+    )
+
+
+def refused(answer: Response, code: str) -> None:
+    assert answer.status_code == 409
+    assert answer.json() == {"error": code}
+
+
+def generated_id(staff: Staff, month: str = "2026-11") -> int:
+    assert staff.generate(month).status_code == 202
+    report_id = staff.get(f"/{month}").json()["delivery"]["report_id"]
+    assert isinstance(report_id, int)
+    return report_id
+
+
+def last_action(db: Session) -> str | None:
+    db.rollback()
+    return db.scalar(
+        select(ActivityLogEntry.action).order_by(ActivityLogEntry.id.desc())
+    )
+
+
+@pytest.mark.usefixtures("manager")
+def test_delivery_routes_need_a_login(client: TestClient) -> None:
+    assert client.get("/api/reports/latest").status_code == 401
+    for path in ("approve", "resend"):
+        answer = client.post(
+            f"/api/reports/2026-11/{path}", json={"report_id": 1}, headers=SAME_ORIGIN
+        )
+        assert answer.status_code == 401
+
+
+def test_delivery_routes_refuse_an_instructor(as_instructor: Staff) -> None:
+    assert as_instructor.get("/latest").status_code == 403
+    assert approve(as_instructor, "2026-11", 1).status_code == 403
+    assert resend(as_instructor, "2026-11", 1).status_code == 403
+
+
+@pytest.mark.usefixtures("customers", "recipients")
+def test_approve_and_send_answers_202_then_shows_sent(
+    db: Session, as_manager: Staff, sent: FakeSend
+) -> None:
+    report_id = generated_id(as_manager)
+
+    answer = approve(as_manager, "2026-11", report_id)
+
+    assert answer.status_code == 202
+    assert answer.json()["delivery"]["approval"]["by"] == "מנהלת"
+    assert answer.json()["delivery"]["sending"] is True
+    # TestClient runs the background task before returning.
+    delivery = as_manager.get("/2026-11").json()["delivery"]
+    assert delivery["stage"] == "sent"
+    assert delivery["sending"] is False
+    assert delivery["recipients_email"]["sent"] is True
+    assert delivery["recipients_email"]["recipients"] == RECIPIENTS
+    assert delivery["recipients_email"]["by"] == "מנהלת"
+    assert delivery["recipients_email"]["at"].endswith("+02:00")
+    assert sent.to == [tuple(RECIPIENTS)]
+    assert last_action(db) == "report.approve_and_send"
+
+
+@pytest.mark.usefixtures("customers", "recipients")
+def test_a_failed_send_shows_and_send_again_sends_it(
+    db: Session, as_manager: Staff, sent: FakeSend
+) -> None:
+    report_id = generated_id(as_manager)
+    sent.failing = True
+    approve(as_manager, "2026-11", report_id)
+
+    delivery = as_manager.get("/2026-11").json()["delivery"]
+    assert delivery["stage"] == "approved"
+    assert delivery["failed_email"] == "recipients_email"
+
+    sent.failing = False
+    answer = resend(as_manager, "2026-11", report_id)
+
+    assert answer.status_code == 202
+    assert as_manager.get("/2026-11").json()["delivery"]["stage"] == "sent"
+    assert last_action(db) == "report.resend"
+
+
+@pytest.mark.usefixtures("customers")
+def test_refusals_are_409_codes_and_record_nothing(
+    db: Session, manager: StaffUser, as_manager: Staff, sent: FakeSend
+) -> None:
+    report_id = generated_id(as_manager)
+
+    refused(approve(as_manager, "2026-11", report_id), "no_recipients")
+    refused(resend(as_manager, "2026-11", report_id), "nothing_to_resend")
+    refused(approve(as_manager, "2026-11", report_id + 1), "report_changed")
+    refused(approve(as_manager, "2026-10", report_id), "report_changed")
+    assert last_action(db) == "report.generate"
+
+    set_recipients(db, manager)
+    job = report_generation.start(Month(2026, 11), by=manager)
+    try:
+        refused(approve(as_manager, "2026-11", report_id), "already_generating")
+    finally:
+        job()
+    newer = as_manager.get("/2026-11").json()["delivery"]["report_id"]
+    refused(approve(as_manager, "2026-11", report_id), "report_changed")
+    assert approve(as_manager, "2026-11", newer).status_code == 202
+    refused(approve(as_manager, "2026-11", newer), "already_approved")
+
+
+@pytest.mark.usefixtures("customers", "recipients")
+def test_an_email_going_out_is_already_sending(
+    as_manager: Staff, manager: StaffUser, db: Session, sent: FakeSend
+) -> None:
+    report_id = generated_id(as_manager)
+    db.rollback()
+    job = report_delivery.start_approve_and_send(
+        db, Month(2026, 11), report_id, by=manager
+    )
+    db.commit()
+    try:
+        assert as_manager.get("/2026-11").json()["delivery"]["sending"] is True
+        refused(resend(as_manager, "2026-11", report_id), "already_sending")
+    finally:
+        job()
+
+
+@pytest.mark.parametrize("body", [{}, {"report_id": "one"}, {"report_id": 1, "x": 1}])
+def test_a_bad_body_is_422(as_manager: Staff, body: dict[str, object]) -> None:
+    for path in ("approve", "resend"):
+        answer = as_manager.client.post(
+            f"/api/reports/2026-11/{path}", json=body, headers=as_manager.headers
+        )
+        assert answer.status_code == 422
+
+
+def test_approving_needs_the_csrf_token(client: TestClient, as_manager: Staff) -> None:
+    answer = client.post(
+        "/api/reports/2026-11/approve", json={"report_id": 1}, headers=SAME_ORIGIN
+    )
+
+    assert answer.status_code == 403
+
+
+@pytest.mark.usefixtures("customers", "recipients")
+def test_the_dashboard_card_shows_last_month(as_manager: Staff, sent: FakeSend) -> None:
+    answer = as_manager.get("/latest")
+    assert answer.status_code == 200
+    assert answer.json()["month"] == "2026-11"
+    assert answer.json()["delivery"]["stage"] == "not_generated"
+
+    approve(as_manager, "2026-11", generated_id(as_manager))
+
+    assert as_manager.get("/latest").json()["delivery"]["stage"] == "sent"

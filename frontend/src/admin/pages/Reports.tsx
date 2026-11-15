@@ -3,6 +3,10 @@
 // the totals all come from the server (app/core/reports.py), which also
 // decides which months can be opened. Generating runs on the server after
 // it answers, so the screen asks again every few seconds until it's done.
+// Delivery (app/core/report_delivery.py): the scheduled job emails the
+// report to the manager; "Approve and send" emails the generation shown
+// here to the recipients in Settings, and "Send again" resends a failed
+// email. Both send after the server answers, polled the same way.
 // Hiding the screen is never the protection: the server checks the
 // permission on every route.
 
@@ -16,17 +20,20 @@ import ui from "../layout/ui.module.css";
 import { usePolledQuery } from "../polling";
 import { NoConnection } from "../../shared/NoConnection";
 import { PLAN_NAMES, formatMonth, formatShekels } from "../../shared/plans";
+import { DeliveryBadge, type Delivery } from "../reportDelivery";
 import styles from "./Reports.module.css";
 
 type Report = Schemas["ReportAnswer"];
 type Refused = Schemas["ReportRefused"];
+type DeliveryRefused = Schemas["ReportDeliveryRefused"];
+type Email = Schemas["ReportEmailAnswer"];
 
 const MONTHS_KEY = ["reports"] as const;
 function reportKey(month: string) {
   return ["reports", month] as const;
 }
 
-// While a generation runs.
+// While a generation runs or an email goes out.
 const POLL_MS = 2000;
 
 /** The server refused the screen: this role can't manage reports. */
@@ -42,6 +49,16 @@ async function fetchMonths(): Promise<string[]> {
 const REFUSALS: Record<Refused["error"], string> = {
   month_not_finished: "אפשר להפיק דוח רק לחודש שהסתיים.",
   already_generating: "הדוח של החודש הזה כבר בהפקה.",
+};
+const DELIVERY_REFUSALS: Record<DeliveryRefused["error"], string> = {
+  report_changed:
+    "הדוח הופק מחדש בינתיים. בדקו את הגרסה החדשה לפני שמאשרים אותה.",
+  already_generating: "הדוח של החודש הזה בהפקה. חכו שתסתיים.",
+  already_sending: "מייל של הדוח הזה נשלח ממש עכשיו. חכו רגע.",
+  already_approved: "הדוח הזה כבר אושר.",
+  no_recipients:
+    "בהגדרות לא רשומים מקבלי דוח. הוסיפו אותם במסך ההגדרות ונסו שוב.",
+  nothing_to_resend: "אין מייל שנכשל ושצריך לשלוח שוב.",
 };
 const FAILED =
   "הפקת הדוח לא הצליחה. אם קובץ הדוח פתוח ב־Excel, סגרו אותו ונסו שוב.";
@@ -111,7 +128,8 @@ function MonthReport({
       if (data) return data;
       throw new Error(`GET /api/reports/${month} failed: ${response.status}`);
     },
-    everyMs: (data) => (data?.generating ? POLL_MS : false),
+    everyMs: (data) =>
+      data?.generating || data?.delivery.sending ? POLL_MS : false,
   });
   // The generation the screen started, by the one it replaces: when the
   // server stops generating and still shows that one, it failed.
@@ -120,6 +138,8 @@ function MonthReport({
   >(undefined);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  // Approve and send, or Send again, waiting for the server's answer.
+  const [delivering, setDelivering] = useState(false);
 
   const data = report.data;
   const failed =
@@ -178,7 +198,41 @@ function MonthReport({
     }
   }
 
+  // Approve and send, or Send again, of the generation shown.
+  async function deliver(action: "approve" | "resend") {
+    const reportId = data?.delivery.report_id;
+    if (reportId === null || reportId === undefined) return;
+    setDelivering(true);
+    setError(null);
+    try {
+      const options = {
+        params: { path: { month } },
+        body: { report_id: reportId },
+      };
+      const { data: answer, error: refused } =
+        action === "approve"
+          ? await api.POST("/api/reports/{month}/approve", options)
+          : await api.POST("/api/reports/{month}/resend", options);
+      if (answer) {
+        queryClient.setQueryData(reportKey(month), answer);
+      } else {
+        setError(
+          refused && "error" in refused
+            ? DELIVERY_REFUSALS[refused.error]
+            : NO_CONNECTION,
+        );
+        // Show what changed (a newer generation, an email going out).
+        void queryClient.invalidateQueries({ queryKey: reportKey(month) });
+      }
+    } catch {
+      setError(NO_CONNECTION);
+    } finally {
+      setDelivering(false);
+    }
+  }
+
   const generating = sending || data?.generating === true;
+  const busy = generating || delivering || data?.delivery.sending === true;
   return (
     <>
       <PageHead
@@ -212,11 +266,31 @@ function MonthReport({
                 <Status report={data} generating={generating} />
               </span>
             </div>
+            {data.generated_at && <DeliveryStatus delivery={data.delivery} />}
             <div className={ui.buttons}>
+              {data.generated_at && data.delivery.approval === null && (
+                <button
+                  type="button"
+                  className={ui.primary}
+                  disabled={busy}
+                  onClick={() => void deliver("approve")}
+                >
+                  אישור ושליחה
+                </button>
+              )}
+              {data.delivery.failed_email && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void deliver("resend")}
+                >
+                  שליחה חוזרת
+                </button>
+              )}
               <button
                 type="button"
                 className={ui.primary}
-                disabled={generating}
+                disabled={busy}
                 onClick={() => void generate()}
               >
                 {data.generated_at ? "הפקה מחדש" : "הפקת הדוח"}
@@ -271,6 +345,85 @@ function Status({
         {formatDate(report.generated_at)} {formatTime(report.generated_at)}
       </span>
       {report.generated_by ? ` על ידי ${report.generated_by}` : " אוטומטית"}
+    </>
+  );
+}
+
+/** The report's emails and approval, one line each, under its badge. */
+function DeliveryStatus({ delivery }: { delivery: Delivery }) {
+  const { manager_email, approval, recipients_email } = delivery;
+  return (
+    <div className={styles.delivery}>
+      <div className={styles.badgeLine}>
+        <DeliveryBadge delivery={delivery} />
+      </div>
+      <ul className={styles.steps}>
+        <li>
+          {manager_email === null ? (
+            <span className={ui.muted}>לא נשלח במייל למנהל.</span>
+          ) : manager_email.recipients.length === 0 ? (
+            <>
+              לא נשלח למנהל <When email={manager_email} />: בהגדרות לא רשום
+              אימייל המנהל.
+            </>
+          ) : (
+            <EmailLine
+              email={manager_email}
+              sent="נשלח למנהל"
+              failed="השליחה למנהל נכשלה"
+            />
+          )}
+        </li>
+        {approval && (
+          <li>
+            אושר ב־
+            <span dir="ltr">
+              {formatDate(approval.at)} {formatTime(approval.at)}
+            </span>{" "}
+            על ידי {approval.by}
+          </li>
+        )}
+        {recipients_email && (
+          <li>
+            <EmailLine
+              email={recipients_email}
+              sent="נשלח לנמענים"
+              failed="השליחה לנמענים נכשלה"
+            />
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function EmailLine({
+  email,
+  sent,
+  failed,
+}: {
+  email: Email;
+  sent: string;
+  failed: string;
+}) {
+  return (
+    <>
+      {email.sent ? sent : failed} <When email={email} />{" "}
+      <span dir="ltr" className={ui.muted}>
+        ({email.recipients.join(", ")})
+      </span>
+    </>
+  );
+}
+
+function When({ email }: { email: Email }) {
+  return (
+    <>
+      ב־
+      <span dir="ltr">
+        {formatDate(email.at)} {formatTime(email.at)}
+      </span>
+      {email.by ? ` על ידי ${email.by}` : " אוטומטית"}
     </>
   );
 }

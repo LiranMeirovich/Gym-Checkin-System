@@ -94,7 +94,7 @@ The tunnel is an outbound connection from the PC, so no router ports are opened.
 | Frontend | React + TypeScript (Vite), two builds (admin and public) served by each FastAPI app from the same domain, talking to a JSON API under `/api`; customer pages mobile-first | Typed end to end (types generated from the OpenAPI spec); no Node needed at runtime; works in any phone browser (decision 0020) |
 | Tunnel | Cloudflare Tunnel (`cloudflared` as a Windows service), free plan | HTTPS handled by Cloudflare; no open ports; no static IP needed |
 | Domain | A gym domain on Cloudflare, e.g. `checkin.<gym-domain>` | Needed for a named tunnel and a stable QR URL; about $10–15/year |
-| Scheduled jobs | Run inside the admin app at startup and every hour (APScheduler or a simple loop) | Monthly report on or after the 1st, daily backup; catches up if the PC was off |
+| Scheduled jobs | A thread inside the admin app runs at startup and every hour; each job checks what's due (decision 0045) | Monthly report on or after the 1st, daily backup; catches up if the PC was off |
 | Email | SMTP through the gym's Google account with an app password | Sends the report to the manager and, after approval, to the recipients |
 | Admin window | Edge or Chrome in app mode (`--app=http://127.0.0.1:8000`) | Looks like a desktop app, no address bar |
 | Startup | Both apps and `cloudflared` as Windows services (e.g. via NSSM), admin window at log-on | Everything is up as soon as the PC starts |
@@ -250,8 +250,9 @@ One SQLite file (`gym.db`, WAL mode) with fifteen tables (`punch_cards` added in
 | `prices` | id, plan (monthly / tri\_monthly / single\_entry / punch\_card), amount\_agorot, valid\_from\_month, created\_at | The manager's price table and its history; rows are only added. The row with the latest valid\_from\_month up to a month applies, and the newest row among those for the same month wins |
 | `punch_cards` | id, customer\_id, price\_agorot, bought\_month, expires\_on, bought\_at, bought\_by (customer / staff), staff\_user\_id (nullable) | One row per card bought (decisions 0042, 0043). The price is copied in; `expires_on` is the 1st of the month after next (a CHECK ties it to bought\_month). Append-only; the balance is never stored |
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable, phone only), staff\_user\_id (nullable, manual only), punch\_card\_id (nullable) | Single-entry payments count these, leaving out those charged to a punch card. Append-only (triggers refuse UPDATE and DELETE); no link to a plan choice, since a correction changes which one is active (decision 0032). Triggers refuse another customer's card and a 21st entry on one card |
-| `reports` | id, month, generated\_at, staff\_user\_id (nullable: the scheduled job), rows\_json | One row per generation, append-only (decision 0044): the newest row for a month is its report. `rows_json` is the snapshot the preview and both files come from; the files' paths follow from the month. The delivery steps (emailed, approved, sent) are rows of their own naming a generation (milestone 5, report delivery) |
-| `settings` | key, value | Gym name, manager email, recipient emails, SMTP settings, backup folder, lock-screen minutes (manager and instructor) |
+| `reports` | id, month, generated\_at, staff\_user\_id (nullable: the scheduled job), rows\_json | One row per generation, append-only (decision 0044): the newest row for a month is its report. `rows_json` is the snapshot the preview and both files come from; the files' paths follow from the month. The delivery steps (emailed, approved, sent) are rows of their own in `report_deliveries` |
+| `report_deliveries` | id, report\_id, kind (manager\_email / approval / recipients\_email), outcome (sent / failed, emails only), recipients\_json (the addresses at the time), staff\_user\_id (nullable: the scheduled job), at | One row per delivery step of a generation, append-only (decision 0045): the newest step of each kind for a month's newest generation is where its report stands. A regeneration has no steps, so it starts unapproved |
+| `settings` | key, value | Gym name, manager email, recipient emails, backup folder, lock-screen minutes (manager and instructor) |
 | staff\_users | id, display\_name, role (owner / manager / instructor; at most one owner), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
 | staff\_sessions | id, staff\_user\_id, token\_hash (unique), created\_at, last\_seen\_at, ended\_at | One row per staff login; the `gym_staff` cookie holds the token, only its SHA-256 hash is stored. Ends on Lock, a new login, the role's idle time or 12 hours; ended, never deleted |
 | activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change, in the same transaction; append-only (database triggers refuse UPDATE and DELETE). Never holds PINs, hashes or tokens |
@@ -276,11 +277,11 @@ On the 1st of each month the system builds the previous month's report and email
 **Steps**
 
 1. **Generate**: on the 1st, the app builds the report for the previous month (the manager can also generate any finished month from the Reports screen). Generation runs outside any request's transaction, so check-ins aren't held up. If the PC is off on the 1st, it does this at the first startup on or after the 1st. It never generates the same month twice on its own.
-2. **Email the manager**: the report goes to the manager's address with the Excel and PDF attached.
+2. **Email the manager**: the report goes to the manager's address with the Excel and PDF attached. Only the scheduled job's own generation is emailed; a regeneration from the Reports screen isn't (the manager is looking at it).
 3. **Review**: the manager opens the report on the admin Reports screen. If something is wrong, the manager fixes the data (a plan choice, a check-in) and clicks "Regenerate".
 4. **Approve and send**: the manager clicks "Approve and send", and the app emails the report to the recipient list in Settings. Forwarding the email by hand also works.
 
-The dashboard shows where the current month's report stands (generated, emailed, approved, sent) and flags a failed email so it can be retried.
+The dashboard shows where last month's report stands (generated, emailed, approved, sent) and flags a failed email so it can be retried.
 
 **Columns** (one row per customer who had a plan or a punch card that month; decision 0044)
 
@@ -299,7 +300,7 @@ Payment uses the price saved on each customer's choice or card, never the price 
 
 - Excel (.xlsx) and PDF, saved to a `reports/` folder (included in backups) and named `report-2026-10.xlsx`.
 - Regenerating a past month gives the same result, because it's calculated from history, not from current state.
-- Email goes out through SMTP from the gym's Google account, using an app password. It needs internet; if sending fails, the app retries at the next startup.
+- Email goes out through SMTP from the gym's Google account, using an app password. It needs internet; if sending fails, the app retries at startup and every hour, and the manager can press "Send again" on the Reports screen. The SMTP settings are deployment config (`GYM_SMTP_*`) until hosting is decided (decision 0045).
 
 ## Security and backups
 

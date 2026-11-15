@@ -3,6 +3,9 @@
 Run with: uvicorn app.admin.main:app --host 127.0.0.1 --port 8000
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -20,6 +23,7 @@ from app.admin.api import reports as api_reports
 from app.admin.api import settings as api_settings
 from app.admin.api import setup as api_setup
 from app.admin.api import staff as api_staff
+from app.core import report_schedule
 from app.core.branding import BRANDING_DIR, serve_logo
 from app.core.http import API_PREFIX, NoStoreMiddleware, SameOriginMiddleware
 from app.core.spa import FRONTEND_DIST, serve_frontend
@@ -33,7 +37,20 @@ from app.core.startup import lifespan
 # is logged in yet. Changes if hosting puts the admin app behind a domain.
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-app = FastAPI(title="Gym admin", lifespan=lifespan)
+
+@asynccontextmanager
+async def admin_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Both apps' startup checks, then the admin app's scheduled job (the
+    monthly report). Only here: the public app never runs it."""
+    async with lifespan(app):
+        report_schedule.start()
+        try:
+            yield
+        finally:
+            report_schedule.stop()
+
+
+app = FastAPI(title="Gym admin", lifespan=admin_lifespan)
 # The last one added runs first: the Host is checked before the Origin is
 # compared with it.
 app.add_middleware(NoStoreMiddleware)

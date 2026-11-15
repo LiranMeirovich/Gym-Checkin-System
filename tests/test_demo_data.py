@@ -60,6 +60,9 @@ def test_refuses_outside_development(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_ENVIRONMENT", "prod")
     monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "checkin.example.com")
     monkeypatch.setenv("GYM_SECRET_KEY", "x" * 40)
+    monkeypatch.setenv("GYM_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("GYM_SMTP_USER", "gym@example.com")
+    monkeypatch.setenv("GYM_SMTP_PASSWORD", "not-a-real-password")
     # migrated_db loaded the settings in dev mode.
     get_settings.cache_clear()
 

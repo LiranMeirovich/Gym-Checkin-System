@@ -947,12 +947,46 @@ class ReportRowAnswer(Answer):
     ends_on: date | None
 
 
+class ReportEmailAnswer(Answer):
+    """One email of the report: the newest attempt. ``at`` is the gym's
+    local time; ``by`` is ``None`` for the scheduled job. ``recipients`` is
+    empty when no manager address was set."""
+
+    at: datetime
+    sent: bool
+    recipients: list[str]
+    by: str | None
+
+
+class ReportApprovalAnswer(Answer):
+    at: datetime
+    by: str
+
+
+class ReportDeliveryAnswer(Answer):
+    """Where a month's report stands (its newest generation, ``report_id``;
+    ``None`` if never generated). ``stage`` in order: ``not_generated``,
+    ``generated``, ``emailed`` (to the manager), ``approved``, ``sent`` (to
+    the recipients). ``failed_email`` names the email "Send again" would
+    resend, if its newest attempt failed. ``sending`` is true while an
+    email for the month is going out: the screen asks again until it's
+    false. Approve and send and Send again name ``report_id``."""
+
+    report_id: int | None
+    stage: Literal["not_generated", "generated", "emailed", "approved", "sent"]
+    manager_email: ReportEmailAnswer | None
+    approval: ReportApprovalAnswer | None
+    recipients_email: ReportEmailAnswer | None
+    failed_email: Literal["manager_email", "recipients_email"] | None
+    sending: bool
+
+
 class ReportAnswer(Answer):
     """A month's report: its newest generation, if any. ``generated_at`` is
     the gym's local time; ``generated_by`` is ``None`` for the scheduled
     job. ``generating`` is true while a generation of the month runs: the
     screen asks again until it's false. ``files`` says whether the Excel
-    and PDF files can be downloaded."""
+    and PDF files can be downloaded. ``delivery`` is where it stands."""
 
     month: MonthText
     generating: bool
@@ -961,6 +995,43 @@ class ReportAnswer(Answer):
     rows: list[ReportRowAnswer]
     total_agorot: int
     files: bool
+    delivery: ReportDeliveryAnswer
+
+
+class LatestReportAnswer(Answer):
+    """The dashboard's report card: where last month's report stands (the
+    server decides which month that is)."""
+
+    month: MonthText
+    delivery: ReportDeliveryAnswer
+
+
+class ReportDeliveryRequest(BaseModel):
+    """Approve and send, or Send again: the generation the screen showed
+    (``delivery.report_id``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    report_id: int
+
+
+class ReportDeliveryRefused(Answer):
+    """409. ``report_changed``: ``report_id`` isn't the month's newest
+    generation (it was regenerated, or never generated).
+    ``already_generating``: the month is being generated now.
+    ``already_sending``: an email for the month is going out now.
+    ``already_approved``: this generation was approved before.
+    ``no_recipients``: Settings list no report recipients.
+    ``nothing_to_resend``: no email of this generation failed."""
+
+    error: Literal[
+        "report_changed",
+        "already_generating",
+        "already_sending",
+        "already_approved",
+        "no_recipients",
+        "nothing_to_resend",
+    ]
 
 
 class ReportRefused(Answer):

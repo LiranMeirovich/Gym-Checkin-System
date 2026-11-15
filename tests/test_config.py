@@ -13,6 +13,13 @@ from app.core.config import Settings, get_settings
 TEST_KEY = "x" * 40
 
 
+def set_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A made-up mail server, which prod requires."""
+    monkeypatch.setenv("GYM_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("GYM_SMTP_USER", "gym@example.com")
+    monkeypatch.setenv("GYM_SMTP_PASSWORD", "not-a-real-password")
+
+
 def test_dev_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
 
@@ -33,11 +40,13 @@ def test_environment_defaults_to_prod_and_then_needs_a_hostname_and_key() -> Non
 
     assert "GYM_PUBLIC_HOSTNAME is required in prod" in str(error.value)
     assert "GYM_SECRET_KEY is required in prod" in str(error.value)
+    assert "GYM_SMTP_PASSWORD is required in prod" in str(error.value)
 
 
-def test_prod_with_hostname_and_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_prod_with_hostname_key_and_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "checkin.example.com")
     monkeypatch.setenv("GYM_SECRET_KEY", TEST_KEY)
+    set_smtp(monkeypatch)
 
     settings = Settings()
 
@@ -132,10 +141,10 @@ def test_unprefixed_key_in_dotenv_file_is_rejected(isolated_env: Path) -> None:
     # (Known gap: an unprefixed key that matches a field name, e.g.
     # TIMEZONE=..., is silently ignored by pydantic-settings instead.)
     (isolated_env / ".env").write_text(
-        "GYM_ENVIRONMENT=dev\nSMTP_HOST=smtp.example.com\n", encoding="utf-8"
+        "GYM_ENVIRONMENT=dev\nMAIL_SERVER=smtp.example.com\n", encoding="utf-8"
     )
 
-    with pytest.raises(ValidationError, match="smtp_host"):
+    with pytest.raises(ValidationError, match="mail_server"):
         Settings()
 
 
@@ -160,6 +169,7 @@ def test_unknown_timezone_is_rejected(
 def test_hostname_is_normalised_to_lowercase(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "  CheckIn.Example.COM ")
     monkeypatch.setenv("GYM_SECRET_KEY", TEST_KEY)
+    set_smtp(monkeypatch)
 
     assert Settings().public_hostname == "checkin.example.com"
 
@@ -251,3 +261,66 @@ def test_settings_cannot_be_changed_after_loading(
 
     with pytest.raises(ValidationError, match="frozen"):
         settings.environment = "prod"
+
+
+def test_dev_without_smtp_saves_emails_instead(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+
+    settings = Settings()
+
+    assert settings.smtp_port == 587
+    assert not settings.sends_email
+
+
+def test_dev_with_smtp_sends(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    set_smtp(monkeypatch)
+
+    settings = Settings()
+
+    assert settings.sends_email
+    assert settings.smtp_user == "gym@example.com"
+
+
+@pytest.mark.parametrize("left_out", ["GYM_SMTP_USER", "GYM_SMTP_PASSWORD"])
+def test_smtp_set_up_only_partly_is_rejected(
+    left_out: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    set_smtp(monkeypatch)
+    monkeypatch.delenv(left_out)
+
+    with pytest.raises(ValidationError, match=f"partly set up: {left_out} missing"):
+        Settings()
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("GYM_SMTP_USER", "not-an-address"),
+        ("GYM_SMTP_USER", "gym@example.com\nBcc: x@example.com"),
+        ("GYM_SMTP_HOST", "smtp.example.com extra"),
+        ("GYM_SMTP_PORT", "0"),
+        ("GYM_SMTP_PORT", "70000"),
+    ],
+)
+def test_bad_smtp_values_are_rejected(
+    name: str, value: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    set_smtp(monkeypatch)
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_the_smtp_password_never_shows_in_a_repr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    set_smtp(monkeypatch)
+
+    assert "not-a-real-password" not in repr(Settings())

@@ -10,6 +10,17 @@
   there. 409 for an unfinished month or one already being generated.
 - ``GET /api/reports/{month}/excel`` and ``.../pdf``: the saved files, as
   downloads. Reading isn't logged. 404 until the month is generated.
+- ``POST /api/reports/{month}/approve``: Approve and send the generation
+  the screen showed (``report_id``): the approval is recorded and logged
+  in this request, the email goes out after the response
+  (``app.core.report_delivery``). Answered 202.
+- ``POST /api/reports/{month}/resend``: Send again the failed email of
+  that generation, the same way. Logged.
+- ``GET /api/reports/latest``: the dashboard's report card, where last
+  month's report stands.
+
+Approve and resend answer 409 with a code when refused; nothing is
+recorded then.
 """
 
 from typing import Annotated
@@ -18,14 +29,21 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, st
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.admin.api.schemas import (
+    LatestReportAnswer,
     MonthText,
     NotLoggedIn,
     ReportAnswer,
+    ReportApprovalAnswer,
+    ReportDeliveryAnswer,
+    ReportDeliveryRefused,
+    ReportDeliveryRequest,
+    ReportEmailAnswer,
     ReportMonths,
     ReportRefused,
     ReportRowAnswer,
 )
 from app.admin.security import StaffLogin, require_permission
+from app.core import report_delivery as delivery
 from app.core import report_generation as core
 from app.core.clock import to_local
 from app.core.db import DbSession
@@ -54,6 +72,15 @@ _MEDIA_TYPES = {
 @router.get("")
 def report_months(db: DbSession, _login: CanManage) -> ReportMonths:
     return ReportMonths(months=[str(m) for m in core.report_months(db)])
+
+
+# Before "/{month}": "latest" isn't a month, so that route would answer 422.
+@router.get("/latest")
+def latest_report(db: DbSession, _login: CanManage) -> LatestReportAnswer:
+    month = delivery.last_month()
+    return LatestReportAnswer(
+        month=str(month), delivery=_delivery(delivery.status(db, month))
+    )
 
 
 @router.get("/{month}")
@@ -103,6 +130,102 @@ def report_pdf(month: MonthPath, _login: CanManage) -> FileResponse:
     return _download(Month.parse(month), core.PDF)
 
 
+_DELIVERY_REFUSALS: dict[type[Exception], str] = {
+    delivery.ReportChangedError: "report_changed",
+    delivery.GenerationRunningError: "already_generating",
+    delivery.SendingError: "already_sending",
+    delivery.AlreadyApprovedError: "already_approved",
+    delivery.NoRecipientsError: "no_recipients",
+    delivery.NothingToResendError: "nothing_to_resend",
+}
+
+_DELIVERY_RESPONSES: dict[int | str, dict[str, object]] = {
+    status.HTTP_409_CONFLICT: {"model": ReportDeliveryRefused}
+}
+
+
+@router.post(
+    "/{month}/approve",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ReportAnswer,
+    responses=_DELIVERY_RESPONSES,
+)
+def approve_report(
+    month: MonthPath,
+    body: ReportDeliveryRequest,
+    db: DbSession,
+    login: CanManage,
+    background: BackgroundTasks,
+) -> ReportAnswer | JSONResponse:
+    wanted = Month.parse(month)
+    try:
+        job = delivery.start_approve_and_send(
+            db, wanted, body.report_id, by=login.staff
+        )
+    except tuple(_DELIVERY_REFUSALS) as error:
+        return _refused(error)
+    # Runs after the response, once the approval has committed.
+    background.add_task(job)
+    return _answer(db, wanted)
+
+
+@router.post(
+    "/{month}/resend",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ReportAnswer,
+    responses=_DELIVERY_RESPONSES,
+)
+def resend_report(
+    month: MonthPath,
+    body: ReportDeliveryRequest,
+    db: DbSession,
+    login: CanManage,
+    background: BackgroundTasks,
+) -> ReportAnswer | JSONResponse:
+    wanted = Month.parse(month)
+    try:
+        job = delivery.start_resend(db, wanted, body.report_id, by=login.staff)
+    except tuple(_DELIVERY_REFUSALS) as error:
+        return _refused(error)
+    background.add_task(job)
+    return _answer(db, wanted)
+
+
+def _refused(error: Exception) -> JSONResponse:
+    answer = ReportDeliveryRefused.model_validate(
+        {"error": _DELIVERY_REFUSALS[type(error)]}
+    )
+    return JSONResponse(answer.model_dump(), status.HTTP_409_CONFLICT)
+
+
+def _delivery(current: delivery.DeliveryStatus) -> ReportDeliveryAnswer:
+    approval = current.approval
+    return ReportDeliveryAnswer(
+        report_id=current.report_id,
+        stage=current.stage.value,
+        manager_email=_email(current.manager_email),
+        approval=None
+        if approval is None
+        else ReportApprovalAnswer(at=to_local(approval.at), by=approval.staff_name),
+        recipients_email=_email(current.recipients_email),
+        failed_email=None
+        if current.failed_email is None
+        else current.failed_email.value,
+        sending=current.sending,
+    )
+
+
+def _email(step: delivery.EmailStep | None) -> ReportEmailAnswer | None:
+    if step is None:
+        return None
+    return ReportEmailAnswer(
+        at=to_local(step.at),
+        sent=step.sent,
+        recipients=list(step.recipients),
+        by=step.staff_name,
+    )
+
+
 def _answer(db: DbSession, month: Month) -> ReportAnswer:
     saved = core.latest(db, month)
     rows = () if saved is None else saved.report.rows
@@ -124,6 +247,7 @@ def _answer(db: DbSession, month: Month) -> ReportAnswer:
         total_agorot=0 if saved is None else saved.report.total_agorot,
         files=saved is not None
         and all(core.file_path(month, kind).is_file() for kind in _MEDIA_TYPES),
+        delivery=_delivery(delivery.status(db, month)),
     )
 
 
