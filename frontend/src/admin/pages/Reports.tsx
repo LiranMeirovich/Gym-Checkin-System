@@ -1,8 +1,9 @@
 // The monthly report, for the owner and managers (reports.manage; design
-// doc: "Monthly report"). Opens on last month; the month list, the rows and
-// the totals all come from the server (app/core/reports.py), which also
-// decides which months can be opened. Generating runs on the server after
-// it answers, so the screen asks again every few seconds until it's done.
+// doc: "Monthly report"). Opens on last month; the month list and the rows
+// come from the server (app/core/reports.py), which also decides which
+// months can be opened. No total row (the developer's call), as in the
+// files. Generating runs on the server after it answers, so the screen asks
+// again every few seconds until it's done.
 // Delivery (app/core/report_delivery.py): the scheduled job emails the
 // report to the manager; "Approve and send" emails the generation shown
 // here to the recipients in Settings, and "Send again" resends a failed
@@ -465,15 +466,6 @@ function Rows({ report }: { report: Report }) {
             </tr>
           ))}
         </tbody>
-        <tfoot>
-          <tr className={styles.total}>
-            <td colSpan={3}>סה"כ</td>
-            <td>
-              <span dir="ltr">{formatShekels(report.total_agorot)}</span>
-            </td>
-            <td />
-          </tr>
-        </tfoot>
       </table>
     </div>
   );

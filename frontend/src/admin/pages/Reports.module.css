@@ -12,13 +12,6 @@
   color: var(--navy-deep);
 }
 
-/* The total under the rows. */
-.total > td {
-  font-weight: 800;
-  border-block-start: 2px solid var(--line-strong);
-  border-block-end: none;
-}
-
 /* Where the report stands: its badge, then each email and the approval. */
 .delivery {
   margin-block-end: var(--space-4);

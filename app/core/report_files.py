@@ -4,7 +4,8 @@ report", "Format and storage").
 Both are made from a ``MonthReport`` and work nothing out themselves: the
 amounts, end dates and plans come from ``app.core.reports``. Both are in
 Hebrew, right to left, with the columns first name, last name, plan,
-payment and subscription end, and a total row. Money stays whole agorot
+payment and subscription end; no total row (the developer's call). Money
+stays whole agorot
 until it's written: Excel gets an exact ``Decimal`` in shekels, the PDF
 the same text as the screens (₪250, ₪19.90).
 
@@ -53,7 +54,6 @@ _MONTH_NAMES = (
 )
 
 HEADINGS = ("שם פרטי", "שם משפחה", "מנוי", "תשלום (₪)", "סיום מנוי")
-TOTAL = 'סה"כ'
 
 _FAMILY = "Heebo"
 
@@ -78,7 +78,7 @@ def plan_names(row: ReportRow) -> str:
 
 def excel(report: MonthReport) -> bytes:
     """The report as an .xlsx workbook: one right-to-left sheet with the
-    title, the headings, a row per customer and the total."""
+    title, the headings and a row per customer."""
     book = Workbook()
     sheet = book.active
     if sheet is None:  # a new workbook always has one sheet
@@ -103,14 +103,10 @@ def excel(report: MonthReport) -> bytes:
                 row.ends_on,
             ]
         )
-    sheet.append([TOTAL, None, None, _shekels(report.total_agorot), None])
-    total_row = sheet.max_row
-    for cell in sheet[total_row]:
-        cell.font = bold
 
     for (payment,) in sheet.iter_rows(min_row=4, min_col=4, max_col=4):
         payment.number_format = "#,##0.00"
-    for (ends,) in sheet.iter_rows(min_row=4, max_row=total_row - 1, min_col=5):
+    for (ends,) in sheet.iter_rows(min_row=4, min_col=5, max_col=5):
         ends.number_format = "dd/mm/yyyy"
         ends.alignment = Alignment(horizontal="right")
     for column, width in zip("ABCDE", (16, 18, 26, 14, 14), strict=True):
@@ -132,7 +128,7 @@ def _shekels(agorot: int) -> Decimal:
 
 def pdf(report: MonthReport) -> bytes:
     """The report as an A4 PDF: the title, then a table with the headings
-    repeated on every page and the total at the end."""
+    repeated on every page."""
     doc = FPDF(format="A4")
     doc.set_margins(15, 12, 15)
     doc.set_auto_page_break(auto=True, margin=15)
@@ -169,8 +165,6 @@ def pdf(report: MonthReport) -> bytes:
                 "" if row.ends_on is None else _day(row.ends_on),
             )
             table.row(tuple(reversed(cells)))
-        total = ("", _ltr(_money(report.total_agorot)), "", "", TOTAL)
-        table.row(total, style=FontFace(emphasis="BOLD"))
     return bytes(doc.output())
 
 

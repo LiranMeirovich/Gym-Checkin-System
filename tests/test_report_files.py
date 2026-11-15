@@ -1,7 +1,7 @@
 """A month's report as Excel and PDF: the file names, the Hebrew title and
 plan names, the workbook's cells (right to left, exact amounts, real dates,
-the total) and that the PDF renders, across pages too. Names and amounts
-are made up."""
+no total row) and that the PDF renders, across pages too. Names and
+amounts are made up."""
 
 import io
 import re
@@ -14,7 +14,6 @@ from app.core.models import Plan
 from app.core.months import Month
 from app.core.report_files import (
     HEADINGS,
-    TOTAL,
     excel,
     file_name,
     pdf,
@@ -78,20 +77,18 @@ def test_each_row_has_exact_amounts_and_real_dates() -> None:
     assert sheet["E4"].number_format == "dd/mm/yyyy"
 
 
-def test_the_last_row_is_the_total() -> None:
+def test_the_last_row_is_the_last_customer_with_no_total() -> None:
     sheet = sheet_of(excel(REPORT))
 
-    assert sheet.max_row == 7
-    assert sheet["A7"].value == TOTAL
-    assert Decimal(str(sheet["D7"].value)) == Decimal("1120.50")
+    assert sheet.max_row == 6
+    assert sheet["A6"].value == "מאיה"
+    assert Decimal(str(sheet["D6"].value)) == Decimal("750.50")
 
 
-def test_an_empty_month_has_headings_and_a_zero_total() -> None:
+def test_an_empty_month_has_only_the_title_and_headings() -> None:
     sheet = sheet_of(excel(MonthReport(NOV, ())))
 
-    assert sheet.max_row == 4
-    assert sheet["A4"].value == TOTAL
-    assert sheet["D4"].value == 0
+    assert sheet.max_row == 3
 
 
 # --- PDF -----------------------------------------------------------------
