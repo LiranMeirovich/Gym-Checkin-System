@@ -11,6 +11,7 @@ from app.core.config import Settings, get_settings
 
 # Made up and obviously not random; real keys never appear in the repo.
 TEST_KEY = "x" * 40
+TEST_DATABASE_KEY = "ab" * 32
 
 
 def set_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -40,18 +41,56 @@ def test_environment_defaults_to_prod_and_then_needs_a_hostname_and_key() -> Non
 
     assert "GYM_PUBLIC_HOSTNAME is required in prod" in str(error.value)
     assert "GYM_SECRET_KEY is required in prod" in str(error.value)
+    assert "GYM_DATABASE_KEY is required in prod" in str(error.value)
     assert "GYM_SMTP_PASSWORD is required in prod" in str(error.value)
 
 
-def test_prod_with_hostname_key_and_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_prod_with_hostname_keys_and_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "checkin.example.com")
     monkeypatch.setenv("GYM_SECRET_KEY", TEST_KEY)
+    monkeypatch.setenv("GYM_DATABASE_KEY", TEST_DATABASE_KEY)
     set_smtp(monkeypatch)
 
     settings = Settings()
 
     assert settings.environment == "prod"
     assert settings.signing_key == TEST_KEY.encode()
+    assert settings.database_key_hex == TEST_DATABASE_KEY
+
+
+def test_dev_without_a_database_key_is_plain(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+
+    assert Settings().database_key_hex is None
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "ab" * 31,  # 62 characters
+        "ab" * 33,  # 66 characters
+        "zz" * 32,  # not hex
+        "ab" * 31 + "'\"",  # would break out of PRAGMA key's quotes
+    ],
+)
+def test_a_bad_database_key_is_rejected(
+    key: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    monkeypatch.setenv("GYM_DATABASE_KEY", key)
+
+    with pytest.raises(ValidationError, match="64 hex characters"):
+        Settings()
+
+
+def test_the_database_key_never_shows_in_a_repr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    monkeypatch.setenv("GYM_DATABASE_KEY", TEST_DATABASE_KEY)
+
+    assert TEST_DATABASE_KEY not in repr(Settings())
+    assert TEST_DATABASE_KEY not in str(Settings().model_dump())
 
 
 def test_prod_needs_a_secret_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -169,6 +208,7 @@ def test_unknown_timezone_is_rejected(
 def test_hostname_is_normalised_to_lowercase(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "  CheckIn.Example.COM ")
     monkeypatch.setenv("GYM_SECRET_KEY", TEST_KEY)
+    monkeypatch.setenv("GYM_DATABASE_KEY", TEST_DATABASE_KEY)
     set_smtp(monkeypatch)
 
     assert Settings().public_hostname == "checkin.example.com"

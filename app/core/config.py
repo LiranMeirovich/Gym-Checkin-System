@@ -30,6 +30,9 @@ _LABEL = r"(?!-)[a-z0-9-]{1,63}(?<!-)"
 # No scheme, port or path: this is compared against the Host header later.
 _HOSTNAME = re.compile(rf"^{_LABEL}(\.{_LABEL})+$")
 
+# The database key: 32 bytes as 64 hex digits.
+_RAW_KEY = re.compile(r"[0-9a-fA-F]{64}")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -57,6 +60,16 @@ class Settings(BaseSettings):
     # SQLite database file. Relative paths are resolved against the
     # working directory the app is started from.
     database_path: Path = Path("gym.db")
+
+    # Encrypts the whole database file with SQLCipher (decision 0005): a
+    # raw 256-bit key, written as 64 hex characters, so no passphrase is
+    # stretched on every new connection. Generate one with
+    #   uv run python -c "import secrets; print(secrets.token_hex(32))"
+    # Required in prod. In dev, without one, the file is plain SQLite.
+    # Losing it loses the data, backups included: keep a copy off the
+    # machine. An existing plain database is converted once with
+    # ``python -m app.encrypt_database``.
+    database_key: SecretStr | None = None
 
     # Folder the monthly reports' Excel and PDF files are saved in
     # (report-2026-11.xlsx). Relative paths are resolved against the working
@@ -132,6 +145,15 @@ class Settings(BaseSettings):
             raise ValueError(f"{value!r} is an IP address, not a hostname")
         return value
 
+    @field_validator("database_key")
+    @classmethod
+    def _key_is_64_hex(cls, value: SecretStr | None) -> SecretStr | None:
+        # Checked strictly: the key goes into PRAGMA key's raw-key syntax
+        # (x'...'), so anything but hex digits must never reach it.
+        if value is not None and not _RAW_KEY.fullmatch(value.get_secret_value()):
+            raise ValueError("must be 64 hex characters (a 256-bit key)")
+        return value
+
     @field_validator("smtp_host", "smtp_user")
     @classmethod
     def _one_line(cls, value: str | None) -> str | None:
@@ -171,6 +193,7 @@ class Settings(BaseSettings):
             for name in (
                 "public_hostname",
                 "secret_key",
+                "database_key",
                 "smtp_host",
                 "smtp_user",
                 "smtp_password",
@@ -190,6 +213,13 @@ class Settings(BaseSettings):
     def sends_email(self) -> bool:
         """Whether emails go through SMTP (otherwise to the dev outbox)."""
         return self.smtp_host is not None
+
+    @property
+    def database_key_hex(self) -> str | None:
+        """The database key's 64 hex digits, or None for a plain file."""
+        if self.database_key is None:
+            return None
+        return self.database_key.get_secret_value()
 
     @property
     def signing_key(self) -> bytes:

@@ -1,31 +1,125 @@
-"""Database engine and request sessions: pragmas, one transaction per
-request, and requests starting with BEGIN IMMEDIATE."""
+"""Database engine and request sessions: SQLCipher encryption, pragmas,
+one transaction per request, and requests starting with BEGIN IMMEDIATE."""
 
 import contextlib
-import sqlite3
 import threading
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+import sqlcipher3.dbapi2 as sqlcipher
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError
 from starlette.types import Receive, Scope, Send
 
+from app.core.config import get_settings
 from app.core.db import (
     BUSY_TIMEOUT_MS,
     DbSession,
+    apply_key,
     create_db_engine,
     get_db,
     get_engine,
     get_read_only_db,
 )
 
+# Made up; real keys never appear in the repo.
+KEY = "ab" * 32
+OTHER_KEY = "cd" * 32
 
-def test_pragmas_are_set_on_every_connection(tmp_path: Path) -> None:
-    engine = create_db_engine(tmp_path / "test.db")
+# The first 16 bytes of every plain SQLite file.
+SQLITE_HEADER = b"SQLite format 3\x00"
+
+
+def write_one_row(path: Path, key: str | None) -> None:
+    engine = create_db_engine(path, key)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE t (x TEXT)")
+        connection.exec_driver_sql("INSERT INTO t VALUES ('kept')")
+    engine.dispose()
+
+
+def read_rows(path: Path, key: str | None) -> list[str]:
+    engine = create_db_engine(path, key)
+    try:
+        with engine.connect() as connection:
+            return list(connection.exec_driver_sql("SELECT x FROM t").scalars())
+    finally:
+        engine.dispose()
+
+
+def test_with_a_key_the_file_is_encrypted(tmp_path: Path) -> None:
+    path = tmp_path / "test.db"
+    write_one_row(path, KEY)
+
+    assert not path.read_bytes().startswith(SQLITE_HEADER)
+    assert b"kept" not in path.read_bytes()
+    assert read_rows(path, KEY) == ["kept"]
+
+
+@pytest.mark.parametrize("key", [None, OTHER_KEY])
+def test_an_encrypted_file_cant_be_read_without_its_key(
+    tmp_path: Path, key: str | None
+) -> None:
+    path = tmp_path / "test.db"
+    write_one_row(path, KEY)
+
+    with pytest.raises(DatabaseError, match="file is not a database"):
+        read_rows(path, key)
+
+
+def test_without_a_key_the_file_is_plain_sqlite(tmp_path: Path) -> None:
+    path = tmp_path / "test.db"
+    write_one_row(path, None)
+
+    assert path.read_bytes().startswith(SQLITE_HEADER)
+    assert read_rows(path, None) == ["kept"]
+
+
+def test_the_driver_is_sqlcipher(tmp_path: Path) -> None:
+    engine = create_db_engine(tmp_path / "test.db", KEY)
+    with engine.connect() as connection:
+        version = connection.exec_driver_sql("PRAGMA cipher_version").scalar()
+    engine.dispose()
+
+    assert version is not None
+    assert version.startswith("4.")
+
+
+def test_the_key_never_shows_in_the_engine(tmp_path: Path) -> None:
+    engine = create_db_engine(tmp_path / "test.db", KEY)
+
+    assert KEY not in repr(engine)
+    assert KEY not in str(engine.url)
+
+
+@pytest.mark.parametrize("key", ["ab" * 31, "zz" * 32, "ab" * 31 + "'\""])
+def test_apply_key_refuses_anything_but_64_hex_digits(key: str) -> None:
+    connection = sqlcipher.connect(":memory:")
+    try:
+        with pytest.raises(ValueError, match="64 hex characters"):
+            apply_key(connection, key)
+    finally:
+        connection.close()
+
+
+def test_get_engine_uses_the_configured_key(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    monkeypatch.setenv("GYM_DATABASE_KEY", KEY)
+
+    with get_engine().begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE t (x TEXT)")
+
+    assert not (isolated_env / "gym.db").read_bytes().startswith(SQLITE_HEADER)
+
+
+@pytest.mark.parametrize("key", [None, KEY])
+def test_pragmas_are_set_on_every_connection(tmp_path: Path, key: str | None) -> None:
+    engine = create_db_engine(tmp_path / "test.db", key)
 
     with engine.connect() as connection:
 
@@ -155,9 +249,12 @@ def notes(monkeypatch: pytest.MonkeyPatch) -> None:
         connection.exec_driver_sql("CREATE TABLE note (body TEXT NOT NULL)")
 
 
-def other_writer() -> sqlite3.Connection:
-    """A connection of its own that gives up at once if it can't write."""
-    connection = sqlite3.connect(get_engine().url.database, timeout=0)
+def other_writer() -> sqlcipher.Connection:
+    """A connection of its own that gives up at once if it can't write.
+    Opened with the same driver and key as the app's engine."""
+    connection = sqlcipher.connect(get_engine().url.database, timeout=0)
+    if (key_hex := get_settings().database_key_hex) is not None:
+        apply_key(connection, key_hex)
     connection.isolation_level = None
     return connection
 
@@ -169,7 +266,7 @@ def test_a_request_holds_the_write_lock_from_its_first_read(notes: None) -> None
 
     writer = other_writer()
     try:
-        with pytest.raises(sqlite3.OperationalError, match="locked"):
+        with pytest.raises(sqlcipher.OperationalError, match="locked"):
             writer.execute("BEGIN IMMEDIATE")
     finally:
         writer.close()

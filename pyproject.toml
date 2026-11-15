@@ -11,6 +11,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pydantic-settings>=2.16.1",
     "sqlalchemy>=2.1.6",
+    "sqlcipher3>=0.6.5",
     "tzdata>=2026.5",
     "uharfbuzz>=0.57.0",
     "uvicorn>=0.54.0",

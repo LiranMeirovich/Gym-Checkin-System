@@ -1,8 +1,9 @@
 """Alembic's entry point: runs migrations against the configured database.
 
 The database comes from the deployment config (``GYM_DATABASE_PATH``)
-through ``create_db_engine``, so migrations get the same pragmas (WAL,
-busy timeout) as the apps, with one exception: foreign keys.
+through ``create_db_engine``, so migrations get the same SQLCipher key
+(``GYM_DATABASE_KEY``) and pragmas (WAL, busy timeout) as the apps, with
+one exception: foreign keys.
 
 Foreign keys are switched off while migrations run, and checked before the
 upgrade commits. This is SQLite's documented procedure for schema changes
@@ -72,7 +73,8 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    engine = create_db_engine(get_settings().database_path)
+    settings = get_settings()
+    engine = create_db_engine(settings.database_path, settings.database_key_hex)
     try:
         with engine.connect() as connection:
             # Must happen before the transaction starts: inside one, SQLite
