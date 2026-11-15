@@ -11,7 +11,9 @@ from app import demo_data
 from app.core.config import get_settings
 from app.core.db import get_engine
 from app.core.health_forms import FormState, health_form_status, local_today
-from app.core.models import CheckIn, Customer, StaffUser
+from app.core.models import CheckIn, Customer, Plan, StaffUser
+from app.core.months import Month
+from app.core.reports import calculate
 
 
 @pytest.fixture
@@ -25,13 +27,32 @@ def count(db: Session, model: type) -> int:
 
 
 @pytest.mark.usefixtures("dev")
+def test_last_month_has_a_report_with_every_kind_of_row() -> None:
+    demo_data.main()
+
+    with Session(get_engine()) as db:
+        report = calculate(db, Month.current().plus(-1))
+
+    rows = {row.first_name: (row.plans, row.payment_agorot) for row in report.rows}
+    assert rows == {
+        "דנה": ((Plan.MONTHLY,), 25000),
+        "עדי": ((Plan.MONTHLY,), 25000),
+        "יוסי": ((Plan.TRI_MONTHLY,), 65000),
+        "מאיה": ((Plan.SINGLE_ENTRY,), 3 * 4000),
+        "אורי": ((Plan.PUNCH_CARD,), 50000),
+    }
+    assert report.total_agorot == 177000
+
+
+@pytest.mark.usefixtures("dev")
 def test_fills_a_fresh_database_with_every_kind_of_customer() -> None:
     demo_data.main()
 
     with Session(get_engine()) as db:
         assert count(db, StaffUser) == 3
         assert count(db, Customer) == 12
-        assert count(db, CheckIn) == 4
+        # Today's 4, and last month's 11.
+        assert count(db, CheckIn) == 15
         customers = db.scalars(select(Customer)).all()
         states = {
             health_form_status(db, c, local_today()).state

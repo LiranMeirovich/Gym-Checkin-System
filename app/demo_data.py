@@ -3,10 +3,16 @@
 ``GYM_ENVIRONMENT=dev`` and the database has no staff yet, so it can never
 add to a real gym's data.
 
-Everything goes through the real ``app.core`` functions, in one
-transaction, so the data obeys the same rules as data entered on the
-screens (and the activity log records it, as the demo owner). Every
-name and phone number is invented (decision 0007: the repo is public).
+This month's data goes through the real ``app.core`` functions, in one
+transaction, so it obeys the same rules as data entered on the screens
+(and the activity log records it, as the demo owner). Last month's
+(``_last_month()``: the prices, plans, a punch card and check-ins, so the
+Reports screen has a finished month to show) can't: the core functions
+only take the current month. Those rows are written directly, with their
+dates in last month and prices copied as the core would; the database's
+own checks and triggers still apply, but they aren't in the activity log.
+Every name and phone number is invented (decision 0007: the repo is
+public).
 
 Use a separate database file, never ``gym.db``. From the project root::
 
@@ -23,7 +29,7 @@ database only, printed at the end too.
 """
 
 import io
-from datetime import date
+from datetime import UTC, date, datetime
 
 from PIL import Image, ImageDraw
 from sqlalchemy.orm import Session
@@ -42,11 +48,21 @@ from app.core.health_forms import (
     local_today,
     save_form,
 )
-from app.core.models import Customer, Plan, StaffUser
+from app.core.models import (
+    CheckIn,
+    CheckInMethod,
+    ChosenBy,
+    Customer,
+    Plan,
+    PlanChoice,
+    Price,
+    PunchCard,
+    StaffUser,
+)
 from app.core.months import Month
 from app.core.permissions import Role
 from app.core.plans import choose_plan
-from app.core.prices import PriceChange, set_prices
+from app.core.punch_cards import expiry_for
 from app.core.staff import any_staff_exists, create_owner, create_staff_user
 from app.core.startup import check_database_is_current
 
@@ -59,8 +75,13 @@ INSTRUCTOR = ("איתי", "135790")
 # The form's gender question, given for each demo customer.
 FEMALE, MALE = Gender.FEMALE, Gender.MALE
 
-# The design doc's sample prices, in agorot.
-PRICES = {Plan.MONTHLY: 25000, Plan.TRI_MONTHLY: 65000, Plan.SINGLE_ENTRY: 4000}
+# The design doc's sample prices, in agorot, and a punch card's.
+PRICES = {
+    Plan.MONTHLY: 25000,
+    Plan.TRI_MONTHLY: 65000,
+    Plan.SINGLE_ENTRY: 4000,
+    Plan.PUNCH_CARD: 50000,
+}
 
 
 def _signature() -> bytes:
@@ -125,6 +146,86 @@ def _customer(
     ).customer
 
 
+def _evening(month: Month, day: int) -> datetime:
+    """18:00 in the gym's time on ``day`` of ``month``, in UTC."""
+    local = datetime(month.year, month.month, day, 18, tzinfo=get_settings().tz)
+    return local.astimezone(UTC)
+
+
+def _last_month(
+    db: Session,
+    month: Month,
+    *,
+    monthly: list[Customer],
+    tri_monthly: Customer,
+    single_entry: Customer,
+    card_holder: Customer,
+    owner: StaffUser,
+    instructor: StaffUser,
+) -> None:
+    """Last month, written directly (see the module docstring): the prices
+    from then on, the plans and a punch card, and check-ins on them. Its
+    report: two monthly, a tri-monthly's first month, three single
+    entries and the card."""
+    last = month.plus(-1)
+
+    def visit(customer: Customer, day: int, card: PunchCard | None = None) -> None:
+        db.add(
+            CheckIn(
+                customer_id=customer.id,
+                checked_in_at=_evening(last, day),
+                method=CheckInMethod.MANUAL,
+                staff_user_id=instructor.id,
+                punch_card_id=None if card is None else card.id,
+            )
+        )
+
+    for plan, amount in PRICES.items():
+        db.add(
+            Price(
+                plan=plan,
+                amount_agorot=amount,
+                valid_from_month=last,
+                created_at=_evening(last, 1),
+            )
+        )
+    for customer, plan, end in [
+        *[(c, Plan.MONTHLY, last) for c in monthly],
+        (tri_monthly, Plan.TRI_MONTHLY, last.plus(2)),
+        (single_entry, Plan.SINGLE_ENTRY, last),
+    ]:
+        db.add(
+            PlanChoice(
+                customer_id=customer.id,
+                plan=plan,
+                start_month=last,
+                end_month=end,
+                unit_price_agorot=PRICES[plan],
+                chosen_at=_evening(last, 2),
+                chosen_by=ChosenBy.STAFF,
+                staff_user_id=owner.id,
+            )
+        )
+    card = PunchCard(
+        customer_id=card_holder.id,
+        price_agorot=PRICES[Plan.PUNCH_CARD],
+        bought_month=last,
+        expires_on=expiry_for(last),
+        bought_at=_evening(last, 3),
+        bought_by=ChosenBy.CUSTOMER,
+    )
+    db.add(card)
+    db.flush()
+
+    for customer in [*monthly, tri_monthly]:
+        visit(customer, 6)
+    for day in (5, 12, 19):
+        visit(single_entry, day)
+    for day in (3, 8, 15, 22, 27):
+        visit(card_holder, day, card)
+    db.flush()
+
+
 def fill(db: Session) -> None:
     owner = create_owner(db, *OWNER)
     update_gym_settings(db, {"gym_name": GYM_NAME}, by=owner)
@@ -134,30 +235,41 @@ def fill(db: Session) -> None:
     )
 
     month = Month.current()
-    set_prices(
-        db,
-        month,
-        [PriceChange(plan, amount) for plan, amount in PRICES.items()],
-        by=owner,
-    )
     first_question = FORMS[CURRENT_VERSION].questions[0].key
 
     def add(first: str, last: str, phone: str, born: date) -> Customer:
         return _customer(db, first, last, phone, born, owner)
 
-    # Valid form, a plan, in today.
-    for first, last, phone, born, gender, plan in [
-        ("דנה", "לוי", "050-555-0101", date(1990, 4, 12), FEMALE, Plan.MONTHLY),
-        ("יוסי", "כהן", "050-555-0102", date(1985, 9, 3), MALE, Plan.TRI_MONTHLY),
-        ("עדי", "פרידמן", "050-555-0103", date(1996, 1, 22), FEMALE, Plan.MONTHLY),
+    dana = add("דנה", "לוי", "050-555-0101", date(1990, 4, 12))
+    yossi = add("יוסי", "כהן", "050-555-0102", date(1985, 9, 3))
+    adi = add("עדי", "פרידמן", "050-555-0103", date(1996, 1, 22))
+    maya = add("מאיה", "פרץ", "050-555-0104", date(2001, 6, 30))
+    uri = add("אורי", "מזרחי", "050-555-0106", date(1993, 11, 8))
+    # Last month: monthly for Dana and Adi, a tri-monthly for Yossi that
+    # still covers this month, single entries for Maya, a card for Uri.
+    _last_month(
+        db,
+        month,
+        monthly=[dana, adi],
+        tri_monthly=yossi,
+        single_entry=maya,
+        card_holder=uri,
+        owner=owner,
+        instructor=instructor,
+    )
+
+    # Valid form, a plan, in today (Yossi's tri-monthly from last month).
+    for customer, gender, plan in [
+        (dana, FEMALE, Plan.MONTHLY),
+        (yossi, MALE, None),
+        (adi, FEMALE, Plan.MONTHLY),
     ]:
-        customer = add(first, last, phone, born)
         _sign_form(db, customer, gender)
-        choose_plan(db, customer, plan, month, by=owner)
+        if plan is not None:
+            choose_plan(db, customer, plan, month, by=owner)
         check_in_manually(db, customer, by=instructor)
 
     # Valid form, checked in by an instructor with no plan: single entry.
-    maya = add("מאיה", "פרץ", "050-555-0104", date(2001, 6, 30))
     _sign_form(db, maya, FEMALE)
     check_in_manually(db, maya, by=instructor)
 
@@ -166,12 +278,11 @@ def fill(db: Session) -> None:
     _sign_form(db, eitan, MALE, signer="אבי גולן")
     choose_plan(db, eitan, Plan.MONTHLY, month, by=owner)
 
+    # Valid form, a punch card from last month with entries left.
+    _sign_form(db, uri, MALE)
+
     # Valid form, no plan yet: the phone's plan page.
-    for first, last, phone, born, gender in [
-        ("אורי", "מזרחי", "050-555-0106", date(1993, 11, 8), MALE),
-        ("ליאור", "שפירא", "050-555-0107", date(1988, 3, 17), FEMALE),
-    ]:
-        _sign_form(db, add(first, last, phone, born), gender)
+    _sign_form(db, add("ליאור", "שפירא", "050-555-0107", date(1988, 3, 17)), FEMALE)
 
     # "Yes" to a question: waiting for a doctor's note.
     noam = add("נועם", "ביטון", "050-555-0108", date(1979, 7, 5))
