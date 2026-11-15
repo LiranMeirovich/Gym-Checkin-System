@@ -294,7 +294,7 @@ The dashboard shows where last month's report stands (generated, emailed, approv
 | Maya | Katz | Punch card | Punch card price (month it was bought) | 28 Feb 2027 (the card's last valid day) |
 | Avi | Peretz | Punch card + Monthly | Card price + monthly price (the card ran out mid-month) | 31 Oct 2026 (the latest plan's end) |
 
-Payment uses the price saved on each customer's choice or card, never the price table. A customer with two plans in one month gets one row: the plans in the order they were made, the payments added up, and the latest plan's end date. The last row shows the total to be collected.
+Payment uses the price saved on each customer's choice or card, never the price table. A customer with two plans in one month gets one row: the plans in the order they were made, the payments added up, and the latest plan's end date. There's no total row, on the screen or in the files (the developer's call).
 
 **Format and storage**
 
