@@ -59,19 +59,25 @@ def create_db_engine(path: Path, key: str | None = None) -> Engine:
     return engine
 
 
+def raw_key(key: str) -> str:
+    """``key`` (64 hex digits) in SQLCipher's raw-key form, ``x'...'``: the
+    32 bytes are used as they are, with no passphrase stretching (thousands
+    of rounds) on each new connection."""
+    # Settings allows nothing but 64 hex digits; checked again here, so no
+    # other caller can put anything else into the SQL (see apply_key).
+    if len(key) != 64 or any(c not in "0123456789abcdefABCDEF" for c in key):
+        raise ValueError("the database key must be 64 hex characters")
+    return f"x'{key}'"
+
+
 def apply_key(dbapi_connection: sqlcipher.Connection, key: str) -> None:
     """Give SQLCipher the key: must be the connection's first statement.
 
-    ``x'...'`` is SQLCipher's raw-key form: the 32 bytes are used as they
-    are, with no passphrase stretching (thousands of rounds) on each new
-    connection. Wrong keys aren't caught here; the first read fails with
-    "file is not a database" (see ``app.core.startup``)."""
-    # The key can't be a bound parameter (PRAGMA takes none). It is safe to
-    # put in the SQL only because Settings allows nothing but 64 hex digits;
-    # check again, so no other caller can pass anything else.
-    if len(key) != 64 or any(c not in "0123456789abcdefABCDEF" for c in key):
-        raise ValueError("the database key must be 64 hex characters")
-    dbapi_connection.execute(f"PRAGMA key = \"x'{key}'\"")
+    Wrong keys aren't caught here; the first read fails with "file is not
+    a database" (see ``app.core.startup``)."""
+    # PRAGMA takes no bound parameters, so the key goes into the SQL text:
+    # safe only because raw_key() lets nothing but hex digits through.
+    dbapi_connection.execute(f'PRAGMA key = "{raw_key(key)}"')
 
 
 def _connect_listener(
