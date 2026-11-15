@@ -335,6 +335,7 @@ The only thing reachable from outside is the public app's check-in pages; everyt
 **Keys to keep off the PC** (printed in the manager's office or in a password manager)
 
 - The BitLocker recovery key.
+- The database key (`GYM_DATABASE_KEY`, decision 0048). Without it, the database and every backup of it can't be read.
 - The backup encryption password. Without it, backups can't be restored.
 - The manager's PIN (the manager can reset instructors' PINs).
 - The Cloudflare account login (domain and tunnel).
