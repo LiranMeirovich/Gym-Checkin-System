@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from app.core import email, report_files, report_generation
@@ -148,15 +148,20 @@ class DeliveryStatus:
     @property
     def failed_email(self) -> DeliveryKind | None:
         """The email to send again: the recipients' once approved, the
-        manager's before that, if its newest attempt failed."""
-        step, kind = (
-            (self.recipients_email, DeliveryKind.RECIPIENTS_EMAIL)
-            if self.approval is not None
-            else (self.manager_email, DeliveryKind.MANAGER_EMAIL)
-        )
+        manager's before that, if its newest attempt failed.
+
+        An approval with no recipients' email recorded and nothing going out
+        counts as failed too: its send never finished (the app stopped, or
+        building the email broke), and otherwise nothing could send it."""
+        if self.approval is not None:
+            step = self.recipients_email
+            if step is None:
+                return None if self.sending else DeliveryKind.RECIPIENTS_EMAIL
+            return None if step.sent else DeliveryKind.RECIPIENTS_EMAIL
+        step = self.manager_email
         if step is None or step.sent:
             return None
-        return kind
+        return DeliveryKind.MANAGER_EMAIL
 
 
 def last_month() -> Month:
@@ -197,16 +202,22 @@ def status(db: Session, month: Month) -> DeliveryStatus:
     )
 
 
-def email_manager(month: Month) -> None:
+def email_manager(month: Month, *, report_id: int | None = None) -> None:
     """Email ``month``'s newest generation to the manager now, in this
-    thread (the scheduled job). Does nothing if it was never generated.
-    A failure is recorded, not raised. Raises ``SendingError``."""
+    thread (the scheduled job). With ``report_id``, only if that's still
+    the newest: the job decided on it, and a regeneration made since is the
+    manager's, never emailed. Does nothing if it was never generated, or if
+    the last attempt already failed for want of an address and none is set
+    yet. A failure is recorded, not raised. Raises ``SendingError``."""
     with Session(get_engine()) as db, db.begin():
-        report_id = _newest_report_id(db, month)
-    if report_id is None:
+        current = status(db, month)
+        settings = load_gym_settings(db)
+    if current.report_id is None or report_id not in (None, current.report_id):
+        return
+    if _still_no_address(current.manager_email, settings.manager_email):
         return
     token = _claim(month)
-    _send_job(month, report_id, DeliveryKind.MANAGER_EMAIL, None, token)()
+    _send_job(month, current.report_id, DeliveryKind.MANAGER_EMAIL, None, token)()
 
 
 def start_approve_and_send(
@@ -227,6 +238,7 @@ def start_approve_and_send(
     if not recipients:
         raise NoRecipientsError("no report recipients in the settings")
     token = _claim(month)
+    _release_unless_committed(db, month, token)
     try:
         db.add(
             ReportDelivery(
@@ -262,6 +274,7 @@ def start_resend(
     if kind is None:
         raise NothingToResendError(f"report {report_id} has no failed email")
     token = _claim(month)
+    _release_unless_committed(db, month, token)
     try:
         record(
             db,
@@ -284,8 +297,17 @@ def retry_failed(month: Month) -> None:
     email failed. Raises ``SendingError``."""
     with Session(get_engine()) as db, db.begin():
         current = status(db, month)
+        settings = load_gym_settings(db)
     kind = current.failed_email
     if kind is None or current.report_id is None:
+        return
+    if kind is DeliveryKind.RECIPIENTS_EMAIL and _still_no_address(
+        current.recipients_email, settings.report_recipients
+    ):
+        return
+    if kind is DeliveryKind.MANAGER_EMAIL and _still_no_address(
+        current.manager_email, settings.manager_email
+    ):
         return
     token = _claim(month)
     _send_job(month, current.report_id, kind, None, token)()
@@ -334,6 +356,34 @@ def _newest_report_id(db: Session, month: Month) -> int | None:
         .order_by(Report.id.desc())
         .limit(1)
     )
+
+
+def _still_no_address(last: EmailStep | None, addresses: object) -> bool:
+    """The last attempt failed because no address was set, and there's
+    still none: another attempt would only add another failed row (the job
+    runs every hour; the table is append-only)."""
+    return (
+        not addresses and last is not None and not last.sent and last.recipients == ()
+    )
+
+
+def _release_unless_committed(db: Session, month: Month, token: object) -> None:
+    """Release the claim if ``db``'s transaction rolls back before it
+    commits: its job will never run (the route only adds it once the
+    request succeeds), so the month mustn't show "sending" until
+    ``CLAIM_LIFETIME`` passes."""
+    committed = False
+
+    def on_commit(_: Session) -> None:
+        nonlocal committed
+        committed = True
+
+    def on_rollback(_: Session) -> None:
+        if not committed:
+            _release(month, token)
+
+    event.listen(db, "after_commit", on_commit)
+    event.listen(db, "after_rollback", on_rollback)
 
 
 def _email_step(row: ReportDelivery | None) -> EmailStep | None:

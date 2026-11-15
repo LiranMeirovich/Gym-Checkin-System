@@ -562,3 +562,80 @@ def test_a_resend_uses_the_recipients_at_the_time(
         .order_by(ReportDelivery.id)
     ).all()
     assert [json.loads(r or "[]") for r in rows] == [RECIPIENTS, ["new@example.com"]]
+
+
+# --- Review fixes ------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("addresses")
+def test_an_approval_whose_send_never_finished_can_be_sent_again(
+    db: Session, manager: StaffUser, generated: int, outbox: Outbox
+) -> None:
+    # Approved, then the app stopped before the job ran: the claim is gone
+    # with the process and no recipients' email was recorded.
+    start_approve_and_send(fresh(db), NOV, generated, by=manager)
+    db.commit()
+    report_delivery._claims.clear()  # noqa: SLF001
+
+    current = now(db)
+    assert current.stage is Stage.APPROVED
+    assert current.failed_email is DeliveryKind.RECIPIENTS_EMAIL
+
+    resend(db, manager, generated)
+
+    assert outbox.sent[-1].to == tuple(RECIPIENTS)
+    assert now(db).stage is Stage.SENT
+
+
+@pytest.mark.usefixtures("addresses")
+def test_an_approval_being_sent_isnt_failed(
+    db: Session, manager: StaffUser, generated: int, outbox: Outbox
+) -> None:
+    job = start_approve_and_send(fresh(db), NOV, generated, by=manager)
+    db.commit()
+
+    assert now(db).failed_email is None
+    job()
+
+
+@pytest.mark.usefixtures("generated")
+def test_no_address_is_recorded_once_until_one_is_set(
+    db: Session, manager: StaffUser, outbox: Outbox
+) -> None:
+    email_manager(NOV)
+    email_manager(NOV)
+    report_delivery.retry_failed(NOV)
+
+    db.rollback()
+    assert len(db.scalars(select(ReportDelivery)).all()) == 1
+
+    update_gym_settings(fresh(db), {"manager_email": MANAGER}, by=manager)
+    db.commit()
+    email_manager(NOV)
+
+    assert [sent.to for sent in outbox.sent] == [(MANAGER,)]
+
+
+@pytest.mark.usefixtures("addresses")
+def test_the_manager_is_emailed_only_the_generation_decided_on(
+    db: Session, manager: StaffUser, generated: int, outbox: Outbox
+) -> None:
+    # The manager regenerated after the job read the status.
+    report_generation.generate(NOV, by=manager)
+
+    email_manager(NOV, report_id=generated)
+
+    assert outbox.sent == []
+
+
+@pytest.mark.usefixtures("addresses")
+def test_a_request_that_rolls_back_releases_the_claim(
+    db: Session, manager: StaffUser, generated: int, outbox: Outbox
+) -> None:
+    start_approve_and_send(fresh(db), NOV, generated, by=manager)
+    assert report_delivery.is_sending(NOV)
+
+    db.rollback()
+
+    assert not report_delivery.is_sending(NOV)
+    assert now(db).approval is None

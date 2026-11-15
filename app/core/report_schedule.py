@@ -64,7 +64,9 @@ def run_due() -> None:
         if current.scheduled and (
             current.manager_email is None or not current.manager_email.sent
         ):
-            report_delivery.email_manager(month)
+            # Only the generation decided on: a regeneration since is the
+            # manager's, never emailed.
+            report_delivery.email_manager(month, report_id=current.report_id)
     except (
         report_generation.GenerationRunningError,
         report_delivery.SendingError,

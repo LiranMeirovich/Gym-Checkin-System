@@ -138,6 +138,8 @@ function MonthReport({
   >(undefined);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  // Approve and send, or Send again, waiting for the server's answer.
+  const [delivering, setDelivering] = useState(false);
 
   const data = report.data;
   const failed =
@@ -200,7 +202,7 @@ function MonthReport({
   async function deliver(action: "approve" | "resend") {
     const reportId = data?.delivery.report_id;
     if (reportId === null || reportId === undefined) return;
-    setSending(true);
+    setDelivering(true);
     setError(null);
     try {
       const options = {
@@ -225,12 +227,12 @@ function MonthReport({
     } catch {
       setError(NO_CONNECTION);
     } finally {
-      setSending(false);
+      setDelivering(false);
     }
   }
 
   const generating = sending || data?.generating === true;
-  const busy = generating || data?.delivery.sending === true;
+  const busy = generating || delivering || data?.delivery.sending === true;
   return (
     <>
       <PageHead
