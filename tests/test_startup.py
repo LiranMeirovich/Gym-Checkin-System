@@ -1,16 +1,22 @@
-"""Shared startup: both apps refuse to start unless the database exists and
-is at the newest migration."""
+"""Shared startup: both apps refuse to start unless the database exists,
+opens with the configured key and is at the newest migration."""
 
 from pathlib import Path
 
 import pytest
+from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.admin.main import app as admin_app
+from app.core.config import get_settings
 from app.core.db import get_engine
-from app.core.startup import DatabaseNotReadyError, check_database_is_current
+from app.core.startup import (
+    SQLITE_HEADER,
+    DatabaseNotReadyError,
+    check_database_is_current,
+)
 from app.public.main import app as public_app
 from tests.conftest import AddMigration
 
@@ -75,6 +81,110 @@ def test_refuses_a_database_upgraded_by_newer_code(app: FastAPI) -> None:
 
     with pytest.raises(DatabaseNotReadyError, match="doesn't know"):
         start(app)
+
+
+# ── The database key ────────────────────────────────────────────────────
+
+# Made up; real keys never appear in the repo.
+KEY = "ab" * 32
+OTHER_KEY = "cd" * 32
+
+
+def use_key(monkeypatch: pytest.MonkeyPatch, key: str | None) -> None:
+    """Switch GYM_DATABASE_KEY, as if the app were restarted with it."""
+    if key is None:
+        monkeypatch.delenv("GYM_DATABASE_KEY", raising=False)
+    else:
+        monkeypatch.setenv("GYM_DATABASE_KEY", key)
+    if get_engine.cache_info().currsize:
+        get_engine().dispose()
+    get_engine.cache_clear()
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def encrypted_db(alembic_config: Config, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A migrated database encrypted with KEY."""
+    use_key(monkeypatch, KEY)
+    command.upgrade(alembic_config, "head")
+    return get_settings().database_path
+
+
+@both_apps
+@pytest.mark.usefixtures("encrypted_db")
+def test_starts_on_an_encrypted_database_with_its_key(app: FastAPI) -> None:
+    start(app)
+
+
+@both_apps
+@pytest.mark.usefixtures("migrated_db")
+def test_refuses_a_plain_database_when_a_key_is_set(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_key(monkeypatch, KEY)
+
+    with pytest.raises(
+        DatabaseNotReadyError, match="is not encrypted.*encrypt_database"
+    ):
+        start(app)
+
+
+@both_apps
+@pytest.mark.usefixtures("encrypted_db")
+def test_refuses_an_encrypted_database_without_a_key(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_key(monkeypatch, None)
+
+    with pytest.raises(DatabaseNotReadyError, match="GYM_DATABASE_KEY isn't set"):
+        start(app)
+
+
+@both_apps
+@pytest.mark.usefixtures("encrypted_db")
+def test_refuses_an_encrypted_database_with_the_wrong_key(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_key(monkeypatch, OTHER_KEY)
+
+    with pytest.raises(DatabaseNotReadyError, match="key is wrong"):
+        start(app)
+
+
+@pytest.mark.parametrize(
+    ("key", "message"),
+    [(None, "isn't set"), (OTHER_KEY, "key is wrong")],
+)
+def test_alembic_refuses_a_key_that_cant_open_the_database(
+    encrypted_db: Path,
+    alembic_config: Config,
+    monkeypatch: pytest.MonkeyPatch,
+    key: str | None,
+    message: str,
+) -> None:
+    before = encrypted_db.read_bytes()
+    use_key(monkeypatch, key)
+
+    with pytest.raises(DatabaseNotReadyError, match=message):
+        command.upgrade(alembic_config, "head")
+
+    assert encrypted_db.read_bytes() == before
+
+
+@pytest.mark.usefixtures("migrated_db")
+def test_alembic_refuses_to_upgrade_a_plain_database_with_a_key(
+    alembic_config: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_key(monkeypatch, KEY)
+
+    with pytest.raises(DatabaseNotReadyError, match="is not encrypted"):
+        command.upgrade(alembic_config, "head")
+
+
+def test_alembic_creates_a_new_database_encrypted(
+    encrypted_db: Path,
+) -> None:
+    assert not encrypted_db.read_bytes().startswith(SQLITE_HEADER)
 
 
 @pytest.mark.usefixtures("migrated_db")

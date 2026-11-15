@@ -27,6 +27,7 @@ from sqlalchemy import Connection
 from app.core.config import get_settings
 from app.core.db import create_db_engine
 from app.core.models import Base, MonthColumn, UTCDateTime
+from app.core.startup import check_database_key
 
 config = context.config
 
@@ -74,6 +75,9 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     settings = get_settings()
+    # A key that can't open the file stops here with a clear message,
+    # before anything is written.
+    check_database_key(settings.database_path, settings.database_key_hex)
     engine = create_db_engine(settings.database_path, settings.database_key_hex)
     try:
         with engine.connect() as connection:
