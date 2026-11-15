@@ -59,6 +59,9 @@ Work found during earlier features that wasn't done there. Grouped by when it's 
 - Page weight: both builds bundle the whole Heebo TTF (122 KB). If the phone's first load is slow on mobile data, ship a Hebrew + Latin WOFF2 subset instead.
 - Nothing stops an app being started on `0.0.0.0`. Add a guard in the start script / service config.
 - Dependabot for the SHA-pinned GitHub Actions.
+- Database key (decision 0048), for server setup: pick an OS with glibc 2.28 or newer (the `sqlcipher3` wheels), generate `GYM_DATABASE_KEY` there, and print it with the other keys to keep off the machine before any real data goes in. If a plain database is moved over, run `python -m app.encrypt_database` (both apps stopped, after a backup) and delete the `gym.db.plain-<date>` it leaves once the apps start. Watch `sqlcipher3` releases: they carry its bundled OpenSSL's security fixes.
+- Backups (feature 2) copy the encrypted database: a copy taken through a keyed connection (SQLite's backup API) stays encrypted with the same key, so restoring one needs both the backup password and `GYM_DATABASE_KEY`. Test a restore with both.
+- The database key can't be changed yet (`PRAGMA rekey`), and there's no decrypt command. Add one if the key ever leaks.
 - Owner account (decision 0039): nobody else can reset the owner's PIN, so a forgotten one needs a command run on the PC itself (e.g. `python -m app.reset_owner_pin`, with both apps stopped, logged as the owner). No ownership transfer either (the gym changing hands); add one if it's ever needed.
 - Staff sessions (decision 0019): if the admin app moves behind HTTPS on a real hostname, change `ALLOWED_HOSTS` in `app/admin/main.py` and add `Secure` to the `gym_staff` cookie. Prod needs `GYM_SECRET_KEY` (both apps and `alembic`).
 
