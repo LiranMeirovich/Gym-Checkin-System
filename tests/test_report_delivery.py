@@ -484,7 +484,7 @@ def test_resend_sends_the_failed_manager_email(
     (log,) = logs(db, Action.REPORT_RESEND)
     assert json.loads(log.after_json or "{}") == {
         "month": "2026-11",
-        "email": "manager_email",
+        "resent": "manager_email",
     }
 
 

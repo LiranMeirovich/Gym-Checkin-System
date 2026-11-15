@@ -45,6 +45,8 @@ export const ACTION_NAMES: Record<string, string> = {
   "doctor_note.open": "אישור רפואי נפתח",
   "checkin.manual": "כניסה ידנית",
   "report.generate": "דוח חודשי הופק",
+  "report.approve_and_send": "דוח חודשי אושר ונשלח לנמענים",
+  "report.resend": "מייל של דוח חודשי נשלח שוב",
 };
 
 /** The targets the filter offers, in the order it lists them. */
@@ -96,6 +98,9 @@ const FIELD_NAMES: Record<string, string> = {
   month: "חודש",
   rows: "שורות",
   total_agorot: 'סה"כ',
+  recipients: "נמענים",
+  // Which email of the report was sent again.
+  resent: "נשלח שוב",
   // Links to other rows
   id: "מזהה",
   customer_id: "לקוח",
@@ -109,6 +114,11 @@ const FIELD_NAMES: Record<string, string> = {
 const AGE_GROUPS: Record<string, string> = {
   adult: "מבוגר",
   under_18: "מתחת ל־18",
+};
+
+const REPORT_EMAILS: Record<string, string> = {
+  manager_email: "למנהל",
+  recipients_email: "לנמענים",
 };
 
 export function actionName(action: string): string {
@@ -139,6 +149,7 @@ export function formatValue(field: string, value: unknown): string {
       return ROLE_NAMES[value as keyof typeof ROLE_NAMES];
     }
     if (field === "age_group") return AGE_GROUPS[value] ?? value;
+    if (field === "resent") return REPORT_EMAILS[value] ?? value;
     if (field === "phone") return formatPhone(value);
     if (
       (field === "date_of_birth" || field === "expires_on") &&
@@ -170,6 +181,7 @@ export function isLtr(field: string): boolean {
     field.endsWith("_agorot") ||
     field.endsWith("email") ||
     field === "report_recipients" ||
+    field === "recipients" ||
     field === "id" ||
     field.endsWith("_id")
   );

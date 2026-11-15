@@ -18,3 +18,19 @@
   border-block-start: 2px solid var(--line-strong);
   border-block-end: none;
 }
+
+/* Where the report stands: its badge, then each email and the approval. */
+.delivery {
+  margin-block-end: var(--space-4);
+}
+
+.badgeLine {
+  margin-block-end: var(--space-2);
+}
+
+.steps {
+  margin: 0;
+  padding-inline-start: var(--space-5);
+  font-size: var(--text-s);
+  line-height: 1.7;
+}

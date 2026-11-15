@@ -269,7 +269,7 @@ def start_resend(
             Action.REPORT_RESEND,
             Target.REPORT,
             report_id,
-            after={"month": str(month), "email": str(kind)},
+            after={"month": str(month), "resent": str(kind)},
         )
         db.flush()
     except BaseException:
