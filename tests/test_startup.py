@@ -18,7 +18,7 @@ from app.core.startup import (
     check_database_is_current,
 )
 from app.public.main import app as public_app
-from tests.conftest import AddMigration
+from tests.conftest import AddMigration, use_database_key
 
 both_apps = pytest.mark.parametrize(
     "app", [admin_app, public_app], ids=["admin", "public"]
@@ -90,22 +90,10 @@ KEY = "ab" * 32
 OTHER_KEY = "cd" * 32
 
 
-def use_key(monkeypatch: pytest.MonkeyPatch, key: str | None) -> None:
-    """Switch GYM_DATABASE_KEY, as if the app were restarted with it."""
-    if key is None:
-        monkeypatch.delenv("GYM_DATABASE_KEY", raising=False)
-    else:
-        monkeypatch.setenv("GYM_DATABASE_KEY", key)
-    if get_engine.cache_info().currsize:
-        get_engine().dispose()
-    get_engine.cache_clear()
-    get_settings.cache_clear()
-
-
 @pytest.fixture
 def encrypted_db(alembic_config: Config, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A migrated database encrypted with KEY."""
-    use_key(monkeypatch, KEY)
+    use_database_key(monkeypatch, KEY)
     command.upgrade(alembic_config, "head")
     return get_settings().database_path
 
@@ -113,7 +101,7 @@ def encrypted_db(alembic_config: Config, monkeypatch: pytest.MonkeyPatch) -> Pat
 @pytest.fixture
 def plain_db(alembic_config: Config, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A migrated database that isn't encrypted (dev without a key)."""
-    use_key(monkeypatch, None)
+    use_database_key(monkeypatch, None)
     command.upgrade(alembic_config, "head")
     return get_settings().database_path
 
@@ -135,7 +123,7 @@ def test_starts_on_a_plain_database_without_a_key(app: FastAPI) -> None:
 def test_refuses_a_plain_database_when_a_key_is_set(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    use_key(monkeypatch, KEY)
+    use_database_key(monkeypatch, KEY)
 
     with pytest.raises(
         DatabaseNotReadyError, match="is not encrypted.*encrypt_database"
@@ -148,7 +136,7 @@ def test_refuses_a_plain_database_when_a_key_is_set(
 def test_refuses_an_encrypted_database_without_a_key(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    use_key(monkeypatch, None)
+    use_database_key(monkeypatch, None)
 
     with pytest.raises(DatabaseNotReadyError, match="GYM_DATABASE_KEY isn't set"):
         start(app)
@@ -159,7 +147,7 @@ def test_refuses_an_encrypted_database_without_a_key(
 def test_refuses_an_encrypted_database_with_the_wrong_key(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    use_key(monkeypatch, OTHER_KEY)
+    use_database_key(monkeypatch, OTHER_KEY)
 
     with pytest.raises(DatabaseNotReadyError, match="key is wrong"):
         start(app)
@@ -177,7 +165,7 @@ def test_alembic_refuses_a_key_that_cant_open_the_database(
     message: str,
 ) -> None:
     before = encrypted_db.read_bytes()
-    use_key(monkeypatch, key)
+    use_database_key(monkeypatch, key)
 
     with pytest.raises(DatabaseNotReadyError, match=message):
         command.upgrade(alembic_config, "head")
@@ -189,7 +177,7 @@ def test_alembic_refuses_a_key_that_cant_open_the_database(
 def test_alembic_refuses_to_upgrade_a_plain_database_with_a_key(
     alembic_config: Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    use_key(monkeypatch, KEY)
+    use_database_key(monkeypatch, KEY)
 
     with pytest.raises(DatabaseNotReadyError, match="is not encrypted"):
         command.upgrade(alembic_config, "head")

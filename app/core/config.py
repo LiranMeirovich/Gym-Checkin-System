@@ -30,8 +30,9 @@ _LABEL = r"(?!-)[a-z0-9-]{1,63}(?<!-)"
 # No scheme, port or path: this is compared against the Host header later.
 _HOSTNAME = re.compile(rf"^{_LABEL}(\.{_LABEL})+$")
 
-# The database key: 32 bytes as 64 hex digits.
-_RAW_KEY = re.compile(r"[0-9a-fA-F]{64}")
+# The database key: 32 bytes as 64 hex digits. Also checked by
+# app.core.db.raw_key, the last step before the key goes into SQL.
+RAW_KEY_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 
 
 class Settings(BaseSettings):
@@ -150,7 +151,9 @@ class Settings(BaseSettings):
     def _key_is_64_hex(cls, value: SecretStr | None) -> SecretStr | None:
         # Checked strictly: the key goes into PRAGMA key's raw-key syntax
         # (x'...'), so anything but hex digits must never reach it.
-        if value is not None and not _RAW_KEY.fullmatch(value.get_secret_value()):
+        if value is not None and not RAW_KEY_PATTERN.fullmatch(
+            value.get_secret_value()
+        ):
             raise ValueError("must be 64 hex characters (a 256-bit key)")
         return value
 

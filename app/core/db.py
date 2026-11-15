@@ -32,7 +32,7 @@ from fastapi import Depends
 from sqlalchemy import URL, Engine, create_engine, event
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import RAW_KEY_PATTERN, get_settings
 
 # How long a write waits for another app's write to finish before giving
 # up with "database is locked". Requests should hold a write for far less.
@@ -65,7 +65,7 @@ def raw_key(key: str) -> str:
     of rounds) on each new connection."""
     # Settings allows nothing but 64 hex digits; checked again here, so no
     # other caller can put anything else into the SQL (see apply_key).
-    if len(key) != 64 or any(c not in "0123456789abcdefABCDEF" for c in key):
+    if not RAW_KEY_PATTERN.fullmatch(key):
         raise ValueError("the database key must be 64 hex characters")
     return f"x'{key}'"
 

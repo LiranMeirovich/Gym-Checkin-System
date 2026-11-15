@@ -14,6 +14,11 @@ copy takes its place.
 The renamed original still holds every customer's data, readable by
 anyone: delete it once the apps start on the encrypted file.
 
+If the run is cut off between the two renames (a power cut), the database
+file is missing and both ``<name>.encrypting`` (the checked, encrypted
+copy) and ``<name>.plain-<date>`` (the original) are left. Running this
+again says so: renaming the ``.encrypting`` file to ``<name>`` finishes it.
+
 Nothing is written to the activity log: no staff member makes the change
 and no app is running. Nothing in the data changes, only how it's stored.
 """
@@ -26,7 +31,7 @@ import sqlcipher3.dbapi2 as sqlcipher
 from app.core.clock import local_today
 from app.core.config import get_settings
 from app.core.db import apply_key, raw_key
-from app.core.startup import SQLITE_HEADER
+from app.core.startup import is_plain_sqlite
 
 # Where the encrypted copy is written before the swap, next to the original.
 IN_PROGRESS_SUFFIX = ".encrypting"
@@ -49,15 +54,24 @@ def encrypt_database(path: Path, key: str | None, today: date) -> Path:
             "GYM_DATABASE_KEY isn't set: generate a key (see .env.example), "
             "keep a copy off this machine, and set it first"
         )
-    if not path.is_file():
-        raise EncryptionRefusedError(f"no database at {path.resolve()}")
-    with path.open("rb") as file:
-        if file.read(len(SQLITE_HEADER)) != SQLITE_HEADER:
-            raise EncryptionRefusedError(
-                f"{path.resolve()} is already encrypted (or isn't a database)"
-            )
     encrypted = path.with_name(path.name + IN_PROGRESS_SUFFIX)
     kept = plain_copy_path(path, today)
+    if not path.is_file():
+        originals = sorted(path.parent.glob(f"{path.name}.plain-*"))
+        if encrypted.is_file() and originals:
+            raise EncryptionRefusedError(
+                f"no database at {path.resolve()}, but an earlier run stopped "
+                f"half-way through swapping the files: {encrypted.resolve()} "
+                f"is the checked, encrypted copy and {originals[-1].resolve()} "
+                f"the plain original. Rename the first to {path.name} to finish"
+            )
+        raise EncryptionRefusedError(f"no database at {path.resolve()}")
+    if path.stat().st_size == 0:
+        raise EncryptionRefusedError(f"{path.resolve()} is empty: nothing to encrypt")
+    if not is_plain_sqlite(path):
+        raise EncryptionRefusedError(
+            f"{path.resolve()} is already encrypted (or isn't a database)"
+        )
     for leftover in (encrypted, kept):
         if leftover.exists():
             raise EncryptionRefusedError(
@@ -120,9 +134,8 @@ def _export(path: Path, encrypted: Path, key: str) -> None:
 def _check_copy(path: Path, encrypted: Path, key: str) -> None:
     """Refuse the copy unless it opens with the key and holds exactly what
     the original does."""
-    with encrypted.open("rb") as file:
-        if file.read(len(SQLITE_HEADER)) == SQLITE_HEADER:
-            raise EncryptionRefusedError("the copy came out unencrypted")
+    if is_plain_sqlite(encrypted):
+        raise EncryptionRefusedError("the copy came out unencrypted")
 
     original = sqlcipher.connect(str(path))
     copy = sqlcipher.connect(str(encrypted))

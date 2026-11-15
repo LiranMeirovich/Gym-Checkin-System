@@ -39,6 +39,19 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
     get_settings.cache_clear()
 
 
+def use_database_key(monkeypatch: pytest.MonkeyPatch, key: str | None) -> None:
+    """Set or clear GYM_DATABASE_KEY, as a freshly started process would
+    see it: the cached settings and engine are dropped."""
+    if key is None:
+        monkeypatch.delenv("GYM_DATABASE_KEY", raising=False)
+    else:
+        monkeypatch.setenv("GYM_DATABASE_KEY", key)
+    if get_engine.cache_info().currsize:
+        get_engine().dispose()
+    get_engine.cache_clear()
+    get_settings.cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def no_scheduled_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     """The admin app starts the report job's thread at startup; in tests it

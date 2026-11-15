@@ -1,5 +1,7 @@
 """The one-time command that encrypts an existing plain database."""
 
+import os
+import shutil
 from datetime import date
 from pathlib import Path
 
@@ -10,36 +12,27 @@ from alembic.config import Config
 from sqlalchemy.orm import Session
 
 from app import demo_data, encrypt_database
-from app.core.config import get_settings
-from app.core.db import get_engine
-from app.core.startup import SQLITE_HEADER, check_database_is_current
+from app.core.db import apply_key, get_engine
+from app.core.startup import (
+    ALEMBIC_INI,
+    SQLITE_HEADER,
+    check_database_is_current,
+)
 from app.encrypt_database import (
     IN_PROGRESS_SUFFIX,
     EncryptionRefusedError,
     plain_copy_path,
 )
-from tests.conftest import TEST_DATABASE_KEY
+from tests.conftest import TEST_DATABASE_KEY, use_database_key
 
 TODAY = date(2026, 11, 15)
-
-
-def restart(monkeypatch: pytest.MonkeyPatch, key: str | None) -> None:
-    """Set or clear GYM_DATABASE_KEY, as a fresh process would see it."""
-    if key is None:
-        monkeypatch.delenv("GYM_DATABASE_KEY", raising=False)
-    else:
-        monkeypatch.setenv("GYM_DATABASE_KEY", key)
-    if get_engine.cache_info().currsize:
-        get_engine().dispose()
-    get_engine.cache_clear()
-    get_settings.cache_clear()
 
 
 def table_counts(path: Path, key: str | None) -> dict[str, int]:
     connection = sqlcipher.connect(str(path))
     try:
         if key is not None:
-            connection.execute(f"PRAGMA key = \"x'{key}'\"")
+            apply_key(connection, key)
         names = [
             row[0]
             for row in connection.execute(
@@ -56,17 +49,36 @@ def table_counts(path: Path, key: str | None) -> dict[str, int]:
         connection.close()
 
 
-@pytest.fixture
-def plain_db(alembic_config: Config, monkeypatch: pytest.MonkeyPatch) -> Path:
+@pytest.fixture(scope="module")
+def filled_plain_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """A plain database, migrated and filled with the demo data (customers,
-    forms, plans, check-ins: every kind of row and trigger), then the key
-    set, as before running the command."""
-    restart(monkeypatch, None)
-    command.upgrade(alembic_config, "head")
-    with Session(get_engine()) as db, db.begin():
-        demo_data.fill(db)
-    path = get_settings().database_path
-    restart(monkeypatch, TEST_DATABASE_KEY)
+    forms, plans, check-ins: every kind of row and trigger). Built once for
+    the whole file, as filling it is slow; tests work on copies."""
+    folder = tmp_path_factory.mktemp("filled")
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        for name in list(os.environ):
+            if name.startswith("GYM_"):
+                monkeypatch.delenv(name)
+        monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+        monkeypatch.chdir(folder)
+        use_database_key(monkeypatch, None)
+        command.upgrade(Config(ALEMBIC_INI), "head")
+        with Session(get_engine()) as db, db.begin():
+            demo_data.fill(db)
+        # Closing the last connection folds the WAL into the file, so the
+        # file alone is the whole database.
+        use_database_key(monkeypatch, None)
+    path = folder / "gym.db"
+    assert not path.with_name("gym.db-wal").exists()
+    return path
+
+
+@pytest.fixture
+def plain_db(filled_plain_db: Path, alembic_config: Config, isolated_env: Path) -> Path:
+    """This test's own copy of the filled plain database, with the key set
+    (conftest), as before running the command."""
+    path = isolated_env / "gym.db"
+    shutil.copyfile(filled_plain_db, path)
     return path
 
 
@@ -110,7 +122,7 @@ def test_main_says_where_the_readable_original_is(
 
 
 def test_refuses_without_a_key(plain_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    restart(monkeypatch, None)
+    use_database_key(monkeypatch, None)
 
     with pytest.raises(SystemExit, match="GYM_DATABASE_KEY isn't set"):
         encrypt_database.main()
@@ -206,3 +218,27 @@ def test_a_failed_swap_puts_the_original_back(
     assert plain_db.read_bytes().startswith(SQLITE_HEADER)
     assert table_counts(plain_db, None) == before
     assert sorted(p.name for p in plain_db.parent.glob("gym.db*")) == ["gym.db"]
+
+
+def test_refuses_an_empty_file(isolated_env: Path) -> None:
+    path = isolated_env / "gym.db"
+    path.touch()
+
+    with pytest.raises(EncryptionRefusedError, match="is empty"):
+        encrypt_database.encrypt_database(path, TEST_DATABASE_KEY, TODAY)
+
+
+def test_explains_a_run_cut_off_during_the_swap(plain_db: Path) -> None:
+    # As after a power cut between the two renames: the original already
+    # moved aside, the checked copy not yet in its place.
+    encrypted = plain_db.with_name(plain_db.name + IN_PROGRESS_SUFFIX)
+    plain_db.rename(plain_copy_path(plain_db, TODAY))
+    encrypted.write_bytes(b"the checked copy")
+
+    with pytest.raises(EncryptionRefusedError, match="stopped half-way") as error:
+        encrypt_database.encrypt_database(
+            plain_db, TEST_DATABASE_KEY, date(2026, 11, 16)
+        )
+
+    assert "gym.db.encrypting" in str(error.value)
+    assert "gym.db.plain-2026-11-15" in str(error.value)

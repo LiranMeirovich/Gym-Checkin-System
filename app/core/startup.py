@@ -90,6 +90,13 @@ def check_database_is_current(alembic_config: Config | None = None) -> None:
     )
 
 
+def is_plain_sqlite(path: Path) -> bool:
+    """Whether the file at ``path`` starts like a plain SQLite database.
+    False for an encrypted one, and for anything too short or not SQLite."""
+    with path.open("rb") as file:
+        return file.read(len(SQLITE_HEADER)) == SQLITE_HEADER
+
+
 def check_database_key(path: Path, key: str | None) -> None:
     """Refuse a database file that ``key`` can't open, saying why.
 
@@ -100,8 +107,7 @@ def check_database_key(path: Path, key: str | None) -> None:
     """
     if not path.is_file() or path.stat().st_size == 0:
         return
-    with path.open("rb") as file:
-        plain = file.read(len(SQLITE_HEADER)) == SQLITE_HEADER
+    plain = is_plain_sqlite(path)
 
     if plain and key is not None:
         raise DatabaseNotReadyError(
