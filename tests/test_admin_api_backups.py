@@ -102,7 +102,7 @@ def test_a_manager_sees_the_newest_backup(
     assert answer.status_code == 200
     assert answer.json() == {
         "configured": True,
-        "last_backup_at": "2026-11-16T07:02:00Z",
+        "last_backup_at": "2026-11-16T09:02:00+02:00",  # Israel time
         "overdue": False,
     }
 

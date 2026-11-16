@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, status
 from app.admin.api.schemas import BackupStatusAnswer, NotLoggedIn
 from app.admin.security import StaffLogin, require_permission
 from app.core import backups
-from app.core.clock import utc_now
+from app.core.clock import to_local, utc_now
 from app.core.permissions import Permission
 
 router = APIRouter(
@@ -37,6 +37,8 @@ def latest_backup(_login: CanManage) -> BackupStatusAnswer:
     current = backups.status(utc_now())
     return BackupStatusAnswer(
         configured=current.configured,
-        last_backup_at=current.last_backup_at,
+        last_backup_at=(
+            to_local(current.last_backup_at) if current.last_backup_at else None
+        ),
         overdue=current.overdue,
     )

@@ -858,7 +858,8 @@ export interface components {
          * BackupStatusAnswer
          * @description The dashboard's backup card: when the newest backup was made, and
          *     whether it's overdue (none at all, or none for 2 days: the card turns
-         *     red). ``configured`` is false only in dev without a backup password.
+         *     red). The time is the gym's local time. ``configured`` is false only in
+         *     dev without a backup password.
          */
         BackupStatusAnswer: {
             /** Configured */
