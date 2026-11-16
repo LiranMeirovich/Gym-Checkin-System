@@ -1,8 +1,9 @@
 """HTTP plumbing both apps share: the ``/api`` prefix, the base of every API
 answer, ``no-store`` on every API answer, the security headers on every
 answer, refusing requests that arrive off 127.0.0.1, the public hostname
-and docs checks in prod, the same-origin check on every unsafe request, reading an image sent as a data URL, the
-date-of-birth field type, and keeping query strings out of the access log.
+and docs checks in prod, the same-origin check on every unsafe request,
+reading an image sent as a data URL, the date-of-birth field type, and
+keeping query strings out of the access log.
 
 Here rather than in ``app.admin`` so the public app, the one reachable
 from the internet, never imports admin code.
@@ -17,8 +18,7 @@ from datetime import date
 from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict
-from starlette.datastructures import MutableHeaders
-from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -173,22 +173,27 @@ class LocalOnlyMiddleware:
     see which address it was bound to, so this checks each request instead:
     ``scope["server"]`` is the local address the connection arrived on
     (not the client's), so a request over the gym's network or the
-    internet is refused even then, and each refusal logs an error naming
-    that address. A Unix socket has no address and only local processes
+    internet is refused even then. The first refusal on each address logs
+    an error naming it; later ones don't, so a flood of requests can't
+    flood the log. A Unix socket has no address and only local processes
     can use it, so it passes.
     """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
+        self._logged: set[str] = set()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] in ("http", "websocket") and not _arrived_locally(scope):
-            server = scope.get("server")
-            logger.error(
-                "refused a request that arrived on %s: the app must listen "
-                "on 127.0.0.1 only (uvicorn --host 127.0.0.1)",
-                server[0] if server else server,
-            )
+            address = scope["server"][0]
+            if address not in self._logged:
+                self._logged.add(address)
+                logger.error(
+                    "refused a request that arrived on %s: the app must listen "
+                    "on 127.0.0.1 only (uvicorn --host 127.0.0.1); further "
+                    "refusals on it aren't logged",
+                    address,
+                )
             response = PlainTextResponse("Served on 127.0.0.1 only", status_code=403)
             await response(scope, receive, send)
             return
@@ -200,10 +205,15 @@ def _arrived_locally(scope: Scope) -> bool:
     if server is None:
         return True
     try:
-        return ipaddress.ip_address(server[0]).is_loopback
+        address = ipaddress.ip_address(server[0])
     except ValueError:
         # Not an address at all; uvicorn always gives one.
         return False
+    # 127.0.0.1 as an IPv6 socket sees it (::ffff:127.0.0.1), which
+    # Python 3.12's is_loopback doesn't recognise.
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return address.is_loopback
 
 
 class PublicHostMiddleware:
@@ -212,10 +222,10 @@ class PublicHostMiddleware:
     / ``localhost`` for a check on the server itself (decision 0050).
 
     cloudflared passes the phone's ``Host`` on, so a real request names the
-    gym's hostname; anything else didn't come through the tunnel. Starlette's
-    ``TrustedHostMiddleware`` does the check, built per request from the
-    settings, since the app is imported (for the OpenAPI export, in tests)
-    before any settings are loaded. Dev answers to any name.
+    gym's hostname; anything else didn't come through the tunnel. The
+    allowed names are read from the settings on each request, since the app
+    is imported (for the OpenAPI export, in tests) before any settings are
+    loaded. Dev answers to any name.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -223,15 +233,15 @@ class PublicHostMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         settings = get_settings()
-        if scope["type"] not in ("http", "websocket") or settings.environment != "prod":
-            await self.app(scope, receive, send)
-            return
-        check = TrustedHostMiddleware(
-            self.app,
-            allowed_hosts=[str(settings.public_hostname), "127.0.0.1", "localhost"],
-            www_redirect=False,
-        )
-        await check(scope, receive, send)
+        if scope["type"] in ("http", "websocket") and settings.environment == "prod":
+            # The Host without its port; names are compared in lower case
+            # (GYM_PUBLIC_HOSTNAME is stored lower case).
+            host = Headers(scope=scope).get("host", "").split(":")[0].lower()
+            if host not in {settings.public_hostname, "127.0.0.1", "localhost"}:
+                response = PlainTextResponse("Invalid host header", status_code=400)
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
 
 
 # FastAPI's generated API docs and the spec they read.

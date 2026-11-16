@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings, get_settings
+from tests.conftest import use_prod
 
 # Made up and obviously not random; real keys never appear in the repo.
 TEST_KEY = "x" * 40
@@ -20,18 +21,6 @@ def set_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GYM_SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("GYM_SMTP_USER", "gym@example.com")
     monkeypatch.setenv("GYM_SMTP_PASSWORD", "not-a-real-password")
-
-
-def set_prod(monkeypatch: pytest.MonkeyPatch, folder: Path) -> None:
-    """A complete, made-up prod config with its paths under ``folder``."""
-    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "checkin.example.com")
-    monkeypatch.setenv("GYM_SECRET_KEY", TEST_KEY)
-    monkeypatch.setenv("GYM_DATABASE_KEY", TEST_DATABASE_KEY)
-    monkeypatch.setenv("GYM_BACKUP_PASSWORD", TEST_BACKUP_PASSWORD)
-    monkeypatch.setenv("GYM_DATABASE_PATH", str(folder / "gym.db"))
-    monkeypatch.setenv("GYM_REPORTS_DIR", str(folder / "reports"))
-    monkeypatch.setenv("GYM_BACKUPS_DIR", str(folder / "backups"))
-    set_smtp(monkeypatch)
 
 
 def test_dev_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,7 +54,7 @@ def test_environment_defaults_to_prod_and_then_needs_a_hostname_and_key(
 def test_prod_with_hostname_keys_smtp_and_absolute_paths(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    set_prod(monkeypatch, tmp_path)
+    use_prod(monkeypatch, tmp_path)
 
     settings = Settings()
 
@@ -226,7 +215,7 @@ def test_unknown_timezone_is_rejected(
 def test_hostname_is_normalised_to_lowercase(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    set_prod(monkeypatch, tmp_path)
+    use_prod(monkeypatch, tmp_path)
     monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "  CheckIn.Example.COM ")
 
     assert Settings().public_hostname == "checkin.example.com"
@@ -427,7 +416,7 @@ def test_the_backup_password_never_shows_in_a_repr(
 def test_prod_refuses_a_relative_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, name: str, relative: str
 ) -> None:
-    set_prod(monkeypatch, tmp_path)
+    use_prod(monkeypatch, tmp_path)
     monkeypatch.setenv(name, relative)
 
     with pytest.raises(ValidationError, match=f"{name} must be an absolute path"):
@@ -437,7 +426,7 @@ def test_prod_refuses_a_relative_path(
 def test_prod_names_every_relative_path_at_once(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    set_prod(monkeypatch, tmp_path)
+    use_prod(monkeypatch, tmp_path)
     for name in ("GYM_DATABASE_PATH", "GYM_REPORTS_DIR", "GYM_BACKUPS_DIR"):
         monkeypatch.delenv(name)
 

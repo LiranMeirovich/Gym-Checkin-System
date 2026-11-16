@@ -8,12 +8,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import demo_data
-from app.core.config import get_settings
 from app.core.db import get_engine
 from app.core.health_forms import FormState, health_form_status, local_today
 from app.core.models import CheckIn, Customer, Plan, StaffUser
 from app.core.months import Month
 from app.core.reports import calculate
+from tests.conftest import use_prod
 
 
 @pytest.fixture
@@ -77,20 +77,8 @@ def test_refuses_a_database_that_has_data() -> None:
 
 @pytest.mark.usefixtures("migrated_db")
 def test_refuses_outside_development(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Prod settings that would otherwise load.
-    monkeypatch.setenv("GYM_ENVIRONMENT", "prod")
-    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "checkin.example.com")
-    monkeypatch.setenv("GYM_SECRET_KEY", "x" * 40)
-    monkeypatch.setenv("GYM_DATABASE_KEY", "ab" * 32)
-    monkeypatch.setenv("GYM_BACKUP_PASSWORD", "x" * 40)
-    monkeypatch.setenv("GYM_SMTP_HOST", "smtp.example.com")
-    monkeypatch.setenv("GYM_SMTP_USER", "gym@example.com")
-    monkeypatch.setenv("GYM_SMTP_PASSWORD", "not-a-real-password")
-    monkeypatch.setenv("GYM_DATABASE_PATH", str(Path.cwd() / "gym.db"))
-    monkeypatch.setenv("GYM_REPORTS_DIR", str(Path.cwd() / "reports"))
-    monkeypatch.setenv("GYM_BACKUPS_DIR", str(Path.cwd() / "backups"))
-    # migrated_db loaded the settings in dev mode.
-    get_settings.cache_clear()
+    # Prod settings that would otherwise load, on the same database.
+    use_prod(monkeypatch, Path.cwd())
 
     with pytest.raises(SystemExit, match="development only"):
         demo_data.main()

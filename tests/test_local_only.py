@@ -46,7 +46,9 @@ def test_a_request_arriving_on_another_address_is_refused(address: str) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.parametrize("address", ["127.0.0.1", "127.0.0.2", "[::1]"])
+@pytest.mark.parametrize(
+    "address", ["127.0.0.1", "127.0.0.2", "[::1]", "[::ffff:127.0.0.1]"]
+)
 def test_loopback_addresses_are_served(address: str) -> None:
     client = TestClient(small_app(), base_url=f"http://{address}:8000")
 
@@ -111,3 +113,17 @@ def test_both_apps_refuse_a_request_off_loopback(app: FastAPI) -> None:
 
     assert response.status_code == 403
     assert response.text == "Served on 127.0.0.1 only"
+
+
+def test_each_address_is_logged_once(caplog: pytest.LogCaptureFixture) -> None:
+    # A flood of requests can't flood the log.
+    app = small_app()
+    on_lan = TestClient(app, base_url="http://192.168.1.10:8000")
+    on_other = TestClient(app, base_url="http://10.0.0.5:8000")
+
+    with caplog.at_level(logging.ERROR, logger="app.core.http"):
+        for _ in range(3):
+            assert on_lan.get("/thing").status_code == 403
+        assert on_other.get("/thing").status_code == 403
+
+    assert [r.args for r in caplog.records] == [("192.168.1.10",), ("10.0.0.5",)]

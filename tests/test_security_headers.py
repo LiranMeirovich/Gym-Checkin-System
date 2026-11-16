@@ -1,5 +1,6 @@
 """Security headers on every answer of both apps (decision 0050)."""
 
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -23,9 +24,9 @@ both_apps = pytest.mark.parametrize(
 )
 
 
-def assert_security_headers(headers: dict[str, str] | object) -> None:
+def assert_security_headers(headers: Mapping[str, str]) -> None:
     for name, value in SECURITY_HEADERS.items():
-        assert headers[name] == value  # type: ignore[index]
+        assert headers[name] == value
 
 
 @pytest.fixture
