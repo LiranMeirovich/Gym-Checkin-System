@@ -283,3 +283,38 @@ def test_nothing_is_deleted_with_30_or_fewer() -> None:
 
     assert backups.prune() == []
     assert len(backups.saved()) == 30
+
+
+# --- Where backups stand (the dashboard's card) ------------------------------
+
+
+@pytest.mark.usefixtures("dev")
+def test_no_backup_yet_is_overdue() -> None:
+    current = backups.status(local(2026, 11, 16, 10, 0))
+
+    assert current.last_backup_at is None
+    assert current.overdue
+    assert not current.configured  # no backup password in this test
+
+
+@pytest.mark.usefixtures("dev")
+@pytest.mark.parametrize(
+    ("now", "overdue"),
+    [
+        ((2026, 11, 16, 9, 30), False),
+        ((2026, 11, 18, 9, 2), False),  # exactly 2 days
+        ((2026, 11, 18, 9, 3), True),
+    ],
+)
+def test_a_backup_is_overdue_after_2_days(now: tuple[int, ...], overdue: bool) -> None:
+    saved_at(local(2026, 11, 15, 22, 7), local(2026, 11, 16, 9, 2))
+
+    current = backups.status(local(*now))
+
+    assert current.last_backup_at == local(2026, 11, 16, 9, 2)
+    assert current.overdue is overdue
+
+
+@pytest.mark.usefixtures("backup_password")
+def test_status_says_backups_are_set_up() -> None:
+    assert backups.status(local(2026, 11, 16, 10, 0)).configured

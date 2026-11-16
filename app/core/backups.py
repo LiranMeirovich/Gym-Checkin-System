@@ -67,6 +67,9 @@ KEEP_NEWEST = 30
 # time on (the job checks hourly, so it's made within the hour after).
 DAILY_AT = time(22, 0)
 
+# The dashboard's card turns red after this long without a backup.
+OVERDUE_AFTER = timedelta(days=2)
+
 # Left behind only if the process dies mid-backup; never a real backup.
 PARTIAL_SUFFIX = ".partial"
 
@@ -197,6 +200,28 @@ def latest() -> SavedBackup | None:
     """The newest backup, or None if there's none yet."""
     found = saved()
     return found[-1] if found else None
+
+
+@dataclass(frozen=True)
+class BackupStatus:
+    """Where backups stand, for the dashboard's backup card."""
+
+    # False only in dev without a backup password: no backups are made.
+    configured: bool
+    last_backup_at: datetime | None  # UTC
+    # No backup at all, or none for OVERDUE_AFTER: the card turns red.
+    overdue: bool
+
+
+def status(now: datetime) -> BackupStatus:
+    """Where backups stand at ``now``."""
+    newest = latest()
+    made_at = newest.made_at if newest else None
+    return BackupStatus(
+        configured=get_settings().makes_backups,
+        last_backup_at=made_at,
+        overdue=made_at is None or now - made_at > OVERDUE_AFTER,
+    )
 
 
 def is_due(now: datetime) -> bool:
