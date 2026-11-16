@@ -1,5 +1,6 @@
 """HTTP plumbing both apps share: the ``/api`` prefix, the base of every API
-answer, ``no-store`` on every API answer, the same-origin check on every
+answer, ``no-store`` on every API answer, the security headers on every
+answer, the same-origin check on every
 unsafe request, reading an image sent as a data URL, the date-of-birth
 field type, and keeping query strings out of the access log.
 
@@ -19,6 +20,8 @@ from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from app.core.config import get_settings
 
 API_PREFIX = "/api"
 
@@ -90,6 +93,69 @@ class NoStoreMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_no_store)
+
+
+# The content security policy of both React builds: everything comes from
+# the app's own origin. Images also from data: (the signature canvas) and
+# blob: (a health form PDF or doctor's note opened in a new tab, whose
+# document inherits this policy). No plugins, no <base>, no framing.
+CONTENT_SECURITY_POLICY = "; ".join(
+    (
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self'",
+        "img-src 'self' data: blob:",
+        "font-src 'self'",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    )
+)
+
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    # frame-ancestors' older twin, for browsers that predate it.
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    # Addresses can carry a search (the customer list) or a code path;
+    # nothing is sent to another site, or even to this one.
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+# HTTPS only, for a year. Prod only: a browser that saw it can't reach the
+# hostname over plain http until it expires, and browsers ignore it on an
+# http answer anyway, so it takes effect only through the tunnel's https.
+STRICT_TRANSPORT_SECURITY = "max-age=31536000"
+
+
+class SecurityHeadersMiddleware:
+    """Adds ``SECURITY_HEADERS`` to every response, pages, API answers,
+    assets and errors alike (decision 0050), and in prod
+    ``Strict-Transport-Security``. Added last, so it wraps every other
+    middleware and their refusals get the headers too."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        prod = get_settings().environment == "prod"
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                for name, value in SECURITY_HEADERS.items():
+                    headers[name] = value
+                if prod:
+                    headers["Strict-Transport-Security"] = STRICT_TRANSPORT_SECURITY
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 class SameOriginMiddleware:

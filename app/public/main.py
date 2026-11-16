@@ -8,7 +8,12 @@ Run with: uvicorn app.public.main:app --host 127.0.0.1 --port 8001
 from fastapi import FastAPI
 
 from app.core.branding import BRANDING_DIR, serve_logo
-from app.core.http import API_PREFIX, NoStoreMiddleware, SameOriginMiddleware
+from app.core.http import (
+    API_PREFIX,
+    NoStoreMiddleware,
+    SameOriginMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.core.spa import FRONTEND_DIST, serve_frontend
 from app.core.startup import lifespan
 from app.public.api import branding as api_branding
@@ -29,6 +34,8 @@ app.add_middleware(NoStoreMiddleware)
 # Without it, another website could post a link form from the customer's
 # own phone. The tunnel hostname check waits on hosting (decision 0028).
 app.add_middleware(SameOriginMiddleware)
+# Last, so it wraps the others and their refusals get the headers too.
+app.add_middleware(SecurityHeadersMiddleware)
 app.include_router(api_branding.router, prefix=API_PREFIX)
 app.include_router(api_link.router, prefix=API_PREFIX)
 app.include_router(api_health_form.router, prefix=API_PREFIX)
