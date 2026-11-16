@@ -28,6 +28,7 @@ from app.core import report_schedule
 from app.core.branding import BRANDING_DIR, serve_logo
 from app.core.http import (
     API_PREFIX,
+    DocsOnlyInDevMiddleware,
     LocalOnlyMiddleware,
     NoStoreMiddleware,
     SameOriginMiddleware,
@@ -61,6 +62,8 @@ app = FastAPI(title="Gym admin", lifespan=admin_lifespan)
 # The last one added runs first: the Host is checked before the Origin is
 # compared with it.
 app.add_middleware(NoStoreMiddleware)
+# /docs, /redoc and /openapi.json in dev only.
+app.add_middleware(DocsOnlyInDevMiddleware)
 app.add_middleware(SameOriginMiddleware)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 app.add_middleware(LocalOnlyMiddleware)

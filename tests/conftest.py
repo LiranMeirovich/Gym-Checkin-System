@@ -62,6 +62,22 @@ def use_database_key(monkeypatch: pytest.MonkeyPatch, key: str | None) -> None:
     get_settings.cache_clear()
 
 
+def use_prod(monkeypatch: pytest.MonkeyPatch, folder: Path) -> None:
+    """A complete, made-up prod config with its paths under ``folder``, as a
+    freshly started process would load it. Nothing here is a real secret."""
+    monkeypatch.setenv("GYM_ENVIRONMENT", "prod")
+    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", TUNNEL_HOST)
+    monkeypatch.setenv("GYM_SECRET_KEY", "x" * 40)
+    monkeypatch.setenv("GYM_BACKUP_PASSWORD", "not-a-real-backup-password-" + "x" * 8)
+    monkeypatch.setenv("GYM_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("GYM_SMTP_USER", "gym@example.com")
+    monkeypatch.setenv("GYM_SMTP_PASSWORD", "not-a-real-password")
+    monkeypatch.setenv("GYM_DATABASE_PATH", str(folder / "gym.db"))
+    monkeypatch.setenv("GYM_REPORTS_DIR", str(folder / "reports"))
+    monkeypatch.setenv("GYM_BACKUPS_DIR", str(folder / "backups"))
+    get_settings.cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def no_scheduled_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
     """The admin app starts the report job's thread at startup; in tests it

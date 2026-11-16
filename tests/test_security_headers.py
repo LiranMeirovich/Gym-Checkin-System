@@ -14,26 +14,13 @@ from app.core.http import (
 )
 from app.core.spa import serve_frontend
 from app.public.main import app as public_app
+from tests.conftest import use_prod
 
 ORIGIN = "http://127.0.0.1:8000"
 
 both_apps = pytest.mark.parametrize(
     "app", [admin_app, public_app], ids=["admin", "public"]
 )
-
-
-def use_prod(monkeypatch: pytest.MonkeyPatch, folder: Path) -> None:
-    """A complete, made-up prod config."""
-    monkeypatch.setenv("GYM_ENVIRONMENT", "prod")
-    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", "checkin.example.com")
-    monkeypatch.setenv("GYM_SECRET_KEY", "x" * 40)
-    monkeypatch.setenv("GYM_BACKUP_PASSWORD", "not-a-real-backup-password-" + "x" * 8)
-    monkeypatch.setenv("GYM_SMTP_HOST", "smtp.example.com")
-    monkeypatch.setenv("GYM_SMTP_USER", "gym@example.com")
-    monkeypatch.setenv("GYM_SMTP_PASSWORD", "not-a-real-password")
-    monkeypatch.setenv("GYM_DATABASE_PATH", str(folder / "gym.db"))
-    monkeypatch.setenv("GYM_REPORTS_DIR", str(folder / "reports"))
-    monkeypatch.setenv("GYM_BACKUPS_DIR", str(folder / "backups"))
 
 
 def assert_security_headers(headers: dict[str, str] | object) -> None:

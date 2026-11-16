@@ -1,7 +1,7 @@
 """HTTP plumbing both apps share: the ``/api`` prefix, the base of every API
 answer, ``no-store`` on every API answer, the security headers on every
-answer, refusing requests that arrive off 127.0.0.1, the same-origin check
-on every unsafe request, reading an image sent as a data URL, the
+answer, refusing requests that arrive off 127.0.0.1, the public hostname
+and docs checks in prod, the same-origin check on every unsafe request, reading an image sent as a data URL, the
 date-of-birth field type, and keeping query strings out of the access log.
 
 Here rather than in ``app.admin`` so the public app, the one reachable
@@ -18,6 +18,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict
 from starlette.datastructures import MutableHeaders
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -203,6 +204,59 @@ def _arrived_locally(scope: Scope) -> bool:
     except ValueError:
         # Not an address at all; uvicorn always gives one.
         return False
+
+
+class PublicHostMiddleware:
+    """In prod, refuses (400) a request to the public app whose ``Host``
+    isn't the tunnel's hostname (``GYM_PUBLIC_HOSTNAME``), or ``127.0.0.1``
+    / ``localhost`` for a check on the server itself (decision 0050).
+
+    cloudflared passes the phone's ``Host`` on, so a real request names the
+    gym's hostname; anything else didn't come through the tunnel. Starlette's
+    ``TrustedHostMiddleware`` does the check, built per request from the
+    settings, since the app is imported (for the OpenAPI export, in tests)
+    before any settings are loaded. Dev answers to any name.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        settings = get_settings()
+        if scope["type"] not in ("http", "websocket") or settings.environment != "prod":
+            await self.app(scope, receive, send)
+            return
+        check = TrustedHostMiddleware(
+            self.app,
+            allowed_hosts=[str(settings.public_hostname), "127.0.0.1", "localhost"],
+            www_redirect=False,
+        )
+        await check(scope, receive, send)
+
+
+# FastAPI's generated API docs and the spec they read.
+DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"})
+
+
+class DocsOnlyInDevMiddleware:
+    """In prod, answers FastAPI's API docs with a 404 (decision 0050): once
+    the admin app is reachable remotely they would show its whole route map
+    to anyone, logged in or not. The spec is still built in-process for the
+    frontend's types (``app.export_openapi``)."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] == "http"
+            and scope["path"] in DOCS_PATHS
+            and get_settings().environment == "prod"
+        ):
+            response = PlainTextResponse("Not Found", status_code=404)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 class SameOriginMiddleware:

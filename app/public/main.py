@@ -12,6 +12,7 @@ from app.core.http import (
     API_PREFIX,
     LocalOnlyMiddleware,
     NoStoreMiddleware,
+    PublicHostMiddleware,
     SameOriginMiddleware,
     SecurityHeadersMiddleware,
 )
@@ -33,8 +34,11 @@ app = FastAPI(
 )
 app.add_middleware(NoStoreMiddleware)
 # Without it, another website could post a link form from the customer's
-# own phone. The tunnel hostname check waits on hosting (decision 0028).
+# own phone.
 app.add_middleware(SameOriginMiddleware)
+# In prod, only the tunnel's hostname: checked before the Origin is compared
+# with it.
+app.add_middleware(PublicHostMiddleware)
 # Only cloudflared, on 127.0.0.1, may reach it, even if started on 0.0.0.0.
 app.add_middleware(LocalOnlyMiddleware)
 # Last, so it wraps the others and their refusals get the headers too.
