@@ -106,6 +106,10 @@ def test_the_reports_go_in_but_not_one_being_written(
             "reports/report-2026-10.xlsx",
         ]
         assert archive.read("reports/report-2026-10.pdf") == b"made-up pdf"
+        # The encrypted database doesn't compress: stored as it is.
+        assert archive.getinfo("gym.db").compress_type == pyzipper.ZIP_STORED
+        info = archive.getinfo("reports/report-2026-10.pdf")
+        assert info.compress_type == pyzipper.ZIP_DEFLATED
 
 
 @pytest.mark.usefixtures("migrated_db")
@@ -219,13 +223,13 @@ def test_saved_reads_backups_from_their_names_oldest_first() -> None:
 
     assert [backup.path for backup in found] == [older, newer]
     assert found[1].made_at == local(2026, 11, 16, 9, 2)
-    assert backups.latest() == found[1]
+    assert backups.latest(local(2026, 11, 16, 10, 0)) == found[1]
 
 
 @pytest.mark.usefixtures("dev")
 def test_no_folder_means_no_backups() -> None:
     assert backups.saved() == []
-    assert backups.latest() is None
+    assert backups.latest(local(2026, 11, 16, 10, 0)) is None
 
 
 @pytest.mark.usefixtures("dev")
@@ -259,7 +263,7 @@ def test_the_evening_backup_is_due_from_22_local(
 
 
 @pytest.mark.usefixtures("dev")
-def test_the_30_newest_and_the_newest_of_each_month_are_kept() -> None:
+def test_the_last_30_days_and_the_newest_of_each_month_are_kept() -> None:
     # One every evening from 25 September to 15 November.
     first = local(2026, 9, 25, 22, 0)
     days = (local(2026, 11, 15, 22, 0) - first).days + 1
@@ -268,7 +272,7 @@ def test_the_30_newest_and_the_newest_of_each_month_are_kept() -> None:
 
     deleted = backups.prune()
 
-    newest_30 = paths[-30:]  # 17 October to 15 November
+    newest_30 = paths[-30:]  # the days 17 October to 15 November
     end_of_september = paths[5]  # 30 September, the last of its month
     kept = [end_of_september, *newest_30]
     assert sorted(deleted) == sorted(set(paths) - set(kept))
@@ -318,3 +322,38 @@ def test_a_backup_is_overdue_after_2_days(now: tuple[int, ...], overdue: bool) -
 @pytest.mark.usefixtures("backup_password")
 def test_status_says_backups_are_set_up() -> None:
     assert backups.status(local(2026, 11, 16, 10, 0)).configured
+
+
+@pytest.mark.usefixtures("dev")
+def test_a_restart_loop_doesnt_push_out_the_days_before() -> None:
+    # One every evening in October, then 40 restarts on the 31st.
+    first = local(2026, 10, 1, 22, 0)
+    days = saved_at(*(first + timedelta(days=n) for n in range(30)))
+    restarts = saved_at(
+        *(local(2026, 10, 31, 9, 0) + timedelta(minutes=n) for n in range(40))
+    )
+
+    backups.prune()
+
+    # The newest of each of the last 30 days: 2 to 31 October. 1 October
+    # isn't one of them, nor the newest of its month.
+    assert [backup.path for backup in backups.saved()] == [*days[1:], restarts[-1]]
+
+
+@pytest.mark.usefixtures("dev")
+def test_a_backup_dated_in_the_future_doesnt_count() -> None:
+    # The clock was a year ahead at boot, then fixed.
+    future = saved_at(local(2027, 11, 16, 9, 0))
+    now = local(2026, 11, 16, 23, 0)
+
+    assert backups.latest(now) is None
+    assert backups.is_due(now)
+    current = backups.status(now)
+    assert current.overdue
+    assert current.last_backup_at is None
+
+    # A real backup since: that one counts.
+    saved_at(local(2026, 11, 16, 22, 30))
+    assert not backups.is_due(now)
+    assert not backups.status(now).overdue
+    assert future[0].exists()

@@ -1,6 +1,7 @@
 """Restoring a backup: the round trip, every refusal leaving things as they
 were, and the replaced files kept aside (app/restore_backup.py)."""
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -238,3 +239,64 @@ def test_the_command_says_nothing_changed_when_refused(
 
     with pytest.raises(SystemExit, match="Nothing was changed"):
         restore_backup.main()
+
+
+@pytest.mark.usefixtures("backup_password")
+def test_a_backslash_in_a_report_name_is_refused(backup_password: bytes) -> None:
+    backup = backups.make()
+    stop_the_apps()
+    # A backslash separates folders on Windows.
+    with pyzipper.AESZipFile(backup, "a", encryption=pyzipper.WZ_AES) as archive:
+        archive.setpassword(backup_password)
+        archive.writestr(r"reports/a\..\..\evil.txt", b"made up")
+
+    refused(backup, backup_password, "unexpected file")
+
+
+@pytest.mark.usefixtures("backup_password")
+def test_an_unreadable_database_is_set_aside_with_its_wal(
+    backup_password: bytes,
+) -> None:
+    mark("in the backup")
+    backup = backups.make()
+    stop_the_apps()
+    # The current database is broken, and left a WAL beside it.
+    Path("gym.db").write_bytes(b"broken" * 100)
+    Path("gym.db-wal").write_bytes(b"a WAL from the broken database")
+    Path("gym.db-shm").write_bytes(b"its index")
+
+    restored = restore(backup, backup_password)
+
+    assert not Path("gym.db-wal").exists()
+    assert not Path("gym.db-shm").exists()
+    assert marks() == ["in the backup"]
+    assert restored.kept_database is not None
+    kept_wal = restored.kept_database.with_name(restored.kept_database.name + "-wal")
+    assert kept_wal.read_bytes() == b"a WAL from the broken database"
+
+
+@pytest.mark.usefixtures("backup_password")
+def test_a_failed_swap_puts_everything_back(
+    backup_password: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mark("in the backup")
+    backup = backups.make()
+    mark("after the backup")
+    Path("reports").mkdir()
+    (Path("reports") / "report-2026-11.pdf").write_bytes(b"made-up November")
+    stop_the_apps()
+    real_move = shutil.move
+
+    def move(source: Path, target: Path) -> object:
+        if Path(target).name == "reports":
+            raise OSError("the disk is full")
+        return real_move(source, target)
+
+    monkeypatch.setattr(shutil, "move", move)
+
+    with pytest.raises(OSError, match="disk is full"):
+        restore(backup, backup_password)
+
+    assert marks() == ["in the backup", "after the backup"]
+    assert folder_files(Path("reports")) == {"report-2026-11.pdf": b"made-up November"}
+    assert not list(Path().glob("*before-restore*"))

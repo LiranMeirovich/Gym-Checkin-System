@@ -12,7 +12,8 @@ every file in it matches its checksum, its database opens with the key and
 passes SQLite's (and SQLCipher's) integrity checks, and this version of the
 code knows its migration. Only then are the files swapped:
 
-- the current database is renamed to ``<name>.before-restore-<time>``,
+- the current database is renamed to ``<name>.before-restore-<time>``
+  (with its ``-wal`` and ``-shm`` files, if any),
 - the current reports folder to ``<folder>.before-restore-<time>``,
 - and the backup's database and reports take their places.
 
@@ -26,6 +27,7 @@ the one being replaced, and no app is running.
 """
 
 import getpass
+import re
 import shutil
 import sys
 from dataclasses import dataclass
@@ -45,6 +47,13 @@ from app.core.startup import ALEMBIC_INI, DatabaseNotReadyError, check_database_
 # Where the backup is unpacked before the swap, next to the database.
 WORK_SUFFIX = ".restoring"
 KEPT_INFIX = ".before-restore-"
+
+# SQLite's side files beside a database in WAL mode. Kept with it: a WAL
+# left beside the restored file would be replayed into it.
+SIDE_SUFFIXES = ("-wal", "-shm")
+
+# What a report's file name inside a backup may look like.
+_PLAIN_NAME = re.compile(r"[\w.-]+")
 
 
 class RestoreRefusedError(RuntimeError):
@@ -105,16 +114,39 @@ def restore(
         restored_reports = work / backups.REPORTS_FOLDER
         _unpack(backup, password, restored_database, restored_reports)
         _check_database(restored_database, key, manifest.migration)
-        if database.exists():
-            _refuse_if_in_use(database, key)
-        _swap(database, restored_database, kept_database)
+        sides = [
+            (
+                database.with_name(database.name + suffix),
+                kept_database.with_name(kept_database.name + suffix),
+            )
+            for suffix in SIDE_SUFFIXES
+        ]
+        # Copied before the in-use check opens the database: SQLite deletes
+        # the side files of a database it can't read (a wrong key, a damaged
+        # file), and its WAL may hold the last changes.
+        copied = []
         try:
-            _swap(reports, restored_reports, kept_reports)
+            for side, kept_side in sides:
+                if side.exists():
+                    shutil.copy2(side, kept_side)
+                    copied.append((side, kept_side))
+            if database.exists():
+                _refuse_if_in_use(database, key)
+            # Never beside the restored file, where it would be replayed.
+            for side, _ in sides:
+                side.unlink(missing_ok=True)
+            _swap(
+                [(database, kept_database), (reports, kept_reports)],
+                [(restored_database, database), (restored_reports, reports)],
+            )
         except BaseException:
-            # Put the database back too: never half a restore.
-            database.unlink(missing_ok=True)
-            if kept_database.exists():
-                kept_database.rename(database)
+            # Put the side files back where they were (the swap already put
+            # the database back), or drop the copies if they're still there.
+            for side, kept_side in copied:
+                if side.exists():
+                    kept_side.unlink()
+                else:
+                    kept_side.rename(side)
             raise
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -138,7 +170,9 @@ def _unpack(backup: Path, password: bytes, database: Path, reports: Path) -> Non
                 target = database
             elif name.startswith(f"{backups.REPORTS_FOLDER}/"):
                 file_name = name.removeprefix(f"{backups.REPORTS_FOLDER}/")
-                if not file_name or "/" in file_name or file_name.startswith("."):
+                # A plain file name only (report-2026-10.xlsx): no "/" or
+                # "\" (a separator on Windows), no ":" (a drive), no "..".
+                if not _PLAIN_NAME.fullmatch(file_name) or file_name.startswith("."):
                     raise RestoreRefusedError(f"unexpected file in the backup: {name}")
                 target = reports / file_name
             elif name == backups.MANIFEST_NAME:
@@ -203,17 +237,29 @@ def _refuse_if_in_use(path: Path, key: str | None) -> None:
         )
 
 
-def _swap(current: Path, restored: Path, kept: Path) -> None:
-    """Move ``current`` (if any) to ``kept``, then ``restored`` into its
-    place; if the second move fails, put ``current`` back."""
-    if current.exists():
-        current.rename(kept)
+def _swap(set_aside: list[tuple[Path, Path]], put_in: list[tuple[Path, Path]]) -> None:
+    """Move each existing ``(current, kept)`` aside, then each
+    ``(restored, current)`` into place. If any move fails, everything is
+    undone: never half a restore."""
+    moved: list[tuple[Path, Path]] = []
+    placed: list[Path] = []
     try:
-        # A move, not a rename: the reports folder may be on another disk
-        # than the database, where the backup was unpacked.
-        shutil.move(restored, current)
+        for current, kept in set_aside:
+            if current.exists():
+                current.rename(kept)
+                moved.append((current, kept))
+        for restored, current in put_in:
+            # A move, not a rename: the reports folder may be on another
+            # disk than the database, where the backup was unpacked.
+            shutil.move(restored, current)
+            placed.append(current)
     except BaseException:
-        if kept.exists():
+        for current in placed:
+            if current.is_dir():
+                shutil.rmtree(current)
+            else:
+                current.unlink()
+        for current, kept in reversed(moved):
             kept.rename(current)
         raise
 

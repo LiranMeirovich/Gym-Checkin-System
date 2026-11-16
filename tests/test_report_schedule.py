@@ -392,14 +392,13 @@ def backup_names() -> list[str]:
 @pytest.mark.usefixtures("backups_on")
 def test_a_backup_is_made_at_every_startup(clock: Clock) -> None:
     report_schedule.back_up_if_due(at_startup=True)
+    assert backup_names() == ["gym-backup-2026-12-01-000500.zip"]
+
+    # A restart a minute later backs up again, though one was just made
+    # (and only the day's newest is kept).
     clock.now += timedelta(minutes=1)
     report_schedule.back_up_if_due(at_startup=True)
-
-    # 00:05 and 00:06 on 1 December, Israel time.
-    assert backup_names() == [
-        "gym-backup-2026-12-01-000500.zip",
-        "gym-backup-2026-12-01-000600.zip",
-    ]
+    assert backup_names() == ["gym-backup-2026-12-01-000600.zip"]
 
 
 @pytest.mark.usefixtures("backups_on")
@@ -416,22 +415,20 @@ def test_the_evening_backup_is_made_once_from_22(clock: Clock) -> None:
     clock.now = datetime(2026, 12, 1, 21, 30, tzinfo=UTC)
     report_schedule.back_up_if_due(at_startup=False)
 
-    assert backup_names() == [
-        "gym-backup-2026-12-01-000500.zip",
-        "gym-backup-2026-12-01-223000.zip",
-    ]
+    # One evening backup, at the first run after 22:00 (the morning's is
+    # the same day's, so only this newest one is kept).
+    assert backup_names() == ["gym-backup-2026-12-01-223000.zip"]
 
 
 @pytest.mark.usefixtures("backups_on")
 def test_old_backups_are_deleted_after_a_backup(
-    monkeypatch: pytest.MonkeyPatch, clock: Clock
+    clock: Clock,
 ) -> None:
-    monkeypatch.setattr(backups, "KEEP_NEWEST", 1)
     report_schedule.back_up_if_due(at_startup=True)
     clock.now += timedelta(minutes=1)
     report_schedule.back_up_if_due(at_startup=True)
 
-    # Both in December: the newest is the one kept.
+    # Both on 1 December: the day's newest is the one kept.
     assert backup_names() == ["gym-backup-2026-12-01-000600.zip"]
 
 
@@ -439,7 +436,6 @@ def test_old_backups_are_deleted_after_a_backup(
 def test_a_failed_backup_is_logged_and_deletes_nothing(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, clock: Clock
 ) -> None:
-    monkeypatch.setattr(backups, "KEEP_NEWEST", 1)
     report_schedule.back_up_if_due(at_startup=True)
     kept = backup_names()
 

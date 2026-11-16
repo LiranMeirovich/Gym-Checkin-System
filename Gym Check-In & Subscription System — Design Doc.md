@@ -331,7 +331,7 @@ Decision 0049 has the details.
 1. On every admin app startup, and in the scheduled job's first hourly run at or after 22:00, the app makes a consistent copy of `gym.db` using SQLite's backup API (not a plain file copy while in use). The copy stays encrypted with the database key.
 2. The copy, the `reports/` folder and a small manifest go into a zip encrypted with the backup password (`GYM_BACKUP_PASSWORD`, AES-256), named `gym-backup-2026-10-07-220714.zip` (local date and time). It's checked before it gets that name.
 3. It's written to the backups folder (`GYM_BACKUPS_DIR`); an off-site copy (e.g. `rclone` to a cloud drive) is set up on the server (decision 0046).
-4. The app keeps the 30 newest backups plus the newest of each month, and deletes the rest.
+4. The app keeps the newest backup of each of the last 30 days that have one, plus the newest of each month, and deletes the rest.
 5. The dashboard shows "Last backup: 16.11.2026 09:02" to the owner and managers, and turns red if no backup succeeded in 2 days.
 
 **Keys to keep off the PC** (printed in the manager's office or in a password manager)

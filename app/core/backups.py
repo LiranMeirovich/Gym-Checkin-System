@@ -28,7 +28,7 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 import pyzipper
@@ -59,9 +59,12 @@ _NAME = re.compile(
     re.escape(FILE_PREFIX) + r"(\d{4}-\d{2}-\d{2}-\d{6})" + re.escape(FILE_SUFFIX)
 )
 
-# Keeping old backups: the newest KEEP_NEWEST, plus the newest of every
-# calendar month (local time), for good. Everything else is deleted.
-KEEP_NEWEST = 30
+# Keeping old backups: the newest of each of the KEEP_DAYS most recent days
+# that have one, plus the newest of every calendar month (both local time),
+# for good. Everything else is deleted. By day, not "the 30 newest", so an
+# app restarted over and over (a backup each start) can't push out the
+# days before it.
+KEEP_DAYS = 30
 
 # Besides one at every startup, a backup is due once a day from this local
 # time on (the job checks hourly, so it's made within the hour after).
@@ -196,9 +199,13 @@ def saved() -> list[SavedBackup]:
     return sorted(found, key=lambda backup: backup.made_at)
 
 
-def latest() -> SavedBackup | None:
-    """The newest backup, or None if there's none yet."""
-    found = saved()
+def latest(now: datetime) -> SavedBackup | None:
+    """The newest backup made by ``now``, or None if there's none yet.
+
+    A backup dated after ``now`` doesn't count: its name came from a clock
+    that was ahead (say, at boot before the time synced). Counted, it would
+    stop the evening backups and keep the card green until that date."""
+    found = [backup for backup in saved() if backup.made_at <= now]
     return found[-1] if found else None
 
 
@@ -215,7 +222,7 @@ class BackupStatus:
 
 def status(now: datetime) -> BackupStatus:
     """Where backups stand at ``now``."""
-    newest = latest()
+    newest = latest(now)
     made_at = newest.made_at if newest else None
     return BackupStatus(
         configured=get_settings().makes_backups,
@@ -227,7 +234,7 @@ def status(now: datetime) -> BackupStatus:
 def is_due(now: datetime) -> bool:
     """Whether the evening's backup is due at ``now``: no backup was made
     since the most recent ``DAILY_AT`` (local time)."""
-    newest = latest()
+    newest = latest(now)
     if newest is None:
         return True
     local_now = to_local(now)
@@ -239,15 +246,19 @@ def is_due(now: datetime) -> bool:
 
 
 def prune() -> list[Path]:
-    """Delete the backups that aren't kept: all but the newest
-    ``KEEP_NEWEST`` and the newest of each calendar month. Returns what was
-    deleted. Files that aren't backups are left alone."""
+    """Delete the backups that aren't kept: all but the newest of each of
+    the ``KEEP_DAYS`` most recent days that have one, and the newest of each
+    calendar month. Returns what was deleted. Files that aren't backups are
+    left alone."""
     found = saved()
-    keep = {backup.path for backup in found[-KEEP_NEWEST:]}
+    newest_of_day: dict[date, Path] = {}
     newest_of_month: dict[tuple[int, int], Path] = {}
-    for backup in found:  # oldest first, so the newest of each month wins
+    for backup in found:  # oldest first, so the newest of each wins
         local = to_local(backup.made_at)
+        newest_of_day[local.date()] = backup.path
         newest_of_month[(local.year, local.month)] = backup.path
+    recent_days = sorted(newest_of_day)[-KEEP_DAYS:]
+    keep = {newest_of_day[day] for day in recent_days}
     keep |= set(newest_of_month.values())
     deleted = []
     for backup in found:
@@ -317,7 +328,15 @@ def _write_zip(
     ) as backup:
         backup.setpassword(password)
         backup.setencryption(pyzipper.WZ_AES, nbits=256)
-        backup.write(database, DATABASE_NAME)
+        # An encrypted database doesn't compress: stored as it is, which
+        # saves running deflate over the whole file for nothing.
+        backup.write(
+            database,
+            DATABASE_NAME,
+            compress_type=(
+                pyzipper.ZIP_STORED if manifest.encrypted else pyzipper.ZIP_DEFLATED
+            ),
+        )
         if reports.is_dir():
             for report in sorted(reports.iterdir()):
                 # A report being written right now is a .partial file
