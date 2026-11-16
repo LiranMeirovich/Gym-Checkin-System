@@ -77,6 +77,20 @@ class Settings(BaseSettings):
     # directory the app is started from. Created when the first report is.
     reports_dir: Path = Path("reports")
 
+    # Folder the encrypted backups are written to (gym-backup-...zip), and
+    # the folder the server's off-site copy reads from. Relative paths are
+    # resolved against the working directory the app is started from.
+    # Created when the first backup is.
+    backups_dir: Path = Path("backups")
+
+    # Encrypts every backup (AES-256 zip). Zip's own key stretching is weak
+    # (1,000 rounds), so the password itself must be long and random: at
+    # least 32 characters. Generate one with
+    #   uv run python -c "import secrets; print(secrets.token_urlsafe(32))"
+    # Required in prod. In dev, without one, no backups are made. Losing it
+    # makes every backup useless: keep a copy off the machine.
+    backup_password: SecretStr | None = Field(default=None, min_length=32)
+
     # IANA timezone for showing times (all timestamps are stored in UTC).
     timezone: str = "Asia/Jerusalem"
 
@@ -197,6 +211,7 @@ class Settings(BaseSettings):
                 "public_hostname",
                 "secret_key",
                 "database_key",
+                "backup_password",
                 "smtp_host",
                 "smtp_user",
                 "smtp_password",
@@ -216,6 +231,12 @@ class Settings(BaseSettings):
     def sends_email(self) -> bool:
         """Whether emails go through SMTP (otherwise to the dev outbox)."""
         return self.smtp_host is not None
+
+    @property
+    def makes_backups(self) -> bool:
+        """Whether backups are made (always in prod; in dev only with a
+        backup password)."""
+        return self.backup_password is not None
 
     @property
     def database_key_hex(self) -> str | None:
