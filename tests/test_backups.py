@@ -1,8 +1,10 @@
-"""Encrypted backups: what goes in, that it's encrypted, and that a failed
-backup leaves nothing behind (app/core/backups.py)."""
+"""Encrypted backups: what goes in, that it's encrypted, that a failed
+backup leaves nothing behind, when one is due and which are kept
+(app/core/backups.py)."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 import pyzipper
@@ -172,3 +174,112 @@ def test_a_missing_database_is_refused(backup_password: bytes) -> None:
     with pytest.raises(BackupError, match="no database"):
         backups.make()
     assert list(Path("backups").iterdir()) == []
+
+
+# --- Which backups exist, when one is due, which are kept ---------------
+
+ISRAEL = ZoneInfo("Asia/Jerusalem")
+
+
+@pytest.fixture
+def dev(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
+    get_settings.cache_clear()
+
+
+def local(*args: int) -> datetime:
+    """A moment given in Israel time, as UTC."""
+    return datetime(*args, tzinfo=ISRAEL).astimezone(UTC)
+
+
+def saved_at(*moments: datetime) -> list[Path]:
+    """Empty files named like backups made at ``moments``."""
+    folder = Path("backups")
+    folder.mkdir(exist_ok=True)
+    paths = []
+    for moment in moments:
+        path = folder / backups.file_name(moment)
+        path.write_bytes(b"made-up backup")
+        paths.append(path)
+    return paths
+
+
+@pytest.mark.usefixtures("dev")
+def test_saved_reads_backups_from_their_names_oldest_first() -> None:
+    newer, older = saved_at(local(2026, 11, 16, 9, 2), local(2026, 11, 15, 22, 7))
+    for other in (
+        "notes.txt",
+        "gym-backup-2026-11-16-090200.zip.partial",
+        "gym-backup-2026-13-01-000000.zip",
+        "gym-backup-2026-11-16.zip",
+    ):
+        (Path("backups") / other).write_bytes(b"")
+
+    found = backups.saved()
+
+    assert [backup.path for backup in found] == [older, newer]
+    assert found[1].made_at == local(2026, 11, 16, 9, 2)
+    assert backups.latest() == found[1]
+
+
+@pytest.mark.usefixtures("dev")
+def test_no_folder_means_no_backups() -> None:
+    assert backups.saved() == []
+    assert backups.latest() is None
+
+
+@pytest.mark.usefixtures("dev")
+def test_a_backup_is_due_when_there_is_none() -> None:
+    assert backups.is_due(local(2026, 11, 16, 10, 0))
+
+
+@pytest.mark.usefixtures("dev")
+@pytest.mark.parametrize(
+    ("made", "now", "due"),
+    [
+        # Made this evening: not due again until tomorrow's 22:00.
+        ((2026, 11, 16, 22, 5), (2026, 11, 16, 23, 0), False),
+        ((2026, 11, 16, 22, 5), (2026, 11, 17, 21, 59), False),
+        ((2026, 11, 16, 22, 5), (2026, 11, 17, 22, 0), True),
+        # A startup backup in the morning doesn't stand in for the evening's.
+        ((2026, 11, 16, 9, 0), (2026, 11, 16, 21, 59), False),
+        ((2026, 11, 16, 9, 0), (2026, 11, 16, 22, 0), True),
+        # Made last night after 22:00, checked the next afternoon.
+        ((2026, 11, 15, 22, 30), (2026, 11, 16, 15, 0), False),
+        # Off for days: due at once.
+        ((2026, 11, 10, 22, 30), (2026, 11, 16, 9, 0), True),
+    ],
+)
+def test_the_evening_backup_is_due_from_22_local(
+    made: tuple[int, ...], now: tuple[int, ...], due: bool
+) -> None:
+    saved_at(local(*made))
+
+    assert backups.is_due(local(*now)) is due
+
+
+@pytest.mark.usefixtures("dev")
+def test_the_30_newest_and_the_newest_of_each_month_are_kept() -> None:
+    # One every evening from 25 September to 15 November.
+    first = local(2026, 9, 25, 22, 0)
+    days = (local(2026, 11, 15, 22, 0) - first).days + 1
+    paths = saved_at(*(first + timedelta(days=n) for n in range(days)))
+    (Path("backups") / "notes.txt").write_bytes(b"not a backup")
+
+    deleted = backups.prune()
+
+    newest_30 = paths[-30:]  # 17 October to 15 November
+    end_of_september = paths[5]  # 30 September, the last of its month
+    kept = [end_of_september, *newest_30]
+    assert sorted(deleted) == sorted(set(paths) - set(kept))
+    assert [backup.path for backup in backups.saved()] == kept
+    assert (Path("backups") / "notes.txt").exists()
+
+
+@pytest.mark.usefixtures("dev")
+def test_nothing_is_deleted_with_30_or_fewer() -> None:
+    first = local(2026, 10, 1, 22, 0)
+    saved_at(*(first + timedelta(days=n) for n in range(30)))
+
+    assert backups.prune() == []
+    assert len(backups.saved()) == 30

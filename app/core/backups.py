@@ -24,10 +24,11 @@ Nothing here is logged in the activity log: no staff member makes a backup.
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
 import pyzipper
@@ -52,6 +53,19 @@ FILE_SUFFIX = ".zip"
 # Local time, to the second: a backup at startup and the evening's can fall
 # in the same day, and two restarts in the same minute shouldn't collide.
 TIME_FORMAT = "%Y-%m-%d-%H%M%S"
+# What a backup's name looks like; anything else in the folder is ignored
+# (and never deleted).
+_NAME = re.compile(
+    re.escape(FILE_PREFIX) + r"(\d{4}-\d{2}-\d{2}-\d{6})" + re.escape(FILE_SUFFIX)
+)
+
+# Keeping old backups: the newest KEEP_NEWEST, plus the newest of every
+# calendar month (local time), for good. Everything else is deleted.
+KEEP_NEWEST = 30
+
+# Besides one at every startup, a backup is due once a day from this local
+# time on (the job checks hourly, so it's made within the hour after).
+DAILY_AT = time(22, 0)
 
 # Left behind only if the process dies mid-backup; never a real backup.
 PARTIAL_SUFFIX = ".partial"
@@ -149,6 +163,75 @@ def read_manifest(
         migration=data["migration"],
         encrypted=data["encrypted"],
     )
+
+
+@dataclass(frozen=True)
+class SavedBackup:
+    """A backup in the backups folder, known by its file name."""
+
+    path: Path
+    made_at: datetime  # UTC
+
+
+def saved() -> list[SavedBackup]:
+    """The backups in the backups folder, oldest first, read from their file
+    names (the files aren't opened)."""
+    folder = get_settings().backups_dir
+    if not folder.is_dir():
+        return []
+    found = []
+    for path in folder.iterdir():
+        match = _NAME.fullmatch(path.name)
+        if match is None or not path.is_file():
+            continue
+        try:
+            local = datetime.strptime(match[1], TIME_FORMAT)
+        except ValueError:  # e.g. a 13th month
+            continue
+        made_at = local.replace(tzinfo=get_settings().tz).astimezone(UTC)
+        found.append(SavedBackup(path=path, made_at=made_at))
+    return sorted(found, key=lambda backup: backup.made_at)
+
+
+def latest() -> SavedBackup | None:
+    """The newest backup, or None if there's none yet."""
+    found = saved()
+    return found[-1] if found else None
+
+
+def is_due(now: datetime) -> bool:
+    """Whether the evening's backup is due at ``now``: no backup was made
+    since the most recent ``DAILY_AT`` (local time)."""
+    newest = latest()
+    if newest is None:
+        return True
+    local_now = to_local(now)
+    day = local_now.date()
+    if local_now.time() < DAILY_AT:
+        day -= timedelta(days=1)
+    last_due = datetime.combine(day, DAILY_AT, tzinfo=get_settings().tz)
+    return newest.made_at < last_due
+
+
+def prune() -> list[Path]:
+    """Delete the backups that aren't kept: all but the newest
+    ``KEEP_NEWEST`` and the newest of each calendar month. Returns what was
+    deleted. Files that aren't backups are left alone."""
+    found = saved()
+    keep = {backup.path for backup in found[-KEEP_NEWEST:]}
+    newest_of_month: dict[tuple[int, int], Path] = {}
+    for backup in found:  # oldest first, so the newest of each month wins
+        local = to_local(backup.made_at)
+        newest_of_month[(local.year, local.month)] = backup.path
+    keep |= set(newest_of_month.values())
+    deleted = []
+    for backup in found:
+        if backup.path not in keep:
+            backup.path.unlink()
+            deleted.append(backup.path)
+    if deleted:
+        logger.info("old backups deleted: %d", len(deleted))
+    return deleted
 
 
 def _copy_database(source: Path, copy: Path, key: str | None) -> str | None:
