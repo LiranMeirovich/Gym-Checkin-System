@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from app.core.branding import BRANDING_DIR, serve_logo
 from app.core.http import (
     API_PREFIX,
+    LocalOnlyMiddleware,
     NoStoreMiddleware,
     SameOriginMiddleware,
     SecurityHeadersMiddleware,
@@ -34,6 +35,8 @@ app.add_middleware(NoStoreMiddleware)
 # Without it, another website could post a link form from the customer's
 # own phone. The tunnel hostname check waits on hosting (decision 0028).
 app.add_middleware(SameOriginMiddleware)
+# Only cloudflared, on 127.0.0.1, may reach it, even if started on 0.0.0.0.
+app.add_middleware(LocalOnlyMiddleware)
 # Last, so it wraps the others and their refusals get the headers too.
 app.add_middleware(SecurityHeadersMiddleware)
 app.include_router(api_branding.router, prefix=API_PREFIX)

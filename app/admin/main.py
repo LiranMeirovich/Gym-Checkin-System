@@ -28,6 +28,7 @@ from app.core import report_schedule
 from app.core.branding import BRANDING_DIR, serve_logo
 from app.core.http import (
     API_PREFIX,
+    LocalOnlyMiddleware,
     NoStoreMiddleware,
     SameOriginMiddleware,
     SecurityHeadersMiddleware,
@@ -62,6 +63,7 @@ app = FastAPI(title="Gym admin", lifespan=admin_lifespan)
 app.add_middleware(NoStoreMiddleware)
 app.add_middleware(SameOriginMiddleware)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
+app.add_middleware(LocalOnlyMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 security.install(app)
 app.include_router(api_branding.router, prefix=API_PREFIX)

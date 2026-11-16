@@ -1,8 +1,8 @@
 """HTTP plumbing both apps share: the ``/api`` prefix, the base of every API
 answer, ``no-store`` on every API answer, the security headers on every
-answer, the same-origin check on every
-unsafe request, reading an image sent as a data URL, the date-of-birth
-field type, and keeping query strings out of the access log.
+answer, refusing requests that arrive off 127.0.0.1, the same-origin check
+on every unsafe request, reading an image sent as a data URL, the
+date-of-birth field type, and keeping query strings out of the access log.
 
 Here rather than in ``app.admin`` so the public app, the one reachable
 from the internet, never imports admin code.
@@ -10,6 +10,7 @@ from the internet, never imports admin code.
 
 import base64
 import binascii
+import ipaddress
 import logging
 import re
 from datetime import date
@@ -156,6 +157,52 @@ class SecurityHeadersMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
+
+
+logger = logging.getLogger(__name__)
+
+
+class LocalOnlyMiddleware:
+    """Refuses (403) any request that reached the app on an address other
+    than the loopback one (decision 0050).
+
+    Both apps must listen on 127.0.0.1 only: on the server, ``cloudflared``
+    connects to them there, and nothing else should reach them. Nothing
+    stops uvicorn being started with ``--host 0.0.0.0``, and the app can't
+    see which address it was bound to, so this checks each request instead:
+    ``scope["server"]`` is the local address the connection arrived on
+    (not the client's), so a request over the gym's network or the
+    internet is refused even then, and each refusal logs an error naming
+    that address. A Unix socket has no address and only local processes
+    can use it, so it passes.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in ("http", "websocket") and not _arrived_locally(scope):
+            server = scope.get("server")
+            logger.error(
+                "refused a request that arrived on %s: the app must listen "
+                "on 127.0.0.1 only (uvicorn --host 127.0.0.1)",
+                server[0] if server else server,
+            )
+            response = PlainTextResponse("Served on 127.0.0.1 only", status_code=403)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+def _arrived_locally(scope: Scope) -> bool:
+    server = scope.get("server")
+    if server is None:
+        return True
+    try:
+        return ipaddress.ip_address(server[0]).is_loopback
+    except ValueError:
+        # Not an address at all; uvicorn always gives one.
+        return False
 
 
 class SameOriginMiddleware:

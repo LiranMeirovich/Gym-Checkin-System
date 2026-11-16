@@ -133,9 +133,9 @@ def test_the_admin_apps_host_refusal_gets_them(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GYM_ENVIRONMENT", "dev")
-    client = TestClient(admin_app, base_url="http://evil.example")
+    client = TestClient(admin_app, base_url=ORIGIN)
 
-    response = client.get("/health")
+    response = client.get("/health", headers={"Host": "evil.example"})
 
     assert response.status_code == 400
     assert_security_headers(response.headers)

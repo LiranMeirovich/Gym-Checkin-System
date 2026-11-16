@@ -120,8 +120,8 @@ def test_frontend_catch_all_comes_after_the_apps_own_routes(app: FastAPI) -> Non
 @pytest.mark.usefixtures("migrated_db")
 @pytest.mark.parametrize("host", ["127.0.0.1:8000", "localhost:8000"])
 def test_admin_app_answers_on_local_names(host: str) -> None:
-    with TestClient(admin_app, base_url=f"http://{host}") as client:
-        response = client.get("/health")
+    with TestClient(admin_app, base_url="http://127.0.0.1:8000") as client:
+        response = client.get("/health", headers={"Host": host})
 
     assert response.status_code == 200
 
@@ -132,8 +132,9 @@ def test_admin_app_answers_on_local_names(host: str) -> None:
 )
 def test_admin_app_refuses_other_host_names(host: str) -> None:
     # DNS rebinding: a website pointed at 127.0.0.1 still sends its own name.
-    with TestClient(admin_app, base_url=f"http://{host}") as client:
-        response = client.get("/health")
+    # The connection itself arrives on 127.0.0.1.
+    with TestClient(admin_app, base_url="http://127.0.0.1:8000") as client:
+        response = client.get("/health", headers={"Host": host})
 
     assert response.status_code == 400
 
@@ -171,11 +172,13 @@ def test_both_apps_never_cache_api_answers(app: FastAPI) -> None:
 @pytest.mark.usefixtures("migrated_db")
 def test_the_public_origin_check_matches_the_tunnels_https() -> None:
     # Behind cloudflared, uvicorn takes the scheme from X-Forwarded-Proto,
-    # so the request URL is https and matches the phone's Origin.
-    with TestClient(public_app, base_url="https://checkin.example.com") as client:
+    # so the request URL is https and matches the phone's Origin. cloudflared
+    # itself connects to 127.0.0.1, passing the phone's Host on.
+    with TestClient(public_app, base_url="https://127.0.0.1:8001") as client:
         response = client.post(
             "/health",
             headers={
+                "Host": "checkin.example.com",
                 "Origin": "https://checkin.example.com",
                 "Sec-Fetch-Site": "same-origin",
             },
