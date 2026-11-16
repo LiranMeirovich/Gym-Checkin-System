@@ -777,6 +777,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/backups/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest Backup */
+        get: operations["latest_backup_api_backups_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -836,6 +853,21 @@ export interface components {
              * @constant
              */
             error: "invalid_filter";
+        };
+        /**
+         * BackupStatusAnswer
+         * @description The dashboard's backup card: when the newest backup was made, and
+         *     whether it's overdue (none at all, or none for 2 days: the card turns
+         *     red). The time is the gym's local time. ``configured`` is false only in
+         *     dev without a backup password.
+         */
+        BackupStatusAnswer: {
+            /** Configured */
+            configured: boolean;
+            /** Last Backup At */
+            last_backup_at: string | null;
+            /** Overdue */
+            overdue: boolean;
         };
         /**
          * Branding
@@ -5011,6 +5043,42 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    latest_backup_api_backups_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupStatusAnswer"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotLoggedIn"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

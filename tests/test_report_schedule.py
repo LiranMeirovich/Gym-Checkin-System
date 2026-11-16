@@ -5,7 +5,7 @@ starts and stops its thread. Names, addresses and amounts are made up."""
 
 import threading
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,7 +13,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core import email, months, report_delivery, report_generation, report_schedule
+from app.core import (
+    backups,
+    email,
+    months,
+    report_delivery,
+    report_generation,
+    report_schedule,
+)
+from app.core.config import get_settings
 from app.core.db import get_engine
 from app.core.gym_settings import update_gym_settings
 from app.core.models import ActivityLogEntry, Report, StaffUser
@@ -359,3 +367,123 @@ def test_the_public_app_never_starts_the_job(
         pass
 
     assert calls == []
+
+
+# --- Backups ----------------------------------------------------------------------
+
+# Made up; real passwords never appear in the repo.
+BACKUP_PASSWORD = "not-a-real-backup-password-" + "x" * 8
+
+
+@pytest.fixture
+def backups_on(
+    migrated_db: Path, monkeypatch: pytest.MonkeyPatch, clock: Clock
+) -> None:
+    monkeypatch.setenv("GYM_BACKUP_PASSWORD", BACKUP_PASSWORD)
+    get_settings.cache_clear()
+    monkeypatch.setattr(report_schedule, "utc_now", clock)
+    monkeypatch.setattr(backups, "utc_now", clock)
+
+
+def backup_names() -> list[str]:
+    return [backup.path.name for backup in backups.saved()]
+
+
+@pytest.mark.usefixtures("backups_on")
+def test_a_backup_is_made_at_every_startup(clock: Clock) -> None:
+    report_schedule.back_up_if_due(at_startup=True)
+    assert backup_names() == ["gym-backup-2026-12-01-000500.zip"]
+
+    # A restart a minute later backs up again, though one was just made
+    # (and only the day's newest is kept).
+    clock.now += timedelta(minutes=1)
+    report_schedule.back_up_if_due(at_startup=True)
+    assert backup_names() == ["gym-backup-2026-12-01-000600.zip"]
+
+
+@pytest.mark.usefixtures("backups_on")
+def test_the_evening_backup_is_made_once_from_22(clock: Clock) -> None:
+    report_schedule.back_up_if_due(at_startup=True)
+
+    # Hourly runs through the day: nothing until 22:00 Israel time (20:00 UTC).
+    clock.now = datetime(2026, 12, 1, 19, 30, tzinfo=UTC)
+    report_schedule.back_up_if_due(at_startup=False)
+    assert len(backup_names()) == 1
+
+    clock.now = datetime(2026, 12, 1, 20, 30, tzinfo=UTC)
+    report_schedule.back_up_if_due(at_startup=False)
+    clock.now = datetime(2026, 12, 1, 21, 30, tzinfo=UTC)
+    report_schedule.back_up_if_due(at_startup=False)
+
+    # One evening backup, at the first run after 22:00 (the morning's is
+    # the same day's, so only this newest one is kept).
+    assert backup_names() == ["gym-backup-2026-12-01-223000.zip"]
+
+
+@pytest.mark.usefixtures("backups_on")
+def test_old_backups_are_deleted_after_a_backup(
+    clock: Clock,
+) -> None:
+    report_schedule.back_up_if_due(at_startup=True)
+    clock.now += timedelta(minutes=1)
+    report_schedule.back_up_if_due(at_startup=True)
+
+    # Both on 1 December: the day's newest is the one kept.
+    assert backup_names() == ["gym-backup-2026-12-01-000600.zip"]
+
+
+@pytest.mark.usefixtures("backups_on")
+def test_a_failed_backup_is_logged_and_deletes_nothing(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, clock: Clock
+) -> None:
+    report_schedule.back_up_if_due(at_startup=True)
+    kept = backup_names()
+
+    def broken() -> Path:
+        raise backups.BackupError("the disk is full")
+
+    monkeypatch.setattr(backups, "make", broken)
+    clock.now += timedelta(minutes=1)
+    report_schedule.back_up_if_due(at_startup=True)
+
+    assert "backup failed: the disk is full" in caplog.text
+    assert backup_names() == kept
+
+
+@pytest.mark.usefixtures("migrated_db")
+def test_no_backup_password_means_no_backups(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    report_schedule.back_up_if_due(at_startup=True)
+    report_schedule.back_up_if_due(at_startup=False)
+
+    assert backups.saved() == []
+    assert caplog.text.count("backups are off") == 1
+
+
+def test_the_thread_backs_up_even_when_the_report_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[bool] = []
+    two_runs = threading.Event()
+
+    def report() -> None:
+        raise RuntimeError("the report breaks")
+
+    def back_up(*, at_startup: bool) -> None:
+        calls.append(at_startup)
+        if len(calls) == 2:
+            two_runs.set()
+
+    monkeypatch.setattr(report_schedule, "run_due", report)
+    monkeypatch.setattr(report_schedule, "back_up_if_due", back_up)
+    monkeypatch.setattr(report_schedule, "CHECK_EVERY", 0.01)
+
+    REAL_START()
+    try:
+        assert two_runs.wait(5)
+    finally:
+        REAL_STOP()
+
+    # Only the first run is the startup one.
+    assert calls[:2] == [True, False]

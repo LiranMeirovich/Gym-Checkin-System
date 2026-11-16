@@ -1006,6 +1006,17 @@ class LatestReportAnswer(Answer):
     delivery: ReportDeliveryAnswer
 
 
+class BackupStatusAnswer(Answer):
+    """The dashboard's backup card: when the newest backup was made, and
+    whether it's overdue (none at all, or none for 2 days: the card turns
+    red). The time is the gym's local time. ``configured`` is false only in
+    dev without a backup password."""
+
+    configured: bool
+    last_backup_at: datetime | None
+    overdue: bool
+
+
 class ReportDeliveryRequest(BaseModel):
     """Approve and send, or Send again: the generation the screen showed
     (``delivery.report_id``)."""

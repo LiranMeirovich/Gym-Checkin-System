@@ -12,6 +12,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.admin import security
 from app.admin.api import activity_log as api_activity_log
 from app.admin.api import auth as api_auth
+from app.admin.api import backups as api_backups
 from app.admin.api import branding as api_branding
 from app.admin.api import checkins as api_checkins
 from app.admin.api import customers as api_customers
@@ -72,6 +73,7 @@ app.include_router(api_staff.router, prefix=API_PREFIX)
 app.include_router(api_activity_log.router, prefix=API_PREFIX)
 app.include_router(api_settings.router, prefix=API_PREFIX)
 app.include_router(api_reports.router, prefix=API_PREFIX)
+app.include_router(api_backups.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

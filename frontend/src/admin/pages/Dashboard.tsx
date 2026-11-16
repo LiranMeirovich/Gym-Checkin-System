@@ -4,7 +4,8 @@
 // check-in or sign-up that doesn't match who's in the gym. The manager also
 // sees the health forms waiting for their review (decision 0041), and where
 // last month's report stands (generated, emailed, approved, sent; red when
-// an email failed).
+// an email failed) and when the last backup was made (red after 2 days
+// without one; the server decides).
 //
 // Each list refreshes itself: today's check-ins every 15 seconds, the rest
 // every minute (they change a few times a day). Only the timed refreshes
@@ -13,6 +14,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { NoConnection } from "../../shared/NoConnection";
+import { StatusBadge } from "../../shared/Status";
 import { formatMonth } from "../../shared/plans";
 import { api, type Schemas } from "../backend/client";
 import { formatDate, formatPhone, formatTime } from "../customers";
@@ -44,6 +46,7 @@ export function Dashboard() {
   const session = useSession();
   const reviews = can(session, "health_forms.accept");
   const reports = can(session, "reports.manage");
+  const backups = can(session, "backups.manage");
   return (
     <>
       <PageHead title={`שלום, ${session.staff.display_name}`} />
@@ -53,6 +56,7 @@ export function Dashboard() {
         </div>
         <div className={styles.side}>
           {reports && <ReportCard />}
+          {backups && <BackupCard />}
           {reviews && <FormsToReview />}
           <LatestCustomers />
         </div>
@@ -211,6 +215,54 @@ function ReportCard() {
             למסך הדוחות
           </Link>
         </div>
+      ) : query.isPending ? null : query.isError ? (
+        <NoConnection />
+      ) : null}
+    </section>
+  );
+}
+
+/** When the newest backup was made; red when there's none, or none for 2
+ * days. Backups are made by the server on their own. */
+function BackupCard() {
+  const query = usePolledQuery({
+    queryKey: ["dashboard", "backup"],
+    fetch: async (headers) => {
+      const { data, response } = await api.GET("/api/backups/latest", {
+        headers,
+      });
+      if (data) return data;
+      throw new Error(`GET /api/backups/latest failed: ${response.status}`);
+    },
+    everyMs: LISTS_EVERY_MS,
+  });
+  const { data } = query;
+  return (
+    <section className={ui.panel}>
+      <h2 className={styles.title}>גיבויים</h2>
+      {data ? (
+        !data.configured ? (
+          <p className={ui.muted}>הגיבויים לא מוגדרים.</p>
+        ) : (
+          <div className={styles.row}>
+            <span>
+              {data.last_backup_at ? (
+                <>
+                  גיבוי אחרון:{" "}
+                  <span dir="ltr" className={styles.time}>
+                    {formatDate(data.last_backup_at)}{" "}
+                    {formatTime(data.last_backup_at)}
+                  </span>
+                </>
+              ) : (
+                "עוד אין גיבוי."
+              )}
+            </span>
+            {data.overdue && (
+              <StatusBadge tone="stop">אין גיבוי ביומיים האחרונים</StatusBadge>
+            )}
+          </div>
+        )
       ) : query.isPending ? null : query.isError ? (
         <NoConnection />
       ) : null}

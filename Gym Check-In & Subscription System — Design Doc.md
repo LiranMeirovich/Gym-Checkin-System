@@ -252,7 +252,7 @@ One SQLite file (`gym.db`, WAL mode) with fifteen tables (`punch_cards` added in
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable, phone only), staff\_user\_id (nullable, manual only), punch\_card\_id (nullable) | Single-entry payments count these, leaving out those charged to a punch card. Append-only (triggers refuse UPDATE and DELETE); no link to a plan choice, since a correction changes which one is active (decision 0032). Triggers refuse another customer's card and a 21st entry on one card |
 | `reports` | id, month, generated\_at, staff\_user\_id (nullable: the scheduled job), rows\_json | One row per generation, append-only (decision 0044): the newest row for a month is its report. `rows_json` is the snapshot the preview and both files come from; the files' paths follow from the month. The delivery steps (emailed, approved, sent) are rows of their own in `report_deliveries` |
 | `report_deliveries` | id, report\_id, kind (manager\_email / approval / recipients\_email), outcome (sent / failed, emails only), recipients\_json (the addresses at the time), staff\_user\_id (nullable: the scheduled job), at | One row per delivery step of a generation, append-only (decision 0045): the newest step of each kind for a month's newest generation is where its report stands. A regeneration has no steps, so it starts unapproved |
-| `settings` | key, value | Gym name, manager email, recipient emails, backup folder, lock-screen minutes (manager and instructor) |
+| `settings` | key, value | Gym name, manager email, recipient emails, lock-screen minutes (manager and instructor). The backup folder is deployment config (`GYM_BACKUPS_DIR`, decision 0049) |
 | staff\_users | id, display\_name, role (owner / manager / instructor; at most one owner), pin\_hash, failed\_attempts, last\_failed\_at, locked\_until, active, created\_at | One row per staff member; deactivate instead of delete |
 | staff\_sessions | id, staff\_user\_id, token\_hash (unique), created\_at, last\_seen\_at, ended\_at | One row per staff login; the `gym_staff` cookie holds the token, only its SHA-256 hash is stored. Ends on Lock, a new login, the role's idle time or 12 hours; ended, never deleted |
 | activity\_log | id, staff\_user\_id, action, target\_type, target\_id, before\_json, after\_json, at | Written for every staff change, in the same transaction; append-only (database triggers refuse UPDATE and DELETE). Never holds PINs, hashes or tokens |
@@ -326,11 +326,13 @@ The only thing reachable from outside is the public app's check-in pages; everyt
 
 **Backups**
 
-1. On every app startup and every day at 22:00 (if running), the app makes a consistent copy of `gym.db` using SQLite's backup API (not a plain file copy while in use).
-2. The copy is encrypted with a backup password (AES-256, e.g. an encrypted zip) and named `gym-backup-2026-10-07.zip`.
-3. It's written to the Google Drive for desktop sync folder, which uploads it automatically.
-4. The app keeps the last 30 backups plus one per month, and deletes older ones.
-5. The dashboard shows "Last backup: today 09:02" and turns red if no backup succeeded in 2 days.
+Decision 0049 has the details.
+
+1. On every admin app startup, and in the scheduled job's first hourly run at or after 22:00, the app makes a consistent copy of `gym.db` using SQLite's backup API (not a plain file copy while in use). The copy stays encrypted with the database key.
+2. The copy, the `reports/` folder and a small manifest go into a zip encrypted with the backup password (`GYM_BACKUP_PASSWORD`, AES-256), named `gym-backup-2026-10-07-220714.zip` (local date and time). It's checked before it gets that name.
+3. It's written to the backups folder (`GYM_BACKUPS_DIR`); an off-site copy (e.g. `rclone` to a cloud drive) is set up on the server (decision 0046).
+4. The app keeps the newest backup of each of the last 30 days that have one, plus the newest of each month, and deletes the rest.
+5. The dashboard shows "Last backup: 16.11.2026 09:02" to the owner and managers, and turns red if no backup succeeded in 2 days.
 
 **Keys to keep off the PC** (printed in the manager's office or in a password manager)
 
@@ -340,7 +342,7 @@ The only thing reachable from outside is the public app's check-in pages; everyt
 - The manager's PIN (the manager can reset instructors' PINs).
 - The Cloudflare account login (domain and tunnel).
 
-**Restore** is a menu action: choose a backup file, enter the backup password, and the app replaces the current database after saving a copy of it. Test a full restore once before going live.
+**Restore** is a command run on the server with both apps stopped (`uv run python -m app.restore_backup <backup file>`, decision 0049), not a menu action: swapping the database while both apps have it open isn't safe. It asks for the backup password, checks the whole backup first (password, checksums, the database key, integrity, the migration), keeps the current database and reports under a `.before-restore-` name, and swaps the backup in. Test a full restore once before going live.
 
 **Privacy**: store only name, phone, notes, an optional photo and the health form. Health information belongs only in the health form, never in the free-text notes; the notes field says so in the interface. Customers are archived, never deleted: their data, visits and activity-log history are kept, since the gym may need them later (for example for its insurer). This was decided on the advice that Israeli law allows keeping such records; confirm it with the manager before launch (decision 0021).
 
