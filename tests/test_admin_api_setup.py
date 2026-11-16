@@ -208,9 +208,12 @@ def test_a_cross_site_setup_is_refused(client: TestClient, db: Session) -> None:
 
 
 def test_a_rebinding_site_cant_reach_setup(migrated_db: Path) -> None:
-    with TestClient(app, base_url="http://evil.example") as client:
+    # The page's name points at 127.0.0.1, so the connection arrives there.
+    with TestClient(app, base_url="http://127.0.0.1:8000") as client:
         response = client.post(
-            "/api/setup", json=GOOD_FORM, headers={"Origin": "http://evil.example"}
+            "/api/setup",
+            json=GOOD_FORM,
+            headers={"Host": "evil.example", "Origin": "http://evil.example"},
         )
 
     assert response.status_code == 400

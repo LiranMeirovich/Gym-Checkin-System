@@ -23,6 +23,7 @@ from app.core.permissions import Role
 from app.core.phone_links import issue_link_code
 from app.public.device import DEVICE_COOKIE
 from app.public.main import app as public_app
+from tests.conftest import THROUGH_THE_TUNNEL
 
 FAKE_PIN_HASH = "$argon2id$v=19$m=65536,t=3,p=4$fake"
 ORIGIN = "https://checkin.example.com"
@@ -70,7 +71,7 @@ def db(migrated_db: Path) -> Iterator[Session]:
 
 @pytest.fixture
 def client(db: Session) -> Iterator[TestClient]:
-    with TestClient(public_app, base_url=ORIGIN) as client:
+    with TestClient(public_app, **THROUGH_THE_TUNNEL) as client:
         yield client
 
 

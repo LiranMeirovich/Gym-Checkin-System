@@ -14,6 +14,16 @@ from app.core.config import get_settings
 from app.core.db import get_engine
 from app.core.startup import ALEMBIC_INI
 
+# How the public app is reached on the server: cloudflared connects to
+# 127.0.0.1 over the tunnel's https and passes the phone's Host on. Both apps
+# refuse a connection arriving on any other address (LocalOnlyMiddleware).
+# Use as ``TestClient(public_app, **THROUGH_THE_TUNNEL)``.
+TUNNEL_HOST = "checkin.example.com"
+THROUGH_THE_TUNNEL = {
+    "base_url": "https://127.0.0.1:8001",
+    "headers": {"Host": TUNNEL_HOST},
+}
+
 # Every test's database is encrypted with this key, as in prod, unless the
 # test removes GYM_DATABASE_KEY. Made up; real keys never appear in the repo.
 TEST_DATABASE_KEY = "ab" * 32
@@ -49,6 +59,22 @@ def use_database_key(monkeypatch: pytest.MonkeyPatch, key: str | None) -> None:
     if get_engine.cache_info().currsize:
         get_engine().dispose()
     get_engine.cache_clear()
+    get_settings.cache_clear()
+
+
+def use_prod(monkeypatch: pytest.MonkeyPatch, folder: Path) -> None:
+    """A complete, made-up prod config with its paths under ``folder``, as a
+    freshly started process would load it. Nothing here is a real secret."""
+    monkeypatch.setenv("GYM_ENVIRONMENT", "prod")
+    monkeypatch.setenv("GYM_PUBLIC_HOSTNAME", TUNNEL_HOST)
+    monkeypatch.setenv("GYM_SECRET_KEY", "x" * 40)
+    monkeypatch.setenv("GYM_BACKUP_PASSWORD", "not-a-real-backup-password-" + "x" * 8)
+    monkeypatch.setenv("GYM_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("GYM_SMTP_USER", "gym@example.com")
+    monkeypatch.setenv("GYM_SMTP_PASSWORD", "not-a-real-password")
+    monkeypatch.setenv("GYM_DATABASE_PATH", str(folder / "gym.db"))
+    monkeypatch.setenv("GYM_REPORTS_DIR", str(folder / "reports"))
+    monkeypatch.setenv("GYM_BACKUPS_DIR", str(folder / "backups"))
     get_settings.cache_clear()
 
 

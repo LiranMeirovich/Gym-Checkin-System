@@ -1,7 +1,9 @@
 """HTTP plumbing both apps share: the ``/api`` prefix, the base of every API
-answer, ``no-store`` on every API answer, the same-origin check on every
-unsafe request, reading an image sent as a data URL, the date-of-birth
-field type, and keeping query strings out of the access log.
+answer, ``no-store`` on every API answer, the security headers on every
+answer, refusing requests that arrive off 127.0.0.1, the public hostname
+and docs checks in prod, the same-origin check on every unsafe request,
+reading an image sent as a data URL, the date-of-birth field type, and
+keeping query strings out of the access log.
 
 Here rather than in ``app.admin`` so the public app, the one reachable
 from the internet, never imports admin code.
@@ -9,16 +11,19 @@ from the internet, never imports admin code.
 
 import base64
 import binascii
+import ipaddress
 import logging
 import re
 from datetime import date
 from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict
-from starlette.datastructures import MutableHeaders
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from app.core.config import get_settings
 
 API_PREFIX = "/api"
 
@@ -90,6 +95,178 @@ class NoStoreMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_no_store)
+
+
+# The content security policy of both React builds: everything comes from
+# the app's own origin. Images also from data: (the signature canvas) and
+# blob: (a health form PDF or doctor's note opened in a new tab, whose
+# document inherits this policy). No plugins, no <base>, no framing.
+CONTENT_SECURITY_POLICY = "; ".join(
+    (
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self'",
+        "img-src 'self' data: blob:",
+        "font-src 'self'",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    )
+)
+
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    # frame-ancestors' older twin, for browsers that predate it.
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    # Addresses can carry a search (the customer list) or a code path;
+    # nothing is sent to another site, or even to this one.
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+# HTTPS only, for a year. Prod only: a browser that saw it can't reach the
+# hostname over plain http until it expires, and browsers ignore it on an
+# http answer anyway, so it takes effect only through the tunnel's https.
+STRICT_TRANSPORT_SECURITY = "max-age=31536000"
+
+
+class SecurityHeadersMiddleware:
+    """Adds ``SECURITY_HEADERS`` to every response, pages, API answers,
+    assets and errors alike (decision 0050), and in prod
+    ``Strict-Transport-Security``. Added last, so it wraps every other
+    middleware and their refusals get the headers too."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        prod = get_settings().environment == "prod"
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                for name, value in SECURITY_HEADERS.items():
+                    headers[name] = value
+                if prod:
+                    headers["Strict-Transport-Security"] = STRICT_TRANSPORT_SECURITY
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+logger = logging.getLogger(__name__)
+
+
+class LocalOnlyMiddleware:
+    """Refuses (403) any request that reached the app on an address other
+    than the loopback one (decision 0050).
+
+    Both apps must listen on 127.0.0.1 only: on the server, ``cloudflared``
+    connects to them there, and nothing else should reach them. Nothing
+    stops uvicorn being started with ``--host 0.0.0.0``, and the app can't
+    see which address it was bound to, so this checks each request instead:
+    ``scope["server"]`` is the local address the connection arrived on
+    (not the client's), so a request over the gym's network or the
+    internet is refused even then. The first refusal on each address logs
+    an error naming it; later ones don't, so a flood of requests can't
+    flood the log. A Unix socket has no address and only local processes
+    can use it, so it passes.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        self._logged: set[str] = set()
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in ("http", "websocket") and not _arrived_locally(scope):
+            address = scope["server"][0]
+            if address not in self._logged:
+                self._logged.add(address)
+                logger.error(
+                    "refused a request that arrived on %s: the app must listen "
+                    "on 127.0.0.1 only (uvicorn --host 127.0.0.1); further "
+                    "refusals on it aren't logged",
+                    address,
+                )
+            response = PlainTextResponse("Served on 127.0.0.1 only", status_code=403)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+def _arrived_locally(scope: Scope) -> bool:
+    server = scope.get("server")
+    if server is None:
+        return True
+    try:
+        address = ipaddress.ip_address(server[0])
+    except ValueError:
+        # Not an address at all; uvicorn always gives one.
+        return False
+    # 127.0.0.1 as an IPv6 socket sees it (::ffff:127.0.0.1), which
+    # Python 3.12's is_loopback doesn't recognise.
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return address.is_loopback
+
+
+class PublicHostMiddleware:
+    """In prod, refuses (400) a request to the public app whose ``Host``
+    isn't the tunnel's hostname (``GYM_PUBLIC_HOSTNAME``), or ``127.0.0.1``
+    / ``localhost`` for a check on the server itself (decision 0050).
+
+    cloudflared passes the phone's ``Host`` on, so a real request names the
+    gym's hostname; anything else didn't come through the tunnel. The
+    allowed names are read from the settings on each request, since the app
+    is imported (for the OpenAPI export, in tests) before any settings are
+    loaded. Dev answers to any name.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        settings = get_settings()
+        if scope["type"] in ("http", "websocket") and settings.environment == "prod":
+            # The Host without its port; names are compared in lower case
+            # (GYM_PUBLIC_HOSTNAME is stored lower case).
+            host = Headers(scope=scope).get("host", "").split(":")[0].lower()
+            if host not in {settings.public_hostname, "127.0.0.1", "localhost"}:
+                response = PlainTextResponse("Invalid host header", status_code=400)
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+# FastAPI's generated API docs and the spec they read.
+DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"})
+
+
+class DocsOnlyInDevMiddleware:
+    """In prod, answers FastAPI's API docs with a 404 (decision 0050): once
+    the admin app is reachable remotely they would show its whole route map
+    to anyone, logged in or not. The spec is still built in-process for the
+    frontend's types (``app.export_openapi``)."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] == "http"
+            and scope["path"] in DOCS_PATHS
+            and get_settings().environment == "prod"
+        ):
+            response = PlainTextResponse("Not Found", status_code=404)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 class SameOriginMiddleware:

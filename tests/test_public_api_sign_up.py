@@ -15,6 +15,7 @@ from app.core.models import ActivityLogEntry, Customer, DeviceSession
 from app.core.staff_sessions import hash_token
 from app.public.device import DEVICE_COOKIE
 from app.public.main import app as public_app
+from tests.conftest import THROUGH_THE_TUNNEL
 
 ORIGIN = "https://checkin.example.com"
 SAME_ORIGIN = {"Origin": ORIGIN, "Sec-Fetch-Site": "same-origin"}
@@ -35,7 +36,7 @@ def db(migrated_db: Path) -> Iterator[Session]:
 
 @pytest.fixture
 def client(db: Session) -> Iterator[TestClient]:
-    with TestClient(public_app, base_url=ORIGIN) as client:
+    with TestClient(public_app, **THROUGH_THE_TUNNEL) as client:
         yield client
 
 

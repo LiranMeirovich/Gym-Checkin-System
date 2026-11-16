@@ -309,10 +309,10 @@ The only thing reachable from outside is the public app's check-in pages; everyt
 **Public app (reachable through the tunnel)**
 
 - Mounts only the customer routes: the check-in page, the link and sign-up pages, and static files. Admin routes are not registered on this instance, so they can't be reached even by guessing URLs.
-- Listens on `127.0.0.1:8001` only; `cloudflared` is the one thing that connects to it. No router ports are opened.
+- Listens on `127.0.0.1:8001` only; `cloudflared` is the one thing that connects to it. No router ports are opened. Both apps refuse any request that reaches them on another address, even if started on `0.0.0.0` (decision 0050).
 - Shows a customer only their own name, plan and visit count, never other customers' data.
 - Is rate-limited by IP at the edge (a Cloudflare rule in front of the tunnel), not in the app (decision 0029).
-- Sends security headers (HTTPS-only, no framing) and rejects requests that don't come through the tunnel's hostname.
+- Sends security headers (HTTPS-only in prod, no framing, a content security policy allowing only its own origin; the admin app sends them too) and, in prod, rejects requests that don't name the tunnel's hostname (`GYM_PUBLIC_HOSTNAME`) (decision 0050).
 - Dependencies (Python packages, `cloudflared`) are kept up to date; Windows Update stays on.
 
 **On the PC**
@@ -339,7 +339,7 @@ Decision 0049 has the details.
 - The BitLocker recovery key.
 - The database key (`GYM_DATABASE_KEY`, decision 0048). Without it, the database and every backup of it can't be read.
 - The backup encryption password. Without it, backups can't be restored.
-- The manager's PIN (the manager can reset instructors' PINs).
+- The owner's PIN. Nobody else can reset it in the app; if it's forgotten, `uv run python -m app.reset_owner_pin` on the server sets a new one (decision 0050).
 - The Cloudflare account login (domain and tunnel).
 
 **Restore** is a command run on the server with both apps stopped (`uv run python -m app.restore_backup <backup file>`, decision 0049), not a menu action: swapping the database while both apps have it open isn't safe. It asks for the backup password, checks the whole backup first (password, checksums, the database key, integrity, the migration), keeps the current database and reports under a `.before-restore-` name, and swaps the backup in. Test a full restore once before going live.

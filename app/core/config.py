@@ -59,7 +59,8 @@ class Settings(BaseSettings):
     environment: Literal["dev", "prod"] = "prod"
 
     # SQLite database file. Relative paths are resolved against the
-    # working directory the app is started from.
+    # working directory the app is started from; prod requires an absolute
+    # path (as for the two folders below).
     database_path: Path = Path("gym.db")
 
     # Encrypts the whole database file with SQLCipher (decision 0005): a
@@ -217,6 +218,14 @@ class Settings(BaseSettings):
                 "smtp_password",
             )
             if getattr(self, name) is None
+        ]
+        # A relative path depends on the folder the process starts in: the
+        # two apps, alembic and the commands could each open a different
+        # database, or write reports and backups somewhere unexpected.
+        missing += [
+            f"GYM_{name.upper()} must be an absolute path in prod"
+            for name in ("database_path", "reports_dir", "backups_dir")
+            if not getattr(self, name).is_absolute()
         ]
         if missing:
             raise ValueError("; ".join(missing))
