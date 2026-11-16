@@ -209,7 +209,9 @@ class _Pdf(FPDF):
         self._text(text, size=size, bold=bold, align=Align.R)
 
     def paragraph(self, text: str, *, size: float = 11) -> None:
-        self._text(text, size=size, bold=False, align=Align.J)
+        # Right-aligned, not justified: fpdf2 puts a justified paragraph's
+        # last line at the left margin, which is wrong for Hebrew.
+        self._text(text, size=size, bold=False, align=Align.R)
         self.ln(1)
 
     def question_row(self, question: str, answer: str) -> None:

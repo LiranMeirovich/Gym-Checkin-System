@@ -4,8 +4,12 @@ up."""
 import io
 import re
 from datetime import date
+from typing import Any
 
 import pytest
+from fpdf import FPDF
+from fpdf.enums import Align
+from fpdf.line_break import TextLine
 from PIL import Image, ImageDraw, PngImagePlugin
 
 from app.core.health_form_pdf import (
@@ -89,6 +93,29 @@ def test_the_longest_form_fits_on_two_pages(guardian: bool) -> None:
     pdf = render_snapshot(checked, details(guardian=guardian), checked.signature_png)
 
     assert pages(pdf) <= 2
+
+
+@pytest.mark.parametrize("guardian", [False, True], ids=["adult", "guardian"])
+def test_every_line_is_right_aligned(
+    guardian: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Hebrew is right to left: every line, wrapped or not, ends at the right
+    # margin. Only the yes/no answers are centred in their column.
+    aligns: list[Align] = []
+    draw = FPDF._render_styled_text_line
+
+    def spy(self: FPDF, text_line: TextLine, *args: Any, **kwargs: Any) -> Any:
+        if text_line.fragments:
+            aligns.append(text_line.align)
+        return draw(self, text_line, *args, **kwargs)
+
+    monkeypatch.setattr(FPDF, "_render_styled_text_line", spy)
+    checked = filled(longest=True)
+
+    render_snapshot(checked, details(guardian=guardian), checked.signature_png)
+
+    assert aligns
+    assert set(aligns) <= {Align.R, Align.C}
 
 
 def test_the_snapshot_renders_without_a_gym_name() -> None:
