@@ -50,6 +50,7 @@ Claude writes the code. The developer (the user) supervises: approves plans, mak
 - Admin test clients use `base_url="http://127.0.0.1:8000"` (the host guard refuses `testserver`), and POSTs need a matching `Origin` header.
 - Run uvicorn with a single worker, so scheduled jobs (report, backups) never run twice. The admin app starts the job thread at startup (`report_schedule.start()`); `tests/conftest.py` stubs it out, and job tests call `run_due()` directly.
 - Prod needs `GYM_SMTP_HOST`, `_USER` and `_PASSWORD` (the report email, decision 0045); in dev without them, emails are saved as `.eml` files in the git-ignored `outbox/` folder.
+- Both apps send security headers and a content security policy on every answer (`SecurityHeadersMiddleware`, decision 0050): scripts, styles, fonts and API calls from the app's own origin only, images also `data:`/`blob:`, no frames or plugins. A screen that needs anything else changes the policy on purpose. They also refuse requests arriving off 127.0.0.1 (`LocalOnlyMiddleware`), so tests connect on `127.0.0.1` and send any other name in the `Host` header (`THROUGH_THE_TUNNEL` in `tests/conftest.py`). Prod requires absolute `GYM_DATABASE_PATH`, `GYM_REPORTS_DIR` and `GYM_BACKUPS_DIR`.
 - Behind Cloudflare, the client IP is in `CF-Connecting-IP`, not the socket address. Use that header for rate limiting.
 
 ## Workflow
@@ -108,6 +109,7 @@ Use `/explain-changes` any time for an architecture-level walkthrough of a chang
 - Create / upgrade the database (before starting the apps; in prod, stop both apps and back up first): `uv run alembic upgrade head`
 - Encrypt an existing plain database once (both apps stopped, `GYM_DATABASE_KEY` set; then delete the renamed plain original it reports): `uv run python -m app.encrypt_database`
 - Restore a backup (both apps stopped; asks for the backup password; keeps the replaced files as `….before-restore-<time>`): `uv run python -m app.restore_backup backups/gym-backup-<date>.zip`
+- Reset the owner's forgotten PIN (on the server; asks for the new PIN twice; the apps may keep running): `uv run python -m app.reset_owner_pin`
 - New migration (follow the `/migration` skill): `uv run alembic revision --autogenerate -m "<what changes>"`
 - Admin: `uv run uvicorn app.admin.main:app --host 127.0.0.1 --port 8000`
 - Public: `uv run uvicorn app.public.main:app --host 127.0.0.1 --port 8001`
