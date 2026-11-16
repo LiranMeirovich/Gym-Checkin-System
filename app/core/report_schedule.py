@@ -21,6 +21,12 @@ worker, so there's one thread (CLAUDE.md); the public app never starts it.
 
 The job's generation and emails aren't logged (no staff member did them)
 and their rows name no one.
+
+The same thread makes the backups (design doc: "Security and backups"),
+with its own due check, ``back_up_if_due()``: one at startup, and one each
+evening from 22:00 (``backups.DAILY_AT``), so within the hour after. Each
+run's report work and backup are tried separately: one failing never
+stops the other.
 """
 
 import logging
@@ -28,7 +34,9 @@ import threading
 
 from sqlalchemy.orm import Session
 
-from app.core import report_delivery, report_generation
+from app.core import backups, report_delivery, report_generation
+from app.core.clock import utc_now
+from app.core.config import get_settings
 from app.core.db import get_engine
 from app.core.models import DeliveryKind
 from app.core.months import Month
@@ -75,6 +83,25 @@ def run_due() -> None:
         logger.info("report job for %s: busy, trying again later", month)
 
 
+def back_up_if_due(*, at_startup: bool) -> None:
+    """Make a backup at startup, or when the evening's is due, then delete
+    the old ones that aren't kept. Nothing when backups are off (dev
+    without a backup password)."""
+    if not get_settings().makes_backups:
+        if at_startup:
+            logger.warning("backups are off: GYM_BACKUP_PASSWORD isn't set")
+        return
+    if not at_startup and not backups.is_due(utc_now()):
+        return
+    try:
+        backups.make()
+    except backups.BackupError as error:
+        # The dashboard's card turns red after 2 days without one.
+        logger.error("backup failed: %s", error)
+        return
+    backups.prune()
+
+
 def start() -> None:
     """Start the job's thread: a run now, then every ``CHECK_EVERY``
     seconds. The admin app calls it at startup."""
@@ -96,12 +123,19 @@ def stop() -> None:
 
 
 def _loop() -> None:
+    at_startup = True
     while not _stop.is_set():
+        # Never let one bad run end the job, or one job stop the other: log
+        # it and try next time.
         try:
             run_due()
         except Exception:
-            # Never let one bad run end the job: log it and try next time.
             logger.exception("report job failed")
+        try:
+            back_up_if_due(at_startup=at_startup)
+        except Exception:
+            logger.exception("backup job failed")
+        at_startup = False
         _stop.wait(CHECK_EVERY)
 
 
