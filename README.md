@@ -68,7 +68,7 @@ Deployment config comes from `GYM_`-prefixed environment variables or a `.env` f
 | `GYM_ENVIRONMENT` | `prod` | `dev` or `prod` |
 | `GYM_DATABASE_PATH` | `gym.db` | SQLite file |
 | `GYM_TIMEZONE` | `Asia/Jerusalem` | Timezone used to show times; timestamps are stored in UTC |
-| `GYM_PUBLIC_HOSTNAME` | none | Bare hostname phones reach the public app on; required in `prod` |
+| `GYM_PUBLIC_HOSTNAME` | none | Bare hostname phones reach the public app on; the wall QR opens `https://<it>/c`; required in `prod` |
 | `GYM_SECRET_KEY` | random per run in `dev` | Signs the admin app's CSRF tokens; at least 32 characters; required in `prod` (both apps and `alembic` read it). Generate with `uv run python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 
 ### Gym settings

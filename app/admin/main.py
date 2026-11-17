@@ -24,6 +24,7 @@ from app.admin.api import reports as api_reports
 from app.admin.api import settings as api_settings
 from app.admin.api import setup as api_setup
 from app.admin.api import staff as api_staff
+from app.admin.api import wall_qr as api_wall_qr
 from app.core import report_schedule
 from app.core.branding import BRANDING_DIR, serve_logo
 from app.core.http import (
@@ -85,6 +86,7 @@ app.include_router(api_activity_log.router, prefix=API_PREFIX)
 app.include_router(api_settings.router, prefix=API_PREFIX)
 app.include_router(api_reports.router, prefix=API_PREFIX)
 app.include_router(api_backups.router, prefix=API_PREFIX)
+app.include_router(api_wall_qr.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

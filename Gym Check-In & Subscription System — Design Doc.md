@@ -116,7 +116,8 @@ The plan page lists the three plans with their prices; see Plans, prices and bil
 
 **The wall QR**
 
-- Encodes one fixed URL, e.g. `https://checkin.<gym-domain>/c`, printed and mounted at the entrance.
+- Encodes one fixed URL, `https://<GYM_PUBLIC_HOSTNAME>/c` (e.g. `https://checkin.<gym-domain>/c`), printed and mounted at the entrance. It's never a setting: it always matches the hostname the public app answers on (decision 0051).
+- Printed from the admin app: Settings → "Print the wall QR" (owner and managers) shows the logo or gym name, the QR, one line of text and the address, sized for one A4 page. A new domain means printing a new one.
 - Anyone can open it, but only a linked phone gets checked in.
 - Customers should scan with the phone's built-in Camera app, which opens the link in the main browser. Third-party scanner apps often use an in-app browser with separate storage, so the phone would look unlinked.
 

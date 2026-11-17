@@ -1,0 +1,76 @@
+/* The wall-QR page: a toolbar on screen, and the poster, which is all
+   that prints (sized to fit one A4 page, portrait). */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-block-end: var(--space-5);
+}
+
+.poster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  text-align: center;
+}
+
+.qr {
+  display: block;
+  width: min(100%, 26rem);
+  aspect-ratio: 1;
+}
+
+.instruction {
+  margin: 0;
+  font-size: var(--text-xxl);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.address {
+  margin: 0;
+  font-size: var(--text-l);
+  color: var(--muted);
+}
+
+/* No @page or body rules: the admin build has one stylesheet, so they would
+   change printing on every staff screen. Browsers print on white anyway. */
+@media print {
+  /* The headerless layout's column (Page.module.css .bare), on this page
+     only: the paper's own margins are enough. */
+  main:has(.poster) {
+    max-width: none;
+    padding: 0;
+  }
+
+  .toolbar {
+    display: none;
+  }
+
+  .poster {
+    border: none;
+    padding: 0;
+    gap: 10mm;
+    /* Black on white, whatever the theme's colours. */
+    color: #000;
+  }
+
+  .qr {
+    width: 140mm;
+  }
+
+  .instruction {
+    color: #000;
+  }
+
+  .address {
+    color: #000;
+  }
+}

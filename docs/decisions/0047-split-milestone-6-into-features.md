@@ -1,6 +1,6 @@
 # 0047. Split milestone 6 into seven features
 
-- Status: Accepted
+- Status: Accepted (feature 4's "the public address becomes a setting" superseded by [0051](0051-the-wall-qr-is-fixed-to-the-public-hostname.md))
 - Date: 2026-11-15
 
 ## Context

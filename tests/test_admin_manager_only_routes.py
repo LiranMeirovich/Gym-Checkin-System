@@ -58,6 +58,7 @@ MANAGER_ONLY = {
     ("POST", "/api/reports/{month}/resend"),
     ("GET", "/api/reports/latest"),
     ("GET", "/api/backups/latest"),
+    ("GET", "/api/wall-qr"),
 }
 
 
