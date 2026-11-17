@@ -34,15 +34,20 @@ export function WallQr() {
     // activity for the auto-lock.
     retry: false,
   });
-  const ready = wallQr.data?.url != null && wallQr.data.qr_image != null;
+  // Both are null together: no public hostname set (dev only).
+  const poster =
+    wallQr.data?.url != null && wallQr.data.qr_image != null
+      ? { url: wallQr.data.url, image: wallQr.data.qr_image }
+      : null;
 
   return (
-    <main className={styles.page}>
+    // No <main> here: the headerless layout's <main> holds this.
+    <>
       <div className={styles.toolbar}>
         <Link className={ui.back} to="/settings">
           חזרה להגדרות
         </Link>
-        {ready && (
+        {poster && (
           <button
             type="button"
             className={ui.primary}
@@ -57,7 +62,7 @@ export function WallQr() {
         <p role="alert">הדף פתוח למנהלים בלבד.</p>
       ) : wallQr.isError ? (
         <NoConnection />
-      ) : wallQr.data.url == null || wallQr.data.qr_image == null ? (
+      ) : poster == null ? (
         <p role="alert">
           הכתובת הציבורית לא הוגדרה בשרת (GYM_PUBLIC_HOSTNAME), ולכן אין קוד
           להדפסה.
@@ -67,17 +72,17 @@ export function WallQr() {
           <Brand branding={branding} size="hero" />
           <img
             className={styles.qr}
-            src={wallQr.data.qr_image}
+            src={poster.image}
             alt="קוד QR לכניסה למכון"
           />
           <p className={styles.instruction}>
             סרקו את הקוד במצלמה של הטלפון כדי להיכנס
           </p>
           <p className={styles.address}>
-            <span dir="ltr">{wallQr.data.url}</span>
+            <span dir="ltr">{poster.url}</span>
           </p>
         </section>
       )}
-    </main>
+    </>
   );
 }

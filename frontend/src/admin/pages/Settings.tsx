@@ -73,11 +73,7 @@ export function Settings() {
     <>
       <PageHead
         title="הגדרות"
-        actions={
-          <Link className={ui.primaryLink} to="/settings/wall-qr">
-            הדפסת קוד ה־QR לכניסה
-          </Link>
-        }
+        actions={<Link to="/settings/wall-qr">הדפסת קוד ה־QR לכניסה</Link>}
       />
       {settings.isPending ? null : settings.isError ? (
         <NoConnection />
