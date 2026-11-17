@@ -1,6 +1,6 @@
 # 0047. Split milestone 6 into seven features
 
-- Status: Accepted (feature 4's "the public address becomes a setting" superseded by [0051](0051-the-wall-qr-is-fixed-to-the-public-hostname.md))
+- Status: Accepted (feature 4's "the public address becomes a setting" superseded by [0051](0051-the-wall-qr-is-fixed-to-the-public-hostname.md); amended by [0052](0052-run-the-apps-in-docker.md): Docker packaging becomes feature 5, server setup runs Docker Compose, features renumbered 6–8)
 - Date: 2026-11-15
 
 ## Context
