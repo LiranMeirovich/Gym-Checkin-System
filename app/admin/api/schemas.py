@@ -1017,6 +1017,15 @@ class BackupStatusAnswer(Answer):
     overdue: bool
 
 
+class WallQrAnswer(Answer):
+    """The printable wall QR: the fixed check-in address and its QR code as
+    an SVG ``data:`` URL. Both are null when no public hostname is
+    configured (dev only)."""
+
+    url: str | None
+    qr_image: str | None
+
+
 class ReportDeliveryRequest(BaseModel):
     """Approve and send, or Send again: the generation the screen showed
     (``delivery.report_id``)."""
