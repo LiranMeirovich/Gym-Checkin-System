@@ -1,6 +1,6 @@
 # 0046. Host the system on a dedicated Linux server
 
-- Status: Accepted
+- Status: Accepted (plain or under Docker settled by [0052](0052-run-the-apps-in-docker.md): Docker Compose)
 - Date: 2026-11-15
 
 ## Context
