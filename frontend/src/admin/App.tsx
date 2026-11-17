@@ -15,6 +15,7 @@ import { Reports } from "./pages/Reports";
 import { Settings } from "./pages/Settings";
 import { Setup } from "./pages/Setup";
 import { Staff } from "./pages/Staff";
+import { WallQr } from "./pages/WallQr";
 import { RequireSession } from "./session";
 
 export function App() {
@@ -33,12 +34,14 @@ export function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
-      {/* Screens the customer uses at the desk: no staff header. */}
+      {/* No staff header: screens the customer uses at the desk, and pages for printing. */}
       <Route element={<RequireSession bare />}>
         <Route
           path="/customers/:id/health-form"
           element={<FillInHealthForm />}
         />
+        {/* Printed for the entrance: only the poster on the page. */}
+        <Route path="/settings/wall-qr" element={<WallQr />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

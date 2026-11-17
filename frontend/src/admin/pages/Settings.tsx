@@ -8,6 +8,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router";
 import { api, type Schemas } from "../backend/client";
 import { BRANDING_KEY } from "../branding";
 import { Field, PageHead, Panel } from "../layout/ui";
@@ -70,7 +71,14 @@ export function Settings() {
   }
   return (
     <>
-      <PageHead title="הגדרות" />
+      <PageHead
+        title="הגדרות"
+        actions={
+          <Link className={ui.primaryLink} to="/settings/wall-qr">
+            הדפסת קוד ה־QR לכניסה
+          </Link>
+        }
+      />
       {settings.isPending ? null : settings.isError ? (
         <NoConnection />
       ) : (
