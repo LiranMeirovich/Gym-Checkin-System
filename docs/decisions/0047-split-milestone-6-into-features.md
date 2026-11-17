@@ -1,6 +1,6 @@
 # 0047. Split milestone 6 into seven features
 
-- Status: Accepted (feature 4's "the public address becomes a setting" superseded by [0051](0051-the-wall-qr-is-fixed-to-the-public-hostname.md))
+- Status: Accepted (feature 4's "the public address becomes a setting" superseded by [0051](0051-the-wall-qr-is-fixed-to-the-public-hostname.md); amended by [0052](0052-package-the-apps-as-one-docker-image.md): Docker packaging is a new feature 5, built on the dev PC, and features 5–7 below become 6–8, server setup running the Docker services instead of plain systemd units)
 - Date: 2026-11-15
 
 ## Context
