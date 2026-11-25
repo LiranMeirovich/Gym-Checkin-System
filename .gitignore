@@ -13,6 +13,9 @@ reports/
 # Dev emails saved instead of sent (the report with its attachments)
 outbox/
 
+# Docker's data folder (database, reports, backups; decision 0052)
+data/
+
 # Backups (encrypted, but still never public)
 backups/
 *.zip
