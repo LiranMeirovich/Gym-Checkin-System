@@ -17,10 +17,12 @@
 name: gym
 
 x-app: &app
-  build: .
   image: gym:latest
   network_mode: host
   restart: unless-stopped
+  # Time to finish a running backup or report before Docker kills the app
+  # (the default is 10 seconds).
+  stop_grace_period: 60s
   env_file:
     - path: .env
       required: true
@@ -35,6 +37,8 @@ x-app: &app
 services:
   admin:
     <<: *app
+    # Built once, here; public runs the same image.
+    build: .
     # One worker: the scheduled job (reports, backups) must never run twice.
     command: [uvicorn, app.admin.main:app, --host, 127.0.0.1, --port, "8000", --workers, "1"]
     healthcheck:

@@ -21,7 +21,11 @@ The app runs as uid **10001**, not root, and can write only to `/data`.
 
 ## First install
 
-1. Clone the repository and `cd` into it.
+1. Make sure Docker starts at boot (most installs do this already; this makes sure):
+   ```bash
+   sudo systemctl enable --now docker
+   ```
+   Then clone the repository and `cd` into it.
 2. Create the data folder, owned by the app's user. Without this, Docker creates it owned by root and the apps can't write to it:
    ```bash
    mkdir -p data branding && sudo chown 10001:10001 data
@@ -40,7 +44,7 @@ The app runs as uid **10001**, not root, and can write only to `/data`.
    ```
 6. Check both are healthy (`docker compose ps` shows `healthy` within about a minute), then do the first-run setup in the admin app at once (README, "Getting started").
 
-The Docker service starts at boot and `restart: unless-stopped` brings both apps back with it, so nothing else is needed for reboots.
+With the Docker service enabled (step 1), `restart: unless-stopped` brings both apps back after a reboot, so nothing else is needed. `docker compose stop` gives a running backup or report up to 60 seconds to finish before the app is killed.
 
 ## Updating
 
