@@ -12,7 +12,7 @@ The phone opens the gym's check-in page, which is served from the gym PC through
 
 - Check-in: customers scan a fixed wall QR with their own phone (no personal QR codes, no desk scanner).
 - Hosting: the system runs on the gym PC; Cloudflare Tunnel makes the customer check-in page reachable from phones. No cloud server. **Under review:** the manager wants the system always on, so it will probably move to a server (the village's server or a paid VPS). See Open questions.
-- Plans: customers choose their own plan (monthly, tri-monthly or single entry) on their phone at their first check-in of each month, which also confirms they're continuing. Punch cards are a fourth option (see Punch cards; decision 0042).
+- Plans: customers choose their own plan (monthly or single entry; tri-monthly was removed, decision 0054) on their phone at their first check-in of each month, which also confirms they're continuing. Punch cards are a fourth option (see Punch cards; decision 0042).
 - Health form: every customer must have a valid signed health form before any check-in. It's filled in on the phone, or on a gym device at the desk (see Health form).
 - Prices: the manager keeps an editable price table with one price for every plan, the same for every customer (decision 0036).
 - Report: generated automatically on the 1st, emailed to the manager, and sent on to the other recipients once the manager approves it.
@@ -156,16 +156,17 @@ From the customer list or the customer's page, a staff member clicks "Check in".
 
 Customers choose their own plan on their phone at their first check-in of each month; the system works out what each customer owes from those choices and the manager's price table. Rules marked *assumption* need the manager's confirmation (see Open questions).
 
+*Decided in November 2026, built after the server work:* tri-monthly plans are removed (decision 0054), a punch card has 15 entries and lasts the month it was bought plus two more (decision 0055), and a card can be shared with one partner (decision 0053). This section describes those decided rules; until they're built, the code still has tri-monthly and the 20-entry card.
+
 | Plan | Covers | Payment in the report | Subscription end in the report |
 | --- | --- | --- | --- |
 | Monthly | The calendar month it's chosen in | Monthly price | Last day of that month |
-| Tri-monthly | The month it's chosen in and the next two | Full tri-monthly price in the first month, ₪0 in the other two | Last day of the third month |
 | Single entry | Each visit in the month it's chosen in | Number of visits × single-entry price | Empty |
 
 **The monthly choice**
 
-- At a customer's first check-in in a calendar month, if no plan covers that month, the phone shows the plan page: the three plans with this customer's prices. Tapping one confirms it and completes the check-in. The choice doubles as the customer's confirmation to keep training that month.
-- Inside a tri-monthly period there's nothing to choose; the status page says "Covered by your 3-month plan until 31 Dec".
+- At a customer's first check-in in a calendar month, if no plan covers that month, the phone shows the plan page: monthly, single entry and the punch card, with their prices. Tapping one confirms it and completes the check-in. The choice doubles as the customer's confirmation to keep training that month.
+- While a punch card is active there's nothing to choose; each check-in uses one of its entries.
 - Once chosen, the plan is fixed for that month on the phone. Corrections are manager-only, and the row records who made them.
 - Instructors never choose or change plans. If an instructor checks in someone who has no plan for the month, the check-in records single entry for that month (chosen by staff, with the instructor recorded), so the visit is counted and the month is never left without a plan. A customer who wants a different plan asks the manager, who corrects it (a new row; the single-entry row is kept). Because the month now has a plan, the phone doesn't show the plan page for it.
 - If the manager checks in someone who has no plan for the month, the check-in dialog asks them to pick one.
@@ -183,7 +184,7 @@ Customers choose their own plan on their phone at their first check-in of each m
 
 **Freezes** (*dropped for now*, decision 0022)
 
-The manager probably doesn't want freezes, so none are built. A monthly customer who doesn't come in simply isn't charged anyway; only a tri-monthly plan could need one. If they come back, they're a feature of their own (a `freezes` table that pushes a tri-monthly period's end back), and the plan-coverage logic must allow a period to be extended.
+The manager probably doesn't want freezes, so none are built. A monthly customer who doesn't come in simply isn't charged anyway. If they come back, they're a feature of their own.
 
 **History**
 
@@ -191,21 +192,22 @@ Choices are never overwritten. Each one is a row with plan, months covered, pric
 
 **Corrections** (manager only, decision 0026)
 
-- The manager can change or clear a choice that started in the current month. A choice that started earlier (including a tri-monthly period still running) is in a past month's report and can't be changed.
+- The manager can change or clear a choice that started in the current month. A choice that started earlier is in a past month's report and can't be changed.
 - A change is a new row from the same start month, priced from the current price table like a new choice. Changing single entry to monthly covers the whole month, visits already made included.
 - Clearing is a "no plan" row: it replaces the choice, has no plan or price, and covers nothing, so the months can be chosen again.
 - The customer page's history shows every row and which ones were replaced.
 
-**Punch cards** (decision 0042; built first in milestone 5, before the report)
+**Punch cards** (decisions 0042, 0043; size, expiry and sharing changed by 0053 and 0055)
 
-A punch card is 20 entries bought for one price; each check-in uses one entry, and the customer pays again only when they buy a new card.
+A punch card is 15 entries bought for one price; each check-in uses one entry, and the customer pays again only when they buy a new card.
 
 - **Buying**: chosen like a plan, on the phone's plan page or by the manager at a manual check-in (an instructor's check-in falls back to single entry, decision 0017). The price at that moment is copied onto the card; a later price change never touches it.
-- **Expiry**: fixed by the month it was bought. Bought on any day of month X, it's valid until the end of month X+1 and expired on the 1st of month X+2 (bought on 1 or 28 January, it expires on 1 March). Unused entries are lost.
-- **One at a time**: no new card while one is active, and never a card alongside a monthly or tri-monthly plan.
-- **Across months**: like tri-monthly, an active card covers the next month too; the check-in uses an entry with no plan page. When it runs out or expires mid-month, the next check-in shows the plan page, as at the start of a month.
-- **Storage**: its own table (`punch_cards`), not `plan_choices`, because a card isn't tied to calendar months. The remaining balance is never stored: it's 20 minus the check-ins charged to the card (`checkins.punch_card_id`), so history stays intact and reports stay reproducible.
-- **Report**: the card's price in the month it was bought, with its last valid day as the end date; 0 in the next month if it still had entries on the 1st (decision 0044).
+- **Expiry**: fixed by the month it was bought. Bought on any day of month X, it's valid until the end of month X+2 and expired on the 1st of month X+3 (bought on 1 or 28 January, it counts through 31 March). Unused entries are lost.
+- **One at a time**: no new card while one is active, and never a card alongside a monthly plan.
+- **Across months**: an active card covers the following months too; the check-in uses an entry with no plan page. When it runs out or expires mid-month, the next check-in shows the plan page, as at the start of a month.
+- **Storage**: its own table (`punch_cards`), not `plan_choices`, because a card isn't tied to calendar months. The remaining balance is never stored: it's 15 minus the check-ins charged to the card (`checkins.punch_card_id`), so history stays intact and reports stay reproducible.
+- **Report**: the card's price in the month it was bought, with its last valid day as the end date; 0 in each following month it still had entries on the 1st (decision 0044).
+- **Sharing** (decision 0053): the manager or owner can link one partner to a card at the desk, from the buyer's customer page. Both people's check-ins use its entries, the same day included; each needs their own valid health form; the partner has no plan or card of their own while it's active. The partner can be removed only before their first check-in on the card, then the link is fixed; both are logged. "Family only" is a gym policy the manager applies, not a system rule. On the report the partner gets a 0 row marked as a shared card of the buyer.
 - Single entry stays as it is.
 
 ## Health form
@@ -247,7 +249,7 @@ One SQLite file (`gym.db`, WAL mode) with fifteen tables (`punch_cards` added in
 | `customers` | id, first\_name, last\_name, phone (unique, normalised), date\_of\_birth, notes, created\_at, active | Date of birth decides whether a parent signs the health form; deactivate instead of delete (decision 0023). No photo column for now (decision 0022) |
 | `device_sessions` | id, customer\_id, token\_hash (unique), user\_agent, created\_at, last\_seen\_at, revoked\_at | One row per linked phone; at most 3 active per customer |
 | `link_codes` | id, customer\_id, code\_hash, created\_by, created\_at, expires\_at, used\_at | 6-digit code, 15-minute expiry, single use; only the customer's newest code counts |
-| `plan_choices` | id, customer\_id, plan (monthly / tri\_monthly / single\_entry; NULL for "no plan"), start\_month, end\_month, unit\_price\_agorot (nullable), chosen\_at, chosen\_by (customer / staff), staff\_user\_id (nullable), replaces\_id (nullable, unique) | Tri-monthly spans 3 months. Append-only (triggers refuse UPDATE and DELETE): a correction is a new row pointing at the one it replaces, from the same start month, and a choice is active while nothing replaces it (decision 0025). A "no plan" row (no plan or price) clears the choice it replaces and covers nothing (decision 0026) |
+| `plan_choices` | id, customer\_id, plan (monthly / single\_entry; NULL for "no plan"), start\_month, end\_month, unit\_price\_agorot (nullable), chosen\_at, chosen\_by (customer / staff), staff\_user\_id (nullable), replaces\_id (nullable, unique) | Tri-monthly spans 3 months. Append-only (triggers refuse UPDATE and DELETE): a correction is a new row pointing at the one it replaces, from the same start month, and a choice is active while nothing replaces it (decision 0025). A "no plan" row (no plan or price) clears the choice it replaces and covers nothing (decision 0026) |
 | `prices` | id, plan (monthly / tri\_monthly / single\_entry / punch\_card), amount\_agorot, valid\_from\_month, created\_at | The manager's price table and its history; rows are only added. The row with the latest valid\_from\_month up to a month applies, and the newest row among those for the same month wins |
 | `punch_cards` | id, customer\_id, price\_agorot, bought\_month, expires\_on, bought\_at, bought\_by (customer / staff), staff\_user\_id (nullable) | One row per card bought (decisions 0042, 0043). The price is copied in; `expires_on` is the 1st of the month after next (a CHECK ties it to bought\_month). Append-only; the balance is never stored |
 | `checkins` | id, customer\_id, checked\_in\_at, method (phone / manual), device\_session\_id (nullable, phone only), staff\_user\_id (nullable, manual only), punch\_card\_id (nullable) | Single-entry payments count these, leaving out those charged to a punch card. Append-only (triggers refuse UPDATE and DELETE); no link to a plan choice, since a correction changes which one is active (decision 0032). Triggers refuse another customer's card and a 21st entry on one card |
@@ -289,10 +291,9 @@ The dashboard shows where last month's report stands (generated, emailed, approv
 | First name | Last name | Plan | Payment (₪) | Subscription ends |
 | --- | --- | --- | --- | --- |
 | Dana | Levi | Monthly | Monthly price | 31 Oct 2026 |
-| Lior | Ben-David | Tri-monthly | Tri-monthly price (first month of the period) | 31 Dec 2026 |
-| Noa | Friedman | Tri-monthly | 0 (covered by a tri-monthly plan) | 30 Nov 2026 |
 | Yossi | Cohen | Single entry | 3 × single-entry price (check-ins not charged to a card) | (empty) |
-| Maya | Katz | Punch card | Punch card price (month it was bought) | 28 Feb 2027 (the card's last valid day) |
+| Maya | Katz | Punch card | Punch card price (month it was bought) | 28 Feb 2027 (bought in December: the card's last valid day) |
+| Noa | Friedman | Punch card (shared card of Maya Katz) | 0 | 28 Feb 2027 |
 | Avi | Peretz | Punch card + Monthly | Card price + monthly price (the card ran out mid-month) | 31 Oct 2026 (the latest plan's end) |
 
 Payment uses the price saved on each customer's choice or card, never the price table. A customer with two plans in one month gets one row: the plans in the order they were made, the payments added up, and the latest plan's end date. There's no total row, on the screen or in the files (the developer's call).
@@ -378,7 +379,7 @@ The price table, one row per plan with its price (sample prices; the real ones c
 | Plan | Price (₪) | Valid from |
 | --- | --- | --- |
 | Monthly | 250 | Nov 2026 |
-| Tri-monthly | 650 | Nov 2026 |
+| Punch card (15 entries) | 450 | Nov 2026 |
 | Single entry (per visit) | 40 | Nov 2026 |
 
 Editing a price asks which month it applies from and keeps the old row, so past months are unaffected. The screen also shows upcoming changes and the price history.
@@ -397,14 +398,14 @@ Each answer replaces an *assumption* above; none of them changes the architectur
 
 - [ ] Prices: the price of each plan (entered on the Prices screen before launch; none are set until then).
 - [ ] A customer who doesn't come in at all during a month: really not charged?
-- [ ] Tri-monthly: once chosen, can the customer switch plans before the 3 months are up?
+- [x] Tri-monthly: removed (decision 0054).
 - [x] Freezes: the manager probably doesn't want them; dropped for now (decision 0022).
 - [ ] Report: the manager's email, and the recipients who get it after approval.
 - [x] Should the report show the plan type as an extra column? Yes; two plans in one month are joined, "Punch card + Monthly" (decision 0044).
 - [ ] Photos: do we want them at all? (Left out for now, decision 0022; a nullable column can be added later.)
 - [ ] Health form: which official form to copy, how long it stays valid, and whether minors need a parent's signature.
 - [ ] Health form: confirm that instructors see only valid / expired, and only the manager opens the contents.
-- [x] Punch cards: 20 entries, one price, expiry on the 1st of the month after next, bought like a plan, unused entries lost, single entry stays (decision 0042).
+- [x] Punch cards: 15 entries, one price, valid through the end of the month bought plus two (decision 0055), shareable with one partner (decision 0053), bought like a plan, unused entries lost, single entry stays (decision 0042).
 
 **Setup**
 

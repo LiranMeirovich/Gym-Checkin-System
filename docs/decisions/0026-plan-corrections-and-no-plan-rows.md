@@ -1,6 +1,6 @@
 # 0026. Plan corrections: "no plan" rows, current-month choices only
 
-- Status: Accepted; its age-group parts superseded by [0036](0036-one-price-per-plan.md) (one price per plan)
+- Status: Accepted; its age-group parts superseded by [0036](0036-one-price-per-plan.md) (one price per plan); tri-monthly removed by [0054](0054-tri-monthly-plans-are-removed.md)
 - Date: 2026-11-03
 
 ## Context

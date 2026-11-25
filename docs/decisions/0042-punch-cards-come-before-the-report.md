@@ -1,6 +1,6 @@
 # 0042. Punch cards come before the report, with 20 entries until the 1st of the month after next
 
-- Status: Accepted
+- Status: Accepted; card size and expiry superseded by [0055](0055-punch-cards-have-15-entries-for-three-months.md); tri-monthly removed by [0054](0054-tri-monthly-plans-are-removed.md); sharing added by [0053](0053-a-punch-card-can-be-shared-with-one-partner.md)
 - Date: 2026-11-10
 
 ## Context
