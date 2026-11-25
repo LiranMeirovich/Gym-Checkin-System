@@ -1,0 +1,59 @@
+# Runs both apps from the one image (decision 0052).
+#
+#   docker compose build                                  # build the image
+#   docker compose run --rm admin alembic upgrade head    # migrate (apps stopped)
+#   docker compose up -d                                  # start both apps
+#
+# Host networking: the apps bind 127.0.0.1 on the host itself, exactly as
+# without Docker, so the local-only guard (decision 0050) and cloudflared
+# work unchanged. Never publish ports or bind 0.0.0.0 here.
+#
+# Secrets and the hostname come from .env next to this file. The data
+# paths below are fixed inside the container, so .env must not set
+# GYM_DATABASE_PATH, GYM_REPORTS_DIR or GYM_BACKUPS_DIR (these win anyway).
+# On the host, the data folder (DATA_DIR, default ./data) must exist and
+# be writable by uid 10001, the image's app user.
+
+name: gym
+
+x-app: &app
+  image: gym:latest
+  network_mode: host
+  restart: unless-stopped
+  # Time to finish a running backup or report before Docker kills the app
+  # (the default is 10 seconds).
+  stop_grace_period: 60s
+  env_file:
+    - path: .env
+      required: true
+  environment:
+    GYM_DATABASE_PATH: /data/gym.db
+    GYM_REPORTS_DIR: /data/reports
+    GYM_BACKUPS_DIR: /data/backups
+  volumes:
+    - ${DATA_DIR:-./data}:/data
+    - ${BRANDING_DIR:-./branding}:/app/branding:ro
+
+services:
+  admin:
+    <<: *app
+    # Built once, here; public runs the same image.
+    build: .
+    # One worker: the scheduled job (reports, backups) must never run twice.
+    command: [uvicorn, app.admin.main:app, --host, 127.0.0.1, --port, "8000", --workers, "1"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  public:
+    <<: *app
+    command: [uvicorn, app.public.main:app, --host, 127.0.0.1, --port, "8001", --workers, "1"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3

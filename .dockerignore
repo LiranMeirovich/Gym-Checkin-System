@@ -1,0 +1,27 @@
+# What the image may contain (decision 0052): an allowlist, so a new
+# file in the project root (a database, a backup, an .env variant) stays
+# out of the image unless it's added here on purpose.
+# Never in the image: .env*, any database, branding/, backups/, reports/,
+# outbox/, node_modules. Those live on the host and are mounted or passed in.
+*
+
+!app/
+!migrations/
+!alembic.ini
+!pyproject.toml
+!uv.lock
+!.python-version
+!frontend/
+
+# Built inside the image, never copied in.
+frontend/node_modules
+frontend/dist
+
+# Belt and braces, in case one of these ever lands in an allowed folder.
+**/.env*
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.zip
+**/__pycache__
+**/*.py[cod]

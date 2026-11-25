@@ -57,6 +57,8 @@ uv run uvicorn app.public.main:app --host 127.0.0.1 --port 8001
 
 Never bind either app to `0.0.0.0`.
 
+On the Linux server the apps run in Docker instead: see [Running with Docker](docs/docker.md).
+
 On a fresh database, open the admin app at `http://127.0.0.1:8000`: it asks for the gym's name and the first manager account (first-run setup). After that it opens on the lock screen: tap your name and enter your PIN. Do this right after installing, since until then anyone at the PC can become the manager.
 
 ## Configuration

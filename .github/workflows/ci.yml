@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # ── WHAT it runs ─────────────────────────────────────────────────────
-# Three jobs. They run in parallel, each on its own fresh machine, and a
+# Four jobs. They run in parallel, each on its own fresh machine, and a
 # failure in one doesn't hide the result of the others.
 jobs:
   checks:
@@ -112,6 +112,19 @@ jobs:
 
       - name: Check the API types are up to date
         run: npm run api:check
+
+  docker:
+    name: Build the Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Only proves the Dockerfile still builds (decision 0052): the image is
+      # built on the server from its own checkout, so nothing is pushed or
+      # kept. The runner's own Docker, so no extra actions to pin.
+      - name: Build the image
+        run: docker build --tag gym:ci .
 
   secrets:
     name: Scan for secrets
