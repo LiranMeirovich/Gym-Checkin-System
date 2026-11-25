@@ -2,7 +2,7 @@
 
 How the two apps run on the server: one image, started twice by Docker Compose ([decision 0052](decisions/0052-package-the-apps-as-one-docker-image.md)). Development stays on Windows without Docker (README, "Getting started").
 
-This is for a **Linux** host. The services use the host network, so the apps listen on the server's own `127.0.0.1:8000` (admin) and `127.0.0.1:8001` (public), exactly as without Docker, and `cloudflared` reaches them there. Docker Desktop on Windows or a Mac doesn't give containers the host's network by default, so the apps can't be reached from the PC there.
+This is for a **Linux** host. The services use the host network, so the apps listen on the server's own `127.0.0.1:8000` (admin) and `127.0.0.1:8001` (public), exactly as without Docker, and `cloudflared` reaches them there. Docker Desktop on Windows or a Mac doesn't give containers the host's network by default, so the apps can't be reached from the PC there; turning on its "Enable host networking" setting (Settings → Resources → Network) makes them reachable at the same addresses, for a local test.
 
 Every command below runs in the checkout's folder, next to `compose.yaml`.
 
