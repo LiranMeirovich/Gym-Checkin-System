@@ -1,6 +1,6 @@
 # 0025. Plan choices are append-only rows, linked by `replaces_id`
 
-- Status: Accepted
+- Status: Accepted; tri-monthly removed by [0054](0054-tri-monthly-plans-are-removed.md)
 - Date: 2026-11-03
 
 ## Context

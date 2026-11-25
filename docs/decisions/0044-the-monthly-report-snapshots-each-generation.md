@@ -1,6 +1,6 @@
 # 0044. The monthly report: one row per customer, a snapshot per generation, generated outside the request lock
 
-- Status: Accepted
+- Status: Accepted; tri-monthly rows removed by [0054](0054-tri-monthly-plans-are-removed.md); shared-card rows added by [0053](0053-a-punch-card-can-be-shared-with-one-partner.md)
 - Date: 2026-11-11
 
 ## Context
